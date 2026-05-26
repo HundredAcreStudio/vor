@@ -1,0 +1,35 @@
+# Binaries
+/bin/
+/dist/
+repowise
+repowise-augment
+
+# Test + coverage
+*.test
+*.out
+coverage.txt
+
+# Go work files (ignored by default but explicit)
+go.work
+go.work.sum
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local data
+.repowise/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Env
+.env
+.env.local
+
+# Build caches
+.cache/

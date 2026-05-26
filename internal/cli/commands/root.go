@@ -1,0 +1,33 @@
+// Package commands wires up the cobra command tree for the repowise CLI.
+// Each subcommand lives in its own file so the root file stays small.
+package commands
+
+import (
+	"github.com/spf13/cobra"
+)
+
+// Root returns the top-level cobra command. It is exposed as a function so
+// tests and the cmd/repowise main can each obtain a fresh tree.
+func Root() *cobra.Command {
+	root := &cobra.Command{
+		Use:           "repowise",
+		Short:         "Codebase intelligence layer for AI coding agents",
+		Long:          longDescription,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+	}
+
+	root.AddCommand(newVersionCmd())
+	root.AddCommand(newServeCmd())
+	root.AddCommand(newDBCmd())
+	// Additional subcommands are added in their respective phases.
+
+	return root
+}
+
+const longDescription = `repowise indexes a codebase into five intelligence layers — dependency graph,
+git history, auto-generated documentation, architectural decisions, and code
+health — and exposes them over MCP and HTTP so AI coding agents can answer
+questions without re-reading the source every time.
+
+This is the Go port. See PORTING_PLAN.md for status and roadmap.`
