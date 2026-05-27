@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
+	"github.com/repowise-dev/repowise-go/internal/analysis/health"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
@@ -37,6 +38,7 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/gitstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
+	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
 	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 )
@@ -143,9 +145,10 @@ func newIngestCmd() *cobra.Command {
 			}
 
 			var (
-				g          *graph.Graph
-				extRecords []external.Record
-				dcFindings []deadcode.Finding
+				g            *graph.Graph
+				extRecords   []external.Record
+				dcFindings   []deadcode.Finding
+				healthResult health.Result
 			)
 			if buildGraph {
 				b := graph.NewBuilder(nil, graph.Options{})
@@ -158,6 +161,9 @@ func newIngestCmd() *cobra.Command {
 				// Dead code runs on the same graph; cheap, always informative.
 				dcFindings = (&deadcode.Analyzer{MinConfidence: 0.5}).Analyze(g)
 				printDeadCodeSummary(out, dcFindings)
+				// Health runs on the parser output (per-symbol complexity).
+				healthResult = (&health.Analyzer{}).Analyze(parsedFiles)
+				printHealthSummary(out, healthResult)
 			}
 
 			if scanExternals || persist {
@@ -187,7 +193,7 @@ func newIngestCmd() *cobra.Command {
 			}
 
 			if persist {
-				if err := persistAll(ctx, root, absRoot, g, extRecords, gitRecords, dcFindings); err != nil {
+				if err := persistAll(ctx, root, absRoot, g, extRecords, gitRecords, dcFindings, healthResult); err != nil {
 					return fmt.Errorf("persist: %w", err)
 				}
 				fmt.Fprintf(out, "\npersisted to %s\n", databaseTarget(root))
@@ -331,7 +337,7 @@ func printExternalsSummary(w io.Writer, records []external.Record) {
 // persistAll opens the configured DB, runs pending migrations, ensures the
 // repository row, and writes graph + externals + git intelligence + dead
 // code findings (whichever inputs are non-nil).
-func persistAll(ctx context.Context, repoArg, absRoot string, g *graph.Graph, exts []external.Record, gitRecs []git.PerFile, dcFindings []deadcode.Finding) error {
+func persistAll(ctx context.Context, repoArg, absRoot string, g *graph.Graph, exts []external.Record, gitRecs []git.PerFile, dcFindings []deadcode.Finding, healthResult health.Result) error {
 	conn, dialect, err := openDB(ctx, repoArg)
 	if err != nil {
 		return err
@@ -367,7 +373,58 @@ func persistAll(ctx context.Context, repoArg, absRoot string, g *graph.Graph, ex
 	if err := deadstore.New(conn).ReplaceAll(ctx, repoRow.ID, dcFindings); err != nil {
 		return fmt.Errorf("dead_code_findings: %w", err)
 	}
+	if err := healthstore.New(conn).ReplaceAll(ctx, repoRow.ID, healthResult); err != nil {
+		return fmt.Errorf("health: %w", err)
+	}
 	return nil
+}
+
+// printHealthSummary writes a top-line health summary: average file
+// score, finding counts per biomarker, and the worst 5 files by score.
+func printHealthSummary(w io.Writer, r health.Result) {
+	if len(r.FileMetrics) == 0 {
+		return
+	}
+	total := 0.0
+	for _, m := range r.FileMetrics {
+		total += m.Score
+	}
+	avg := total / float64(len(r.FileMetrics))
+
+	byKind := map[string]int{}
+	for _, f := range r.Findings {
+		byKind[f.BiomarkerType]++
+	}
+
+	fmt.Fprintf(w, "\nCode health: avg score %.2f / 10  (%d findings)\n", avg, len(r.Findings))
+	if len(byKind) > 0 {
+		kinds := make([]string, 0, len(byKind))
+		for k := range byKind {
+			kinds = append(kinds, k)
+		}
+		sort.Strings(kinds)
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		for _, k := range kinds {
+			fmt.Fprintf(tw, "  %s\t%d\n", k, byKind[k])
+		}
+		tw.Flush()
+	}
+
+	// Worst-5 files by score.
+	worst := append([]health.FileMetric(nil), r.FileMetrics...)
+	sort.Slice(worst, func(i, j int) bool { return worst[i].Score < worst[j].Score })
+	top := 5
+	if len(worst) < top {
+		top = len(worst)
+	}
+	if top > 0 {
+		fmt.Fprintln(w, "Worst-scoring files:")
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		for i := 0; i < top; i++ {
+			fmt.Fprintf(tw, "  %.2f\t%s\t(maxCCN=%d)\n", worst[i].Score, worst[i].FilePath, worst[i].MaxCCN)
+		}
+		tw.Flush()
+	}
 }
 
 // printDeadCodeSummary prints how many dead-code findings the analyzer

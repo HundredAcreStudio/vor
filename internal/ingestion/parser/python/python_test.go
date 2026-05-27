@@ -135,6 +135,41 @@ def old_api():
 	}
 }
 
+func TestParse_PythonComplexity(t *testing.T) {
+	src := []byte(`def trivial():
+    return 1
+
+def one(n):
+    if n > 0:
+        return n
+    return 0
+
+def four(n):
+    if n > 10:
+        return 1
+    elif n > 5:
+        return 2
+    for i in range(n):
+        pass
+    return 0
+`)
+	fi := models.FileInfo{Path: "x/x.py", Language: "python"}
+	parsed, err := (&Parser{}).Parse(context.Background(), fi, src)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	want := map[string]int{
+		"trivial": 1,
+		"one":     2,
+		"four":    4, // if + elif + for
+	}
+	for _, s := range parsed.Symbols {
+		if expect, ok := want[s.Name]; ok && s.ComplexityEstimate != expect {
+			t.Errorf("%s ComplexityEstimate = %d, want %d", s.Name, s.ComplexityEstimate, expect)
+		}
+	}
+}
+
 func TestPythonVisibility(t *testing.T) {
 	cases := []struct {
 		name string

@@ -144,6 +144,45 @@ export enum Status {
 	}
 }
 
+func TestParse_TypeScriptComplexity(t *testing.T) {
+	src := []byte(`function trivial(): number {
+  return 1;
+}
+
+function one(n: number): number {
+  if (n > 0) return n;
+  return 0;
+}
+
+function many(n: number): number {
+  if (n > 10) return 1;
+  if (n > 5) return 2;
+  for (let i = 0; i < n; i++) {
+    if (i === 0) continue;
+  }
+  return 0;
+}
+`)
+	fi := models.FileInfo{Path: "x.ts", Language: "typescript"}
+	parsed, err := (&Parser{}).Parse(context.Background(), fi, src)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	want := map[string]int{
+		"trivial": 1,
+		"one":     2,
+	}
+	for _, s := range parsed.Symbols {
+		if expect, ok := want[s.Name]; ok && s.ComplexityEstimate != expect {
+			t.Errorf("%s ComplexityEstimate = %d, want %d", s.Name, s.ComplexityEstimate, expect)
+		}
+		// `many` has two if + one for + one nested if = ≥ 4.
+		if s.Name == "many" && s.ComplexityEstimate < 4 {
+			t.Errorf("many ComplexityEstimate = %d, want >= 4", s.ComplexityEstimate)
+		}
+	}
+}
+
 func TestParse_TSX(t *testing.T) {
 	src := []byte(`import React from "react";
 

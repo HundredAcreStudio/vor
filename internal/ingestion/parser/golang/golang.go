@@ -122,6 +122,11 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 		return
 	}
 
+	complexity := 1
+	if def.Type() == "function_declaration" || def.Type() == "method_declaration" {
+		complexity = 1 + common.CountBranchNodes(def, goBranchNodeTypes)
+	}
+
 	sym := &models.Symbol{
 		Name:               name,
 		Kind:               kindForNode(def),
@@ -129,7 +134,7 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 		EndLine:            int(def.EndPoint().Row) + 1,
 		Visibility:         goVisibility(name),
 		Language:           string(langTag),
-		ComplexityEstimate: 1,
+		ComplexityEstimate: complexity,
 		IsExportedSymbol:   isExported(name),
 		QualifiedName:      name,
 	}
@@ -147,6 +152,28 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 
 	sym.Signature = strings.TrimSpace(common.SignatureSlice(source, def, caps["symbol.params"]))
 	out[startByte] = sym
+}
+
+// goBranchNodeTypes are the tree-sitter-go node types that add one to
+// cyclomatic complexity when seen inside a function body. We count the
+// case/communication-case nodes (one per branch) rather than counting
+// switch_statement itself; that's pure McCabe — a switch with N cases
+// adds N decision points, not 1.
+//
+// Short-circuit boolean operators (&& / ||) are not counted: tree-sitter
+// represents them under the broad `binary_expression` node which also
+// covers arithmetic, comparison, etc., so a tighter check would need to
+// inspect the operator field. Trade-off is documented; if it matters we
+// can add an "extended McCabe" mode later.
+var goBranchNodeTypes = map[string]struct{}{
+	"if_statement":       {},
+	"for_statement":      {},
+	"select_statement":   {},
+	"expression_case":    {},
+	"type_case":          {},
+	"communication_case": {},
+	// default_case is intentionally absent — it is the "else" path that
+	// already exists implicitly; counting it would double-count one path.
 }
 
 func absorbImport(caps map[string][]*sitter.Node, source []byte) *models.Import {

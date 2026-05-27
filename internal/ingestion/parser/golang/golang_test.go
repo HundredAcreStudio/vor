@@ -154,6 +154,66 @@ func TestParse_EmptyFile(t *testing.T) {
 	}
 }
 
+func TestParse_ComplexityCounts(t *testing.T) {
+	src := []byte(`package x
+
+// trivial — complexity 1
+func trivial() int { return 1 }
+
+// one if — complexity 2
+func one(n int) int {
+	if n > 0 {
+		return n
+	}
+	return 0
+}
+
+// 2 ifs + 1 for = complexity 4
+func three(n int) int {
+	if n > 10 {
+		return 1
+	}
+	if n > 5 {
+		return 2
+	}
+	for i := 0; i < n; i++ {
+		_ = i
+	}
+	return 0
+}
+
+// switch with 3 cases + default — complexity 4
+func sw(n int) int {
+	switch n {
+	case 1:
+		return 1
+	case 2:
+		return 2
+	case 3:
+		return 3
+	default:
+		return 0
+	}
+}
+`)
+	fi := models.FileInfo{Path: "x/x.go", Language: "go"}
+	parsed, err := (&Parser{}).Parse(context.Background(), fi, src)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	want := map[string]int{
+		"trivial": 1,
+		"one":     2,
+		"three":   4,
+		"sw":      4,
+	}
+	for _, s := range parsed.Symbols {
+		if expect, ok := want[s.Name]; ok && s.ComplexityEstimate != expect {
+			t.Errorf("%s ComplexityEstimate = %d, want %d", s.Name, s.ComplexityEstimate, expect)
+		}
+	}
+}
+
 func TestGoReceiverType(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"(r *MyType)", "MyType"},

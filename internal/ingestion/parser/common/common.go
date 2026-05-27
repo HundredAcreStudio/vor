@@ -115,3 +115,56 @@ func SignatureSlice(source []byte, def *sitter.Node, params []*sitter.Node) stri
 	}
 	return string(FirstLine(source[start:end]))
 }
+
+// CountBranchNodes walks node's subtree (including node itself) and counts
+// occurrences of any tree-sitter node type in branchTypes. Each match adds
+// one to the running total — used to compute McCabe cyclomatic complexity
+// as 1 + branch-count for a function body.
+//
+// The walker uses an explicit stack rather than recursion to keep cgo
+// boundary crossings cheap on deeply-nested code.
+func CountBranchNodes(node *sitter.Node, branchTypes map[string]struct{}) int {
+	if node == nil {
+		return 0
+	}
+	count := 0
+	stack := []*sitter.Node{node}
+	for len(stack) > 0 {
+		n := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if _, hit := branchTypes[n.Type()]; hit {
+			count++
+		}
+		for i := uint32(0); i < n.NamedChildCount(); i++ {
+			stack = append(stack, n.NamedChild(int(i)))
+		}
+	}
+	return count
+}
+
+// MaxNestingDepth returns the deepest nesting level under node, counting
+// only types in nestingTypes (typically the same set as branchTypes plus
+// any block-introducing nodes like try / with / catch). Depth 0 means no
+// nesting; 1 means one level deep, etc.
+func MaxNestingDepth(node *sitter.Node, nestingTypes map[string]struct{}) int {
+	if node == nil {
+		return 0
+	}
+	var walk func(n *sitter.Node, depth int) int
+	walk = func(n *sitter.Node, depth int) int {
+		thisDepth := depth
+		if _, hit := nestingTypes[n.Type()]; hit {
+			thisDepth = depth + 1
+		}
+		best := thisDepth
+		for i := uint32(0); i < n.NamedChildCount(); i++ {
+			child := n.NamedChild(int(i))
+			d := walk(child, thisDepth)
+			if d > best {
+				best = d
+			}
+		}
+		return best
+	}
+	return walk(node, 0)
+}

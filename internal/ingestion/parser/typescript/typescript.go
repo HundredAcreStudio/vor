@@ -157,6 +157,13 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 		return
 	}
 
+	complexity := 1
+	switch def.Type() {
+	case "function_declaration", "generator_function_declaration",
+		"method_definition", "lexical_declaration":
+		complexity = 1 + common.CountBranchNodes(def, tsBranchNodeTypes)
+	}
+
 	sym := &models.Symbol{
 		Name:               name,
 		Kind:               kindForNode(def),
@@ -164,7 +171,7 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 		EndLine:            int(def.EndPoint().Row) + 1,
 		Visibility:         models.VisibilityPublic, // default; refined below
 		Language:           string(langTag),
-		ComplexityEstimate: 1,
+		ComplexityEstimate: complexity,
 		QualifiedName:      name,
 	}
 
@@ -234,6 +241,24 @@ func absorbCall(caps map[string][]*sitter.Node, source []byte) *models.CallSite 
 		cs.ArgumentCount = &n
 	}
 	return &cs
+}
+
+// tsBranchNodeTypes covers the decision-point nodes in tree-sitter-
+// typescript. switch_case includes default_case (TS grammar uses the
+// same node type for both); to avoid counting default we'd need to
+// inspect its child — for v1 we accept that default adds 1 (matches
+// most popular linters' McCabe output).
+var tsBranchNodeTypes = map[string]struct{}{
+	"if_statement":         {},
+	"for_statement":        {},
+	"for_in_statement":     {},
+	"for_of_statement":     {},
+	"while_statement":      {},
+	"do_statement":         {},
+	"switch_case":          {},
+	"catch_clause":         {},
+	"ternary_expression":   {},
+	"else_clause":          {}, // counts else-if chains
 }
 
 // ---- TypeScript-specific rules ---------------------------------------------

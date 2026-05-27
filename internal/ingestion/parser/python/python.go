@@ -128,6 +128,11 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 		return
 	}
 
+	complexity := 1
+	if def.Type() == "function_definition" {
+		complexity = 1 + common.CountBranchNodes(def, pythonBranchNodeTypes)
+	}
+
 	sym := &models.Symbol{
 		Name:               name,
 		Kind:               kindForNode(def),
@@ -135,7 +140,7 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 		EndLine:            int(def.EndPoint().Row) + 1,
 		Visibility:         pythonVisibility(name),
 		Language:           string(langTag),
-		ComplexityEstimate: 1,
+		ComplexityEstimate: complexity,
 		IsExportedSymbol:   pythonVisibility(name) == models.VisibilityPublic,
 		QualifiedName:      name,
 		IsAsync:            isAsync(def),
@@ -202,6 +207,20 @@ func absorbCall(caps map[string][]*sitter.Node, source []byte) *models.CallSite 
 		cs.ArgumentCount = &n
 	}
 	return &cs
+}
+
+// pythonBranchNodeTypes: tree-sitter-python decision-point nodes for
+// McCabe cyclomatic complexity. case_clause covers match/case;
+// except_clause covers try/except branches. Ternaries (a if b else c)
+// also count.
+var pythonBranchNodeTypes = map[string]struct{}{
+	"if_statement":           {},
+	"elif_clause":            {},
+	"for_statement":          {},
+	"while_statement":        {},
+	"except_clause":          {},
+	"case_clause":            {},
+	"conditional_expression": {},
 }
 
 // ---- Python-specific rules -------------------------------------------------
