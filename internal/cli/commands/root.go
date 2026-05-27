@@ -31,6 +31,7 @@ func Root() *cobra.Command {
 	root.AddCommand(newUpdateCmd())
 	root.AddCommand(newReindexCmd())
 	root.AddCommand(newDeleteCmd())
+	root.AddCommand(newClaudeMdCmd())
 	root.AddCommand(newHotspotsCmd())
 	root.AddCommand(newSearchCmd())
 	root.AddCommand(newExternalsCmd())
