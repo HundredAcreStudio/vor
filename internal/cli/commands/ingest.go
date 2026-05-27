@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
@@ -32,6 +33,7 @@ import (
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/pypi"
 
 	"github.com/repowise-dev/repowise-go/internal/ingestion/traverser"
+	"github.com/repowise-dev/repowise-go/internal/persistence/deadstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/gitstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
@@ -143,6 +145,7 @@ func newIngestCmd() *cobra.Command {
 			var (
 				g          *graph.Graph
 				extRecords []external.Record
+				dcFindings []deadcode.Finding
 			)
 			if buildGraph {
 				b := graph.NewBuilder(nil, graph.Options{})
@@ -152,6 +155,9 @@ func newIngestCmd() *cobra.Command {
 				g = b.Build()
 				g.ComputeMetrics()
 				printGraphSummary(out, g)
+				// Dead code runs on the same graph; cheap, always informative.
+				dcFindings = (&deadcode.Analyzer{MinConfidence: 0.5}).Analyze(g)
+				printDeadCodeSummary(out, dcFindings)
 			}
 
 			if scanExternals || persist {
@@ -181,7 +187,7 @@ func newIngestCmd() *cobra.Command {
 			}
 
 			if persist {
-				if err := persistAll(ctx, root, absRoot, g, extRecords, gitRecords); err != nil {
+				if err := persistAll(ctx, root, absRoot, g, extRecords, gitRecords, dcFindings); err != nil {
 					return fmt.Errorf("persist: %w", err)
 				}
 				fmt.Fprintf(out, "\npersisted to %s\n", databaseTarget(root))
@@ -323,9 +329,9 @@ func printExternalsSummary(w io.Writer, records []external.Record) {
 }
 
 // persistAll opens the configured DB, runs pending migrations, ensures the
-// repository row, and writes graph + externals + git intelligence
-// (whichever inputs are non-nil).
-func persistAll(ctx context.Context, repoArg, absRoot string, g *graph.Graph, exts []external.Record, gitRecs []git.PerFile) error {
+// repository row, and writes graph + externals + git intelligence + dead
+// code findings (whichever inputs are non-nil).
+func persistAll(ctx context.Context, repoArg, absRoot string, g *graph.Graph, exts []external.Record, gitRecs []git.PerFile, dcFindings []deadcode.Finding) error {
 	conn, dialect, err := openDB(ctx, repoArg)
 	if err != nil {
 		return err
@@ -358,7 +364,47 @@ func persistAll(ctx context.Context, repoArg, absRoot string, g *graph.Graph, ex
 	if err := gitstore.New(conn).ReplaceAll(ctx, repoRow.ID, gitRecs); err != nil {
 		return fmt.Errorf("git_metadata: %w", err)
 	}
+	if err := deadstore.New(conn).ReplaceAll(ctx, repoRow.ID, dcFindings); err != nil {
+		return fmt.Errorf("dead_code_findings: %w", err)
+	}
 	return nil
+}
+
+// printDeadCodeSummary prints how many dead-code findings the analyzer
+// produced, broken down by kind, plus the top-5 by confidence.
+func printDeadCodeSummary(w io.Writer, findings []deadcode.Finding) {
+	if len(findings) == 0 {
+		fmt.Fprintln(w, "\nDead code: none found")
+		return
+	}
+	files, syms := 0, 0
+	for _, f := range findings {
+		switch f.Kind {
+		case deadcode.KindUnreachableFile:
+			files++
+		case deadcode.KindUnreachableSymbol:
+			syms++
+		}
+	}
+	fmt.Fprintf(w, "\nDead code: %d findings (%d files, %d symbols)\n", len(findings), files, syms)
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	defer tw.Flush()
+	top := 5
+	if len(findings) < top {
+		top = len(findings)
+	}
+	for i := 0; i < top; i++ {
+		f := findings[i]
+		label := f.FilePath
+		if f.SymbolName != "" {
+			label = fmt.Sprintf("%s::%s", f.FilePath, f.SymbolName)
+		}
+		flag := ""
+		if f.SafeToDelete {
+			flag = " SAFE"
+		}
+		fmt.Fprintf(tw, "  %.2f%s\t%s\t%s\n", f.Confidence, flag, label, f.Reason)
+	}
 }
 
 // printGitSummary prints a top-line overview of git intelligence: total
