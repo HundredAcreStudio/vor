@@ -9,8 +9,11 @@ import (
 
 	"github.com/repowise-dev/repowise-go/internal/config"
 	"github.com/repowise-dev/repowise-go/internal/generation/runner"
+	"github.com/repowise-dev/repowise-go/internal/persistence/coststore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 	"github.com/repowise-dev/repowise-go/internal/providers"
+	"github.com/repowise-dev/repowise-go/internal/providers/middleware"
+	"github.com/repowise-dev/repowise-go/internal/providers/ratelimit"
 
 	// Side-effect imports — register every provider so --provider can
 	// pick any of them at runtime. Mock first for predictability when
@@ -76,9 +79,23 @@ variables; override per-invocation with --provider and --model.`,
 
 			var prov providers.Provider
 			if !dryRun {
-				prov, err = buildProvider(providerName, model, cfg)
+				raw, err := buildProvider(providerName, model, cfg)
 				if err != nil {
 					return fmt.Errorf("build provider %q: %w", providerName, err)
+				}
+				// Wrap real providers with the cost/ratelimit/retry chain.
+				// The mock provider is exempted because: it never produces
+				// transient errors (retry is dead weight), never costs
+				// anything (cost rows would be all-zero), and the spend
+				// totals are most useful when they're real.
+				if providerName == "mock" {
+					prov = raw
+				} else {
+					prov = middleware.Wrap(raw, middleware.Options{
+						RepositoryID: repoRow.ID,
+						CostStore:    coststore.New(conn),
+						Limiter:      ratelimit.New(cfg.RPM, cfg.TPM),
+					})
 				}
 			}
 
