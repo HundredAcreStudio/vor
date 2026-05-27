@@ -1,8 +1,11 @@
 # Binaries
 /bin/
 /dist/
-repowise
-repowise-augment
+# Anchored — gitignore bare patterns match anywhere in the tree, which
+# would also exclude the cmd/repowise/ and cmd/repowise-augment/ source
+# directories. The leading slash limits the match to the repo root.
+/repowise
+/repowise-augment
 
 # Test + coverage
 *.test

@@ -21,11 +21,20 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
 	"github.com/repowise-dev/repowise-go/internal/analysis/health"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
+	"github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
+	"github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/parser"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/traverser"
+
+	// Side-effect imports — each per-language resolver registers itself
+	// with the resolver registry in its init(). Add a language here as
+	// soon as a resolver for it exists.
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/golang"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/python"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/typescript"
 	"github.com/repowise-dev/repowise-go/internal/persistence/deadstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/gitstore"
@@ -185,9 +194,17 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 		return nil
 	})
 
-	// Phase: graph.
+	// Phase: graph. Builds the dependency graph using the per-language
+	// resolver registry. Reads go.mod (and similar per-language config
+	// files in future) so resolvers have the cross-cutting data they
+	// need to translate module-path imports into file paths.
 	if err := runPhase(ctx, opts, store, PhaseGraph, res, func() error {
-		b := graph.NewBuilder(nil, graph.Options{})
+		rctx := resolver.Context{}
+		if modPath, err := gomod.ParseModulePath(opts.RepoPath); err == nil && modPath != "" {
+			rctx.GoModulePath = modPath
+			opts.Logger.Info("pipeline: detected Go module", "module", modPath)
+		}
+		b := graph.NewBuilder(nil, graph.Options{ResolverContext: rctx})
 		for _, p := range res.Parsed {
 			b.AddFile(p)
 		}

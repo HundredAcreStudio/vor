@@ -2,10 +2,8 @@ package graph
 
 import (
 	"path"
-	"path/filepath"
-	"strings"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/languages"
+	"github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
 )
 
@@ -28,6 +26,13 @@ type Options struct {
 	// MinCallConfidence drops call edges whose resolution confidence falls
 	// below this value. Default 0.0 (keep everything).
 	MinCallConfidence float64
+
+	// ResolverContext carries language-specific data the per-language
+	// import resolvers consume (Go module path from go.mod, Rust crate
+	// name from Cargo.toml, etc.). The Files / FilesByDir fields are
+	// populated by the builder; callers only need to set the
+	// language-specific ones.
+	ResolverContext resolver.Context
 }
 
 // NewBuilder constructs a Builder writing into g. The caller may pass an
@@ -81,112 +86,48 @@ func (b *Builder) Build() *Graph {
 	return b.g
 }
 
-// resolveImports walks every parsed file's imports and attempts to map the
-// module path to another file in the repo. Three strategies, in order:
-//
-//  1. Relative imports (./foo, ../bar) are resolved against the importer's
-//     directory, trying each registered extension for the importer's
-//     language plus common ones (index.{ts,tsx,js,py}).
-//  2. Python dotted imports ("pkg.sub.mod") are resolved by treating "." as
-//     "/" and appending ".py" / "/__init__.py".
-//  3. Best-effort suffix match across all known files.
-//
-// Anything that fails to resolve becomes a no-op (no edge). The Python
-// implementation likewise drops un-resolvable imports rather than emitting
-// edges to placeholder external nodes.
+// resolveImports walks every parsed file's imports and dispatches each
+// one to the per-language resolver registered in
+// internal/ingestion/graph/resolver. Languages without a registered
+// resolver produce no graph edges — by design, since wrong edges are
+// worse than absent ones for dead-code and hidden_coupling analysis.
 func (b *Builder) resolveImports() {
+	// Materialise the resolver context once per Build() call. Caller-
+	// supplied language-specific fields (GoModulePath, RustCrateName, ...)
+	// flow through; the Files / FilesByDir indexes are derived from
+	// the parsed set.
+	ctx := b.options.ResolverContext
+	ctx.Files = make(map[string]bool, len(b.byPath))
+	ctx.FilesByDir = map[string][]string{}
+	for p := range b.byPath {
+		ctx.Files[p] = true
+		dir := path.Dir(p)
+		ctx.FilesByDir[dir] = append(ctx.FilesByDir[dir], p)
+	}
+
 	for i := range b.parsed {
 		parsed := &b.parsed[i]
 		fileNode := b.g.LookupNode(parsed.FileInfo.Path)
 		if fileNode == nil {
 			continue
 		}
+		r := resolver.Lookup(parsed.FileInfo.Language)
+		if r == nil {
+			continue // no resolver for this language — skip
+		}
 		for _, imp := range parsed.Imports {
-			targetPath, ok := b.resolveImportPath(parsed.FileInfo, imp)
-			if !ok {
-				continue
-			}
-			targetNode := b.g.LookupNode(targetPath)
-			if targetNode == nil {
-				continue
-			}
-			b.g.AddEdge(fileNode, targetNode, models.EdgeImports, 1.0, imp.ImportedNames)
-		}
-	}
-}
-
-func (b *Builder) resolveImportPath(fi models.FileInfo, imp models.Import) (string, bool) {
-	module := strings.TrimSpace(imp.ModulePath)
-	if module == "" {
-		return "", false
-	}
-	importerDir := path.Dir(fi.Path)
-
-	// Strategy 1: relative import.
-	if strings.HasPrefix(module, ".") {
-		candidates := relativeImportCandidates(importerDir, module, fi.Language)
-		for _, c := range candidates {
-			if _, ok := b.byPath[c]; ok {
-				return c, true
-			}
-		}
-		return "", false
-	}
-
-	// Strategy 2: Python dotted import.
-	if fi.Language == "python" {
-		dotted := strings.ReplaceAll(module, ".", "/")
-		candidates := []string{
-			dotted + ".py",
-			dotted + "/__init__.py",
-		}
-		for _, c := range candidates {
-			if _, ok := b.byPath[c]; ok {
-				return c, true
+			for _, targetPath := range r.Resolve(parsed.FileInfo, imp, ctx) {
+				if targetPath == parsed.FileInfo.Path {
+					continue // self-import / same-package
+				}
+				targetNode := b.g.LookupNode(targetPath)
+				if targetNode == nil {
+					continue
+				}
+				b.g.AddEdge(fileNode, targetNode, models.EdgeImports, 1.0, imp.ImportedNames)
 			}
 		}
 	}
-
-	// Strategy 3: TypeScript / JavaScript bare specifiers that happen to
-	// match a file (e.g. tsconfig path aliases not yet plumbed through
-	// here, or just naive matches). Suffix match.
-	for p := range b.byPath {
-		if strings.HasSuffix(p, "/"+module) {
-			return p, true
-		}
-		// Strip extensions in path to handle `import { x } from "calc"`
-		// matching "calc.ts".
-		ext := filepath.Ext(p)
-		if ext != "" && strings.HasSuffix(strings.TrimSuffix(p, ext), "/"+module) {
-			return p, true
-		}
-	}
-	return "", false
-}
-
-// relativeImportCandidates expands "./calc" / "../utils" into a candidate
-// list of possible target paths. The language drives which extensions are
-// considered.
-func relativeImportCandidates(importerDir, module string, lang models.LanguageTag) []string {
-	joined := path.Join(importerDir, module)
-	exts := relativeImportExts(lang)
-	out := make([]string, 0, len(exts)*2+1)
-	out = append(out, joined) // exact filename if user wrote one
-	for _, ext := range exts {
-		out = append(out, joined+ext)
-	}
-	for _, ext := range exts {
-		out = append(out, joined+"/index"+ext)
-	}
-	return out
-}
-
-func relativeImportExts(lang models.LanguageTag) []string {
-	spec := languages.Lookup(lang)
-	if spec != nil && len(spec.Extensions) > 0 {
-		return append([]string(nil), spec.Extensions...)
-	}
-	return []string{".ts", ".tsx", ".js", ".py", ".go"}
 }
 
 // resolveCalls walks every parsed file's calls and emits `calls` edges

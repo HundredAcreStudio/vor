@@ -14,8 +14,10 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
 	"github.com/repowise-dev/repowise-go/internal/analysis/health"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
+	"github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
+	"github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/parser"
 
@@ -37,6 +39,12 @@ import (
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/npm"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/nuget"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/pypi"
+
+	// Side-effect imports: each per-language import resolver registers
+	// itself with the resolver registry.
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/golang"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/python"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/typescript"
 
 	"github.com/repowise-dev/repowise-go/internal/ingestion/traverser"
 	"github.com/repowise-dev/repowise-go/internal/persistence/deadstore"
@@ -174,7 +182,14 @@ func newIngestCmd() *cobra.Command {
 			}
 
 			if buildGraph {
-				b := graph.NewBuilder(nil, graph.Options{})
+				// Resolver context: per-language config (Go module path,
+				// future Rust crate name, etc.) flows into the per-
+				// language import resolvers.
+				rctx := resolver.Context{}
+				if modPath, err := gomod.ParseModulePath(absRoot); err == nil && modPath != "" {
+					rctx.GoModulePath = modPath
+				}
+				b := graph.NewBuilder(nil, graph.Options{ResolverContext: rctx})
 				for _, p := range parsedFiles {
 					b.AddFile(p)
 				}

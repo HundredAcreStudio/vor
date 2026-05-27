@@ -5,6 +5,14 @@ import (
 	"testing"
 
 	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+
+	// Side-effect imports: each per-language resolver registers itself
+	// with the resolver registry, the same way the CLI / pipeline pulls
+	// them in. Without these, builder tests get zero import edges
+	// because Lookup() returns nil for every language.
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/golang"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/python"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/typescript"
 )
 
 // mkFile is a test helper that creates a ParsedFile with the given path,
