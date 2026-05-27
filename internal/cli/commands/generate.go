@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/repowise-dev/repowise-go/internal/config"
+	"github.com/repowise-dev/repowise-go/internal/generation/models"
 	"github.com/repowise-dev/repowise-go/internal/generation/runner"
 	"github.com/repowise-dev/repowise-go/internal/persistence/coststore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
@@ -30,6 +32,7 @@ func newGenerateCmd() *cobra.Command {
 		target       string
 		providerName string
 		model        string
+		kindsCSV     string
 		limit        int
 		force        bool
 		dryRun       bool
@@ -54,6 +57,11 @@ variables; override per-invocation with --provider and --model.`,
 			absRoot, err := filepath.Abs(root)
 			if err != nil {
 				return fmt.Errorf("resolve path: %w", err)
+			}
+
+			kinds, err := parsePageKinds(kindsCSV)
+			if err != nil {
+				return err
 			}
 
 			cfg, err := config.Load(root)
@@ -106,6 +114,7 @@ variables; override per-invocation with --provider and --model.`,
 				DB:           conn,
 				Provider:     prov,
 				Model:        model,
+				Kinds:        kinds,
 				Target:       target,
 				Limit:        limit,
 				Force:        force,
@@ -140,7 +149,39 @@ variables; override per-invocation with --provider and --model.`,
 	cmd.Flags().IntVar(&limit, "limit", 0, "max pages to generate this run (0 = no cap)")
 	cmd.Flags().BoolVar(&force, "force", false, "regenerate even when source_hash matches")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what would be generated without calling the provider")
+	cmd.Flags().StringVar(&kindsCSV, "kind", "file_overview", "comma-separated page kinds: file_overview|directory_overview|symbol_detail")
 	return cmd
+}
+
+// parsePageKinds validates the --kind flag value. Returns an error
+// rather than silently filtering so a typo doesn't become "ran a no-op".
+func parsePageKinds(csv string) ([]models.PageKind, error) {
+	if csv == "" {
+		return nil, nil
+	}
+	known := map[string]models.PageKind{
+		"file_overview":      models.PageKindFileOverview,
+		"directory_overview": models.PageKindDirectoryOverview,
+		"symbol_detail":      models.PageKindSymbolDetail,
+	}
+	out := []models.PageKind{}
+	seen := map[models.PageKind]bool{}
+	for _, raw := range strings.Split(csv, ",") {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		k, ok := known[name]
+		if !ok {
+			return nil, fmt.Errorf("unknown page kind %q (valid: file_overview, directory_overview, symbol_detail)", name)
+		}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, k)
+	}
+	return out, nil
 }
 
 // buildProvider hydrates a Provider with config-derived options. For now

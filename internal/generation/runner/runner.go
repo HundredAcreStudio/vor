@@ -36,8 +36,15 @@ type Options struct {
 	// means "let the provider pick".
 	Model string
 
-	// Target restricts generation to a single file path (repo-relative).
-	// Empty means "every indexed file".
+	// Kinds names which PageKinds this run should produce. Empty defaults
+	// to [PageKindFileOverview] for backwards compatibility with the
+	// Pass B CLI. Pass D adds DirectoryOverview and SymbolDetail.
+	Kinds []models.PageKind
+
+	// Target restricts generation to a single target path (repo-relative
+	// file for file/directory kinds; symbol_id like "file.go::Sym" for
+	// symbol_detail). Empty means "every indexed unit of the selected
+	// Kinds".
 	Target string
 	// Limit caps the number of pages generated this run. 0 means "no cap".
 	Limit int
@@ -48,7 +55,7 @@ type Options struct {
 	// DryRun prints what would be generated without calling the provider.
 	DryRun bool
 
-	// OnProgress is called once per file with its outcome. Optional;
+	// OnProgress is called once per unit with its outcome. Optional;
 	// when nil, the runner is silent. Useful for CLI tick output.
 	OnProgress func(FileResult)
 }
@@ -96,53 +103,87 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 	if err := validate(opts); err != nil {
 		return Summary{}, err
 	}
-	files, err := loadIndexedFiles(ctx, opts.DB, opts.RepositoryID, opts.Target)
-	if err != nil {
-		return Summary{}, fmt.Errorf("load indexed files: %w", err)
-	}
-	if len(files) == 0 {
-		return Summary{}, nil // empty summary, no error — caller decides how to report
+	kinds := opts.Kinds
+	if len(kinds) == 0 {
+		kinds = []models.PageKind{models.PageKindFileOverview}
 	}
 
+	summary := Summary{Files: []FileResult{}}
 	store := wikistore.New(opts.DB)
-	gen := &pages.FileOverviewGenerator{
-		Provider: opts.Provider,
-		Store:    store,
-		Model:    opts.Model,
-	}
 
-	summary := Summary{Files: make([]FileResult, 0, len(files))}
-	for _, f := range files {
+	for _, kind := range kinds {
 		if opts.Limit > 0 && summary.GeneratedCount+summary.DryRunCount >= opts.Limit {
 			break
 		}
-		select {
-		case <-ctx.Done():
-			return summary, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return summary, err
+		}
+		var (
+			err error
+		)
+		switch kind {
+		case models.PageKindFileOverview:
+			err = runFileOverviews(ctx, opts, store, &summary)
+		case models.PageKindDirectoryOverview:
+			err = runDirectoryOverviews(ctx, opts, store, &summary)
+		case models.PageKindSymbolDetail:
+			err = runSymbolDetails(ctx, opts, store, &summary)
 		default:
+			err = fmt.Errorf("runner: unsupported kind %q", kind)
 		}
-		res := generateOne(ctx, opts, gen, store, f)
-		summary.Files = append(summary.Files, res)
-		switch res.Status {
-		case StatusGenerated:
-			summary.GeneratedCount++
-			summary.TotalInputTokens += res.InputTokens
-			summary.TotalOutputTokens += res.OutputTokens
-			summary.TotalCachedTokens += res.CachedTokens
-		case StatusSkipped:
-			summary.SkippedCount++
-		case StatusError:
-			summary.ErrorCount++
-		case StatusMissing:
-			summary.MissingCount++
-		case StatusDryRun:
-			summary.DryRunCount++
-		}
-		if opts.OnProgress != nil {
-			opts.OnProgress(res)
+		if err != nil {
+			return summary, err
 		}
 	}
 	return summary, nil
+}
+
+// runFileOverviews handles the file_overview kind — extracted from the
+// original Run for Pass D's multi-kind dispatch.
+func runFileOverviews(ctx context.Context, opts Options, store *wikistore.Store, summary *Summary) error {
+	files, err := loadIndexedFiles(ctx, opts.DB, opts.RepositoryID, opts.Target)
+	if err != nil {
+		return fmt.Errorf("load indexed files: %w", err)
+	}
+	if len(files) == 0 {
+		return nil
+	}
+	gen := &pages.FileOverviewGenerator{
+		Provider: opts.Provider, Store: store, Model: opts.Model,
+	}
+	for _, f := range files {
+		if opts.Limit > 0 && summary.GeneratedCount+summary.DryRunCount >= opts.Limit {
+			return nil
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		res := generateOne(ctx, opts, gen, store, f)
+		recordResult(opts, summary, res)
+	}
+	return nil
+}
+
+func recordResult(opts Options, summary *Summary, res FileResult) {
+	summary.Files = append(summary.Files, res)
+	switch res.Status {
+	case StatusGenerated:
+		summary.GeneratedCount++
+		summary.TotalInputTokens += res.InputTokens
+		summary.TotalOutputTokens += res.OutputTokens
+		summary.TotalCachedTokens += res.CachedTokens
+	case StatusSkipped:
+		summary.SkippedCount++
+	case StatusError:
+		summary.ErrorCount++
+	case StatusMissing:
+		summary.MissingCount++
+	case StatusDryRun:
+		summary.DryRunCount++
+	}
+	if opts.OnProgress != nil {
+		opts.OnProgress(res)
+	}
 }
 
 // generateOne handles a single file: read, hash, decide, call.
