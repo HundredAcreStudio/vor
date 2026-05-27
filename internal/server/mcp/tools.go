@@ -84,6 +84,12 @@ func (s *Server) registerTools() {
 		mcp.WithString("node_type", mcp.Description("Filter to 'file' or 'symbol'.")),
 		mcp.WithNumber("limit", mcp.DefaultNumber(25), mcp.Description("Maximum matches to return (1–200, default 25).")),
 	), s.wrap(s.toolSearch))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_pipeline_log",
+		mcp.WithDescription("Recent pipeline phase executions for this repository, newest first. Each entry is one row of pipeline_jobs (phase, state, started_at, error if failed). Useful for diagnosing 'why is my data out of date?'"),
+		mcp.WithNumber("limit", mcp.DefaultNumber(20), mcp.Description("Maximum rows to return (1–200, default 20).")),
+	), s.wrap(s.toolPipelineLog))
 }
 
 // wrap is the common handler wrapper: it logs each tool call (method,

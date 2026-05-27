@@ -30,6 +30,7 @@ func Root() *cobra.Command {
 	root.AddCommand(newExternalsCmd())
 	root.AddCommand(newCostsCmd())
 	root.AddCommand(newDoctorCmd())
+	root.AddCommand(newPipelineCmd())
 	root.AddCommand(newMCPCmd())
 	// Additional subcommands are added in their respective phases.
 

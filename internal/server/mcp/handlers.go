@@ -467,6 +467,46 @@ func (s *Server) toolSearch(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	})
 }
 
+// ---- tool: repowise_pipeline_log ------------------------------------------
+
+type pipelineLogEntry struct {
+	Phase     string `json:"phase"`
+	State     string `json:"state"`
+	StartedAt string `json:"startedAt"`
+	UpdatedAt string `json:"updatedAt"`
+	Error     string `json:"error,omitempty"`
+}
+
+func (s *Server) toolPipelineLog(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	limit := clampInt(req.GetInt("limit", 20), 1, 200)
+	rows, err := s.opts.DB.QueryContext(ctx,
+		`SELECT phase, state, started_at, updated_at, COALESCE(error,'')
+		 FROM pipeline_jobs WHERE repository_id = ?
+		 ORDER BY started_at DESC, id DESC LIMIT ?`,
+		s.opts.RepositoryID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]pipelineLogEntry, 0, limit)
+	for rows.Next() {
+		var (
+			e                    pipelineLogEntry
+			startedAt, updatedAt string
+		)
+		if err := rows.Scan(&e.Phase, &e.State, &startedAt, &updatedAt, &e.Error); err != nil {
+			return nil, err
+		}
+		e.StartedAt = startedAt
+		e.UpdatedAt = updatedAt
+		out = append(out, e)
+	}
+	return jsonResult(map[string]any{
+		"entries": out,
+		"limit":   limit,
+	})
+}
+
 func clampInt(v, lo, hi int) int {
 	if v < lo {
 		return lo
