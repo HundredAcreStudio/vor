@@ -42,8 +42,12 @@ import (
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/rust"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/typescript"
 
-	// Side-effect import — registers the inline-marker decision extractor.
-	// Future ADR / CHANGELOG / commit extractors go here as they land.
+	// Side-effect imports — each decision-source extractor registers
+	// itself with the decisions registry in its init(). Add a source
+	// here as soon as its package exists.
+	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/adr"
+	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/changelog"
+	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/commits"
 	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/inline"
 
 	"github.com/repowise-dev/repowise-go/internal/persistence/deadstore"
