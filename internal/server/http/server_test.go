@@ -238,6 +238,48 @@ func TestListHotspots(t *testing.T) {
 	}
 }
 
+func TestGetSymbol(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+	var body struct {
+		Name     string `json:"name"`
+		NodeType string `json:"nodeType"`
+		FilePath string `json:"filePath"`
+	}
+	hitJSON(t, srv.URL, "/api/repos/"+repoID+"/symbol?symbol_id=calc.ts::add", &body)
+	if body.Name != "add" || body.NodeType != "symbol" || body.FilePath != "calc.ts" {
+		t.Errorf("symbol = %+v", body)
+	}
+}
+
+func TestGetSymbol_NotFound(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+	resp, _ := http.Get(srv.URL + "/api/repos/" + repoID + "/symbol?symbol_id=nope")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestGetDependents(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+	var body struct {
+		Dependents []map[string]any `json:"dependents"`
+	}
+	hitJSON(t, srv.URL, "/api/repos/"+repoID+"/dependents?file_path=calc.ts", &body)
+	if len(body.Dependents) != 1 || body.Dependents[0]["from"] != "index.ts" {
+		t.Errorf("dependents = %+v", body.Dependents)
+	}
+}
+
+func TestGetSymbol_MissingQuery(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+	resp, _ := http.Get(srv.URL + "/api/repos/" + repoID + "/symbol")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("missing symbol_id should yield 400; got %d", resp.StatusCode)
+	}
+}
+
 func TestListDeadCode(t *testing.T) {
 	srv, repoID := fixtureRepo(t)
 	var body struct {

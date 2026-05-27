@@ -240,6 +240,178 @@ func (s *Server) toolHealthFindings(ctx context.Context, req mcp.CallToolRequest
 	return jsonResult(map[string]any{"findings": out, "limit": limit})
 }
 
+// ---- tool: repowise_symbol -----------------------------------------------
+
+type symbolPayload struct {
+	NodeID        string  `json:"nodeId"`
+	NodeType      string  `json:"nodeType"`
+	Kind          string  `json:"kind,omitempty"`
+	Name          string  `json:"name,omitempty"`
+	QualifiedName string  `json:"qualifiedName,omitempty"`
+	FilePath      string  `json:"filePath,omitempty"`
+	StartLine     int     `json:"startLine,omitempty"`
+	EndLine       int     `json:"endLine,omitempty"`
+	Visibility    string  `json:"visibility,omitempty"`
+	Signature     string  `json:"signature,omitempty"`
+	PageRank      float64 `json:"pagerank"`
+	Language      string  `json:"language,omitempty"`
+}
+
+func (s *Server) toolSymbol(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	id, err := req.RequireString("symbol_id")
+	if err != nil {
+		return nil, err
+	}
+	row := s.opts.DB.QueryRowContext(ctx,
+		`SELECT node_id, node_type, COALESCE(kind,''), COALESCE(name,''),
+		        COALESCE(qualified_name,''), COALESCE(file_path,''),
+		        COALESCE(start_line,0), COALESCE(end_line,0),
+		        COALESCE(visibility,''), COALESCE(signature,''),
+		        pagerank, language
+		 FROM graph_nodes WHERE repository_id = ? AND node_id = ?`,
+		s.opts.RepositoryID, id)
+	var p symbolPayload
+	if err := row.Scan(&p.NodeID, &p.NodeType, &p.Kind, &p.Name, &p.QualifiedName,
+		&p.FilePath, &p.StartLine, &p.EndLine, &p.Visibility, &p.Signature,
+		&p.PageRank, &p.Language); err != nil {
+		return mcp.NewToolResultError("symbol not found: " + id), nil
+	}
+	return jsonResult(p)
+}
+
+// ---- tool: repowise_callers ----------------------------------------------
+
+type callerEdgePayload struct {
+	From       string  `json:"from"`
+	EdgeType   string  `json:"edgeType"`
+	Confidence float64 `json:"confidence"`
+}
+
+func (s *Server) toolCallers(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	target, err := req.RequireString("symbol_id")
+	if err != nil {
+		return nil, err
+	}
+	limit := clampInt(req.GetInt("limit", 50), 1, 500)
+	rows, err := s.opts.DB.QueryContext(ctx,
+		`SELECT source_node_id, edge_type, confidence
+		 FROM graph_edges
+		 WHERE repository_id = ? AND target_node_id = ?
+		   AND edge_type IN ('calls', 'has_method', 'method_overrides', 'method_implements')
+		 ORDER BY confidence DESC, source_node_id
+		 LIMIT ?`, s.opts.RepositoryID, target, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]callerEdgePayload, 0, limit)
+	for rows.Next() {
+		var e callerEdgePayload
+		if err := rows.Scan(&e.From, &e.EdgeType, &e.Confidence); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return jsonResult(map[string]any{
+		"symbolId": target,
+		"callers":  out,
+	})
+}
+
+// ---- tool: repowise_dependents -------------------------------------------
+
+type dependentEdgePayload struct {
+	From          string   `json:"from"`
+	Confidence    float64  `json:"confidence"`
+	ImportedNames []string `json:"importedNames,omitempty"`
+}
+
+func (s *Server) toolDependents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	target, err := req.RequireString("file_path")
+	if err != nil {
+		return nil, err
+	}
+	limit := clampInt(req.GetInt("limit", 50), 1, 500)
+	rows, err := s.opts.DB.QueryContext(ctx,
+		`SELECT source_node_id, confidence, imported_names_json
+		 FROM graph_edges
+		 WHERE repository_id = ? AND target_node_id = ? AND edge_type = 'imports'
+		 ORDER BY source_node_id LIMIT ?`,
+		s.opts.RepositoryID, target, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]dependentEdgePayload, 0, limit)
+	for rows.Next() {
+		var (
+			d           dependentEdgePayload
+			namesJSON   string
+		)
+		if err := rows.Scan(&d.From, &d.Confidence, &namesJSON); err != nil {
+			return nil, err
+		}
+		if namesJSON != "" && namesJSON != "[]" {
+			d.ImportedNames = unmarshalStringArray(namesJSON)
+		}
+		out = append(out, d)
+	}
+	return jsonResult(map[string]any{
+		"filePath":   target,
+		"dependents": out,
+	})
+}
+
+// ---- tool: repowise_externals --------------------------------------------
+
+type externalPayload struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName,omitempty"`
+	Ecosystem   string `json:"ecosystem"`
+	Version     string `json:"version,omitempty"`
+	DeclaredIn  string `json:"declaredIn"`
+	IsDevDep    bool   `json:"isDevDep"`
+}
+
+func (s *Server) toolExternals(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	limit := clampInt(req.GetInt("limit", 200), 1, 1000)
+	ecosystem := req.GetString("ecosystem", "")
+	devOnly := req.GetBool("dev_only", false)
+
+	query := `SELECT name, display_name, ecosystem, COALESCE(version,''), declared_in, is_dev_dep
+	          FROM external_systems WHERE repository_id = ?`
+	args := []any{s.opts.RepositoryID}
+	if ecosystem != "" {
+		query += " AND ecosystem = ?"
+		args = append(args, ecosystem)
+	}
+	if devOnly {
+		query += " AND is_dev_dep = 1"
+	}
+	query += " ORDER BY ecosystem, name LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := s.opts.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]externalPayload, 0, limit)
+	for rows.Next() {
+		var e externalPayload
+		var dev int
+		if err := rows.Scan(&e.Name, &e.DisplayName, &e.Ecosystem, &e.Version, &e.DeclaredIn, &dev); err != nil {
+			return nil, err
+		}
+		e.IsDevDep = dev == 1
+		out = append(out, e)
+	}
+	return jsonResult(map[string]any{
+		"externals": out,
+		"limit":     limit,
+	})
+}
+
 func clampInt(v, lo, hi int) int {
 	if v < lo {
 		return lo
@@ -248,4 +420,12 @@ func clampInt(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+func unmarshalStringArray(s string) []string {
+	var out []string
+	if err := jsonUnmarshalLocal([]byte(s), &out); err != nil {
+		return nil
+	}
+	return out
 }

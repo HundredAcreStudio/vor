@@ -9,6 +9,11 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+// jsonUnmarshalLocal exposes encoding/json.Unmarshal under a name the
+// handler file can call without re-importing json. Tiny shim because the
+// handler file only needs unmarshal — keeping its imports clean.
+var jsonUnmarshalLocal = json.Unmarshal
+
 // registerTools wires every tool onto s.srv. New tools should land here so
 // the registration sits in one place and a follow-up can split this file
 // per tool group when the count grows.
@@ -43,6 +48,34 @@ func (s *Server) registerTools() {
 		mcp.WithString("biomarker", mcp.Description("Filter to one biomarker type (e.g. 'high_complexity').")),
 		mcp.WithNumber("limit", mcp.DefaultNumber(50), mcp.Description("Maximum findings to return (1–500, default 50).")),
 	), s.wrap(s.toolHealthFindings))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_symbol",
+		mcp.WithDescription("Detail for one symbol: kind, file path, line range, visibility, complexity, PageRank. Look up by the canonical symbol_id (e.g. 'src/foo.go::User::Save')."),
+		mcp.WithString("symbol_id", mcp.Required(), mcp.Description("Canonical symbol ID, formatted '<file>::<symbol>' or '<file>::<parent>::<symbol>'.")),
+	), s.wrap(s.toolSymbol))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_callers",
+		mcp.WithDescription("Who calls this symbol? Returns the incoming 'calls' / 'has_method' edges from the dependency graph, with caller symbol ID and confidence."),
+		mcp.WithString("symbol_id", mcp.Required(), mcp.Description("Canonical symbol ID to find callers of.")),
+		mcp.WithNumber("limit", mcp.DefaultNumber(50), mcp.Description("Maximum callers to return (1–500, default 50).")),
+	), s.wrap(s.toolCallers))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_dependents",
+		mcp.WithDescription("Which files import the given file? Returns incoming 'imports' edges. Use to assess the blast radius of changing a file."),
+		mcp.WithString("file_path", mcp.Required(), mcp.Description("Repo-relative file path (e.g. 'pkg/foo/bar.go').")),
+		mcp.WithNumber("limit", mcp.DefaultNumber(50), mcp.Description("Maximum dependents to return (1–500, default 50).")),
+	), s.wrap(s.toolDependents))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_externals",
+		mcp.WithDescription("Third-party dependencies declared in manifest files (package.json, pyproject.toml, Cargo.toml, go.mod, *.csproj). Optional ecosystem + dev filters."),
+		mcp.WithString("ecosystem", mcp.Description("Filter to one ecosystem: 'npm', 'pypi', 'cargo', 'go', or 'nuget'.")),
+		mcp.WithBoolean("dev_only", mcp.DefaultBool(false), mcp.Description("If true, return only dev/test dependencies.")),
+		mcp.WithNumber("limit", mcp.DefaultNumber(200), mcp.Description("Maximum records to return (1–1000, default 200).")),
+	), s.wrap(s.toolExternals))
 }
 
 // wrap is the common handler wrapper: it logs each tool call (method,

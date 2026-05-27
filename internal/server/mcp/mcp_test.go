@@ -202,6 +202,61 @@ func TestRepowiseHealthFindings_FilterByBiomarker(t *testing.T) {
 	}
 }
 
+func TestRepowiseSymbol(t *testing.T) {
+	srv, _ := fixtureServer(t)
+	text := callTool(t, srv, "repowise_symbol", map[string]any{
+		"symbol_id": "lib.go::Helper",
+	})
+	for _, want := range []string{`"name": "Helper"`, `"nodeType": "symbol"`, `"filePath": "lib.go"`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("symbol missing %q in %s", want, text)
+		}
+	}
+}
+
+func TestRepowiseSymbol_NotFound(t *testing.T) {
+	srv, _ := fixtureServer(t)
+	req := map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+		"params": map[string]any{
+			"name":      "repowise_symbol",
+			"arguments": map[string]any{"symbol_id": "does/not/exist::Foo"},
+		},
+	}
+	raw, _ := json.Marshal(req)
+	resp := srv.MCPServer().HandleMessage(context.Background(), raw)
+	respBytes, _ := json.Marshal(resp)
+	if !strings.Contains(string(respBytes), "not found") {
+		t.Errorf("expected 'not found' response, got: %s", string(respBytes))
+	}
+}
+
+func TestRepowiseDependents(t *testing.T) {
+	srv, _ := fixtureServer(t)
+	text := callTool(t, srv, "repowise_dependents", map[string]any{
+		"file_path": "lib.go",
+	})
+	if !strings.Contains(text, "main.go") {
+		t.Errorf("dependents missing main.go: %s", text)
+	}
+}
+
+func TestRepowiseExternals_EcosystemFilter(t *testing.T) {
+	srv, _ := fixtureServer(t)
+	text := callTool(t, srv, "repowise_externals", map[string]any{
+		"ecosystem": "npm",
+	})
+	if !strings.Contains(text, "react") {
+		t.Errorf("expected react in npm externals: %s", text)
+	}
+	text2 := callTool(t, srv, "repowise_externals", map[string]any{
+		"ecosystem": "cargo",
+	})
+	if strings.Contains(text2, "react") {
+		t.Errorf("cargo filter should exclude npm react: %s", text2)
+	}
+}
+
 func TestNew_RejectsMissingDB(t *testing.T) {
 	_, err := mcpserver.New(mcpserver.Options{RepositoryID: "x"})
 	if err == nil {
