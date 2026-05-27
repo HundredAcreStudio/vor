@@ -74,6 +74,7 @@ func New(opts Options) (*Server, error) {
 			routes.MountDeadCode(per, deps)
 			routes.MountHealth(per, deps)
 			routes.MountExternals(per, deps)
+			routes.MountPipeline(per, deps)
 		})
 	})
 
