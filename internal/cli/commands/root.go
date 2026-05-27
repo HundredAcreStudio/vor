@@ -21,6 +21,7 @@ func Root() *cobra.Command {
 	root.AddCommand(newServeCmd())
 	root.AddCommand(newDBCmd())
 	root.AddCommand(newIngestCmd())
+	root.AddCommand(newInitCmd())
 	root.AddCommand(newStatusCmd())
 	root.AddCommand(newHealthCmd())
 	root.AddCommand(newDeadCodeCmd())
