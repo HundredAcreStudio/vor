@@ -28,10 +28,11 @@ const (
 
 // Biomarker names. Stored as biomarker_type on health_findings.
 const (
-	BiomarkerHighComplexity = "high_complexity"
-	BiomarkerLongFunction   = "long_function"
-	BiomarkerDeepNesting    = "deep_nesting"
-	BiomarkerGodClass       = "god_class"
+	BiomarkerHighComplexity  = "high_complexity"
+	BiomarkerLongFunction    = "long_function"
+	BiomarkerDeepNesting     = "deep_nesting"
+	BiomarkerGodClass        = "god_class"
+	BiomarkerUntestedHotspot = "untested_hotspot"
 )
 
 // Finding is one biomarker hit. Persisted into health_findings.
@@ -103,6 +104,12 @@ func DefaultThresholds() Thresholds {
 // Analyzer runs biomarkers over a set of parsed files.
 type Analyzer struct {
 	Thresholds Thresholds
+
+	// HotspotPaths is the set of file paths flagged as git hotspots,
+	// used by the untested_hotspot biomarker. Pass the output of git
+	// intelligence here. Optional — when empty, the biomarker won't
+	// fire.
+	HotspotPaths map[string]struct{}
 }
 
 // Result is the bundle returned by Analyze.
@@ -122,10 +129,27 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 	var findings []Finding
 	metrics := make([]FileMetric, 0, len(files))
 
+	// Pre-compute "files that have a paired test file" so untested_hotspot
+	// can skip well-covered hotspots.
+	testPairs := buildTestPairs(files)
+
 	for _, pf := range files {
 		fm := FileMetric{
-			FilePath: pf.FileInfo.Path,
-			Score:    10.0,
+			FilePath:    pf.FileInfo.Path,
+			Score:       10.0,
+			HasTestFile: testPairs[pf.FileInfo.Path],
+		}
+
+		// untested_hotspot: file is a known git hotspot AND has no paired
+		// test file. One finding per file, not per symbol.
+		if _, isHot := a.HotspotPaths[pf.FileInfo.Path]; isHot && !pf.FileInfo.IsTest && !testPairs[pf.FileInfo.Path] {
+			findings = append(findings, Finding{
+				FilePath:      pf.FileInfo.Path,
+				BiomarkerType: BiomarkerUntestedHotspot,
+				Severity:      SeverityHigh,
+				HealthImpact:  3.0,
+				Reason:        "high-churn file with no paired test file",
+			})
 		}
 
 		// Count methods per parent class for the god_class biomarker.
@@ -244,6 +268,91 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 	}
 
 	return Result{Findings: findings, FileMetrics: metrics}
+}
+
+// buildTestPairs walks files and returns a map of production paths whose
+// paired test file exists in the same set. Recognised pairings:
+//
+//	Go:     foo.go      ↔  foo_test.go
+//	Python: foo.py      ↔  test_foo.py   (or foo_test.py)
+//	JS/TS:  foo.ts      ↔  foo.test.ts   (or foo.spec.ts)
+//	Java:   Foo.java    ↔  FooTest.java
+func buildTestPairs(files []models.ParsedFile) map[string]bool {
+	testsByProdPath := map[string]struct{}{}
+	for _, f := range files {
+		if !f.FileInfo.IsTest {
+			continue
+		}
+		for _, prod := range productionSiblings(f.FileInfo.Path) {
+			testsByProdPath[prod] = struct{}{}
+		}
+	}
+	out := map[string]bool{}
+	for _, f := range files {
+		if f.FileInfo.IsTest {
+			continue
+		}
+		if _, ok := testsByProdPath[f.FileInfo.Path]; ok {
+			out[f.FileInfo.Path] = true
+		}
+	}
+	return out
+}
+
+// productionSiblings returns possible production file paths a test path
+// could be testing. Multiple candidates because conventions overlap.
+func productionSiblings(testPath string) []string {
+	dir, base := splitDirBase(testPath)
+	ext := fileExtLocal(base)
+	stem := base[:len(base)-len(ext)]
+	cands := []string{}
+
+	if ext == ".go" && hasSuffixLocal(stem, "_test") {
+		cands = append(cands, joinDir(dir, stem[:len(stem)-5]+ext))
+	}
+	if ext == ".py" && hasPrefixLocal(stem, "test_") {
+		cands = append(cands, joinDir(dir, stem[5:]+ext))
+	}
+	if ext == ".py" && hasSuffixLocal(stem, "_test") {
+		cands = append(cands, joinDir(dir, stem[:len(stem)-5]+ext))
+	}
+	for _, suf := range []string{".test", ".spec"} {
+		if hasSuffixLocal(stem, suf) {
+			cands = append(cands, joinDir(dir, stem[:len(stem)-len(suf)]+ext))
+		}
+	}
+	if ext == ".java" && hasSuffixLocal(stem, "Test") {
+		cands = append(cands, joinDir(dir, stem[:len(stem)-4]+ext))
+	}
+	return cands
+}
+
+func splitDirBase(p string) (string, string) {
+	for i := len(p) - 1; i >= 0; i-- {
+		if p[i] == '/' {
+			return p[:i+1], p[i+1:]
+		}
+	}
+	return "", p
+}
+func fileExtLocal(base string) string {
+	for i := len(base) - 1; i >= 0; i-- {
+		if base[i] == '.' {
+			return base[i:]
+		}
+		if base[i] == '/' {
+			return ""
+		}
+	}
+	return ""
+}
+func hasPrefixLocal(s, p string) bool { return len(s) >= len(p) && s[:len(p)] == p }
+func hasSuffixLocal(s, p string) bool { return len(s) >= len(p) && s[len(s)-len(p):] == p }
+func joinDir(dir, base string) string {
+	if dir == "" {
+		return base
+	}
+	return dir + base
 }
 
 func complexityHit(ccn int, t Thresholds) (bool, Severity) {

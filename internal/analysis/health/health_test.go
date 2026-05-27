@@ -298,3 +298,102 @@ func TestAnalyze_GodClass_BelowThreshold(t *testing.T) {
 		}
 	}
 }
+
+// TestAnalyze_UntestedHotspot covers the cross-cutting biomarker that
+// combines git intelligence (HotspotPaths) with the parser output (test
+// file detection). Three files in the fixture:
+//
+//	pkg/foo.go      — hotspot, NO test pair  → flagged
+//	pkg/bar.go      — hotspot, paired with bar_test.go → NOT flagged
+//	pkg/baz.go      — NOT a hotspot, no test pair → NOT flagged
+//
+// A fourth file (pkg/bar_test.go) is the paired test that suppresses the
+// bar.go finding.
+func TestAnalyze_UntestedHotspot(t *testing.T) {
+	files := []models.ParsedFile{
+		{FileInfo: models.FileInfo{Path: "pkg/foo.go", Language: "go"}},
+		{FileInfo: models.FileInfo{Path: "pkg/bar.go", Language: "go"}},
+		{FileInfo: models.FileInfo{Path: "pkg/baz.go", Language: "go"}},
+		{FileInfo: models.FileInfo{Path: "pkg/bar_test.go", Language: "go", IsTest: true}},
+	}
+	a := &health.Analyzer{
+		HotspotPaths: map[string]struct{}{
+			"pkg/foo.go": {},
+			"pkg/bar.go": {},
+		},
+	}
+	res := a.Analyze(files)
+
+	got := map[string]bool{}
+	for _, f := range res.Findings {
+		if f.BiomarkerType == health.BiomarkerUntestedHotspot {
+			got[f.FilePath] = true
+		}
+	}
+	if !got["pkg/foo.go"] {
+		t.Errorf("pkg/foo.go should be flagged (hotspot, no test)")
+	}
+	if got["pkg/bar.go"] {
+		t.Errorf("pkg/bar.go has bar_test.go — should NOT be flagged")
+	}
+	if got["pkg/baz.go"] {
+		t.Errorf("pkg/baz.go is not a hotspot — should NOT be flagged")
+	}
+
+	// HasTestFile on metrics reflects the pairing detection.
+	for _, m := range res.FileMetrics {
+		switch m.FilePath {
+		case "pkg/bar.go":
+			if !m.HasTestFile {
+				t.Errorf("pkg/bar.go HasTestFile = false, want true")
+			}
+		case "pkg/foo.go":
+			if m.HasTestFile {
+				t.Errorf("pkg/foo.go HasTestFile = true, want false")
+			}
+		}
+	}
+}
+
+func TestAnalyze_UntestedHotspot_NoHotspotPathsSkipsBiomarker(t *testing.T) {
+	files := []models.ParsedFile{
+		{FileInfo: models.FileInfo{Path: "pkg/foo.go", Language: "go"}},
+	}
+	res := (&health.Analyzer{}).Analyze(files)
+	for _, f := range res.Findings {
+		if f.BiomarkerType == health.BiomarkerUntestedHotspot {
+			t.Errorf("untested_hotspot fired with empty HotspotPaths: %+v", f)
+		}
+	}
+}
+
+func TestAnalyze_TestPairingPatterns(t *testing.T) {
+	// Each row exercises one of the recognised naming conventions.
+	cases := []struct {
+		prod, test string
+	}{
+		{"pkg/foo.go", "pkg/foo_test.go"},     // Go
+		{"app/util.py", "app/test_util.py"},   // Python prefix
+		{"app/util.py", "app/util_test.py"},   // Python suffix
+		{"web/calc.ts", "web/calc.test.ts"},   // TS .test
+		{"web/calc.ts", "web/calc.spec.ts"},   // TS .spec
+		{"src/Foo.java", "src/FooTest.java"},  // Java
+	}
+	for _, tc := range cases {
+		files := []models.ParsedFile{
+			{FileInfo: models.FileInfo{Path: tc.prod}},
+			{FileInfo: models.FileInfo{Path: tc.test, IsTest: true}},
+		}
+		a := &health.Analyzer{HotspotPaths: map[string]struct{}{tc.prod: {}}}
+		res := a.Analyze(files)
+		flagged := false
+		for _, f := range res.Findings {
+			if f.BiomarkerType == health.BiomarkerUntestedHotspot && f.FilePath == tc.prod {
+				flagged = true
+			}
+		}
+		if flagged {
+			t.Errorf("%s ↔ %s pairing not recognised; biomarker fired", tc.prod, tc.test)
+		}
+	}
+}

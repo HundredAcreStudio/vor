@@ -152,35 +152,11 @@ func newIngestCmd() *cobra.Command {
 				extRecords   []external.Record
 				dcFindings   []deadcode.Finding
 				healthResult health.Result
+				gitRecords   []git.PerFile
 			)
-			if buildGraph {
-				b := graph.NewBuilder(nil, graph.Options{})
-				for _, p := range parsedFiles {
-					b.AddFile(p)
-				}
-				g = b.Build()
-				g.ComputeMetrics()
-				printGraphSummary(out, g)
-				// Dead code runs on the same graph; cheap, always informative.
-				dcFindings = (&deadcode.Analyzer{MinConfidence: 0.5}).Analyze(g)
-				printDeadCodeSummary(out, dcFindings)
-				// Health runs on the parser output (per-symbol complexity).
-				healthResult = (&health.Analyzer{}).Analyze(parsedFiles)
-				printHealthSummary(out, healthResult)
-			}
 
-			if scanExternals || persist {
-				records, err := external.ScanRoot(ctx, absRoot)
-				if err != nil {
-					return fmt.Errorf("scan externals: %w", err)
-				}
-				extRecords = records
-				if scanExternals {
-					printExternalsSummary(out, records)
-				}
-			}
-
-			var gitRecords []git.PerFile
+			// Git intelligence runs first so health.Analyzer can weave
+			// hotspot paths into the untested_hotspot biomarker.
 			if gitIndex {
 				ix := &git.Indexer{MaxCommits: gitMaxCommits}
 				recs, err := ix.Index(ctx, absRoot)
@@ -192,6 +168,44 @@ func newIngestCmd() *cobra.Command {
 				} else {
 					gitRecords = recs
 					printGitSummary(out, recs)
+				}
+			}
+
+			if buildGraph {
+				b := graph.NewBuilder(nil, graph.Options{})
+				for _, p := range parsedFiles {
+					b.AddFile(p)
+				}
+				g = b.Build()
+				g.ComputeMetrics()
+				printGraphSummary(out, g)
+				// Dead code runs on the same graph; cheap, always informative.
+				dcFindings = (&deadcode.Analyzer{MinConfidence: 0.5}).Analyze(g)
+				printDeadCodeSummary(out, dcFindings)
+				// Health runs on the parser output. Hotspot paths come
+				// from git intelligence (above) so untested_hotspot fires.
+				healthOpts := &health.Analyzer{}
+				if len(gitRecords) > 0 {
+					hot := make(map[string]struct{}, len(gitRecords))
+					for _, gr := range gitRecords {
+						if gr.IsHotspot {
+							hot[gr.Path] = struct{}{}
+						}
+					}
+					healthOpts.HotspotPaths = hot
+				}
+				healthResult = healthOpts.Analyze(parsedFiles)
+				printHealthSummary(out, healthResult)
+			}
+
+			if scanExternals || persist {
+				records, err := external.ScanRoot(ctx, absRoot)
+				if err != nil {
+					return fmt.Errorf("scan externals: %w", err)
+				}
+				extRecords = records
+				if scanExternals {
+					printExternalsSummary(out, records)
 				}
 			}
 
