@@ -16,7 +16,10 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
 	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
@@ -70,7 +73,18 @@ const (
 	// ModeUpdate is an incremental re-index (no-op vs init for now;
 	// distinguishes user intent in pipeline_jobs.metadata).
 	ModeUpdate Mode = "update"
+	// ModeResume continues the most recent unfinished run for the repo.
+	// At the start of Run() we look up the latest run via
+	// pipelinestore.LatestRun; if it's running or failed, we adopt its
+	// run_id so the new pipeline_jobs rows link back. If the latest run
+	// already succeeded, Run() returns ErrNothingToResume.
+	ModeResume Mode = "resume"
 )
+
+// ErrNothingToResume is returned when Mode=ModeResume but the latest
+// run for the repo has already finished successfully — there's no
+// failure to continue from.
+var ErrNothingToResume = errors.New("pipeline: latest run already succeeded; nothing to resume")
 
 // Phase names. Stored as pipeline_jobs.phase. Order is significant —
 // Run executes them top-to-bottom.
@@ -108,6 +122,12 @@ type Options struct {
 
 	// GitMaxCommits caps the git intelligence walk (0 = default 10000).
 	GitMaxCommits int
+
+	// RunID groups every phase of this run together in pipeline_jobs
+	// for resume + observability. When empty, Run() generates one. When
+	// Mode=ModeResume, an explicit RunID overrides the auto-detected
+	// "latest unfinished run" lookup.
+	RunID string
 }
 
 // Result is the bundle the caller can persist or inspect after Run.
@@ -126,6 +146,12 @@ type Result struct {
 	// execution order. Useful for tests + the "show pipeline history"
 	// CLI surface.
 	Phases []PhaseRecord
+
+	// RunID is the run_id used for this invocation. Generated when
+	// Options.RunID is empty; echoes the user-supplied value otherwise.
+	// Useful for resume — a caller can ask "what run did I just kick
+	// off?" without parsing pipeline_jobs.
+	RunID string
 }
 
 // PhaseRecord is one line in the run log.
@@ -158,7 +184,30 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 	}
 
 	store := pipelinestore.New(opts.DB)
-	res := &Result{}
+
+	// Resolve run_id. Mode=ModeResume looks up the latest unfinished
+	// run for the repo and adopts its run_id; an explicit opts.RunID
+	// overrides. Other modes generate a fresh run_id.
+	runID := opts.RunID
+	if runID == "" {
+		switch opts.Mode {
+		case ModeResume:
+			latest, err := store.LatestRun(ctx, opts.RepositoryID)
+			if err != nil {
+				return nil, fmt.Errorf("lookup latest run: %w", err)
+			}
+			if latest == nil {
+				return nil, errors.New("pipeline: no previous run found to resume")
+			}
+			if latest.Overall == pipelinestore.OutcomeSucceeded {
+				return nil, ErrNothingToResume
+			}
+			runID = latest.RunID
+		default:
+			runID = newRunID()
+		}
+	}
+	res := &Result{RunID: runID}
 
 	// Phase: traverse.
 	if err := runPhase(ctx, opts, store, PhaseTraverse, res, func() error {
@@ -355,7 +404,7 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 // bookkeeping. The caller supplies a closure with the actual work.
 func runPhase(ctx context.Context, opts Options, store *pipelinestore.Store, phase string, res *Result, do func() error) error {
 	start := time.Now()
-	job, err := store.Begin(ctx, opts.RepositoryID, phase)
+	job, err := store.Begin(ctx, opts.RepositoryID, phase, res.RunID)
 	if err != nil {
 		return fmt.Errorf("begin %s: %w", phase, err)
 	}
@@ -389,6 +438,12 @@ func runPhase(ctx context.Context, opts Options, store *pipelinestore.Store, pha
 // filesystem abstraction.
 func readFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
+}
+
+// newRunID generates a fresh run_id. Format mirrors pipelinestore.newID
+// (32 hex chars) so log readers can recognise the shape.
+func newRunID() string {
+	return strings.ReplaceAll(uuid.New().String(), "-", "")
 }
 
 // AbsRepoPath resolves a possibly-relative path to absolute. Surface so

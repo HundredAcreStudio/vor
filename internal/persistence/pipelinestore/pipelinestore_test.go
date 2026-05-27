@@ -43,7 +43,7 @@ func TestBegin_StartComplete_Lifecycle(t *testing.T) {
 	store := pipelinestore.New(conn)
 	ctx := context.Background()
 
-	job, err := store.Begin(ctx, repoID, "parse")
+	job, err := store.Begin(ctx, repoID, "parse", "")
 	if err != nil {
 		t.Fatalf("Begin: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestFail_StampsError(t *testing.T) {
 	store := pipelinestore.New(conn)
 	ctx := context.Background()
 
-	job, _ := store.Begin(ctx, repoID, "graph")
+	job, _ := store.Begin(ctx, repoID, "graph", "")
 	_ = store.Start(ctx, job.ID)
 	if err := store.Fail(ctx, job.ID, "boom"); err != nil {
 		t.Fatalf("Fail: %v", err)
@@ -90,14 +90,14 @@ func TestCountByState(t *testing.T) {
 
 	// Three completed, one failed, one running.
 	for _, p := range []string{"parse", "graph", "git"} {
-		j, _ := store.Begin(ctx, repoID, p)
+		j, _ := store.Begin(ctx, repoID, p, "")
 		_ = store.Start(ctx, j.ID)
 		_ = store.Complete(ctx, j.ID)
 	}
-	j1, _ := store.Begin(ctx, repoID, "health")
+	j1, _ := store.Begin(ctx, repoID, "health", "")
 	_ = store.Start(ctx, j1.ID)
 	_ = store.Fail(ctx, j1.ID, "x")
-	j2, _ := store.Begin(ctx, repoID, "externals")
+	j2, _ := store.Begin(ctx, repoID, "externals", "")
 	_ = store.Start(ctx, j2.ID)
 
 	counts, err := store.CountByState(ctx, repoID)
@@ -113,10 +113,10 @@ func TestCountByState(t *testing.T) {
 
 func TestBegin_RequiresInputs(t *testing.T) {
 	store := pipelinestore.New(freshDB(t))
-	if _, err := store.Begin(context.Background(), "", "parse"); err == nil {
+	if _, err := store.Begin(context.Background(), "", "parse", ""); err == nil {
 		t.Errorf("expected error on empty repoID")
 	}
-	if _, err := store.Begin(context.Background(), "x", ""); err == nil {
+	if _, err := store.Begin(context.Background(), "x", "", ""); err == nil {
 		t.Errorf("expected error on empty phase")
 	}
 }
@@ -135,7 +135,7 @@ func TestLatestByRepo_Ordering(t *testing.T) {
 		if i > 0 {
 			time.Sleep(1100 * time.Millisecond)
 		}
-		_, _ = store.Begin(ctx, repoID, p)
+		_, _ = store.Begin(ctx, repoID, p, "")
 	}
 	rows, _ := store.LatestByRepo(ctx, repoID, 10)
 	if len(rows) != 3 {

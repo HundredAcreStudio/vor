@@ -3,8 +3,10 @@ package pipeline_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/repowise-dev/repowise-go/internal/persistence/db"
@@ -109,5 +111,107 @@ func TestRun_DefaultsModeToInit(t *testing.T) {
 	}
 	if len(res.Phases) == 0 {
 		t.Errorf("no phases recorded")
+	}
+}
+
+func TestRun_AutoGeneratesRunID(t *testing.T) {
+	root, conn, repoID := setup(t)
+	res, err := pipeline.Run(context.Background(), pipeline.Options{
+		RepoPath: root, DB: conn, RepositoryID: repoID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.RunID == "" {
+		t.Error("RunID should be auto-generated when not supplied")
+	}
+	if len(res.RunID) != 32 {
+		t.Errorf("RunID = %q, want 32-char hex", res.RunID)
+	}
+}
+
+func TestRun_HonoursExplicitRunID(t *testing.T) {
+	root, conn, repoID := setup(t)
+	res, err := pipeline.Run(context.Background(), pipeline.Options{
+		RepoPath: root, DB: conn, RepositoryID: repoID,
+		RunID: "explicit-run-id",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.RunID != "explicit-run-id" {
+		t.Errorf("RunID = %q, want explicit-run-id", res.RunID)
+	}
+	// Verify it propagated to pipeline_jobs.metadata_json.
+	latest, _ := pipelinestore.New(conn).LatestRun(context.Background(), repoID)
+	if latest == nil || latest.RunID != "explicit-run-id" {
+		t.Errorf("explicit RunID didn't propagate to pipeline_jobs: %+v", latest)
+	}
+}
+
+func TestRun_ResumeAdoptsPreviousRunID(t *testing.T) {
+	root, conn, repoID := setup(t)
+	store := pipelinestore.New(conn)
+	ctx := context.Background()
+
+	// Seed a previously-failed run.
+	j1, _ := store.Begin(ctx, repoID, "parse", "previous-run")
+	_ = store.Start(ctx, j1.ID)
+	_ = store.Complete(ctx, j1.ID)
+	j2, _ := store.Begin(ctx, repoID, "graph", "previous-run")
+	_ = store.Start(ctx, j2.ID)
+	_ = store.Fail(ctx, j2.ID, "graph failed")
+
+	// Resume should pick up that run_id.
+	res, err := pipeline.Run(ctx, pipeline.Options{
+		RepoPath: root, DB: conn, RepositoryID: repoID,
+		Mode: pipeline.ModeResume,
+	})
+	if err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if res.RunID != "previous-run" {
+		t.Errorf("RunID = %q, want previous-run", res.RunID)
+	}
+	// The latest pipeline_jobs row should also carry the previous run_id.
+	latest, _ := store.LatestRun(ctx, repoID)
+	if latest.RunID != "previous-run" {
+		t.Errorf("LatestRun.RunID = %q, want previous-run", latest.RunID)
+	}
+	// And the resume should have succeeded.
+	if latest.Overall != pipelinestore.OutcomeSucceeded {
+		t.Errorf("after resume, Overall = %q, want succeeded", latest.Overall)
+	}
+}
+
+func TestRun_ResumeNoPreviousRun(t *testing.T) {
+	root, conn, repoID := setup(t)
+	_, err := pipeline.Run(context.Background(), pipeline.Options{
+		RepoPath: root, DB: conn, RepositoryID: repoID,
+		Mode: pipeline.ModeResume,
+	})
+	if err == nil {
+		t.Fatal("expected error when resuming a repo with no previous run")
+	}
+	if !strings.Contains(err.Error(), "no previous run") {
+		t.Errorf("error = %v, want 'no previous run' message", err)
+	}
+}
+
+func TestRun_ResumeAlreadySucceeded(t *testing.T) {
+	root, conn, repoID := setup(t)
+	// First run to completion.
+	if _, err := pipeline.Run(context.Background(), pipeline.Options{
+		RepoPath: root, DB: conn, RepositoryID: repoID,
+	}); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	// Resume should refuse — there's nothing to resume.
+	_, err := pipeline.Run(context.Background(), pipeline.Options{
+		RepoPath: root, DB: conn, RepositoryID: repoID,
+		Mode: pipeline.ModeResume,
+	})
+	if !errors.Is(err, pipeline.ErrNothingToResume) {
+		t.Errorf("expected ErrNothingToResume, got %v", err)
 	}
 }
