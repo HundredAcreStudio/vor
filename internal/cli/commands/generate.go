@@ -1,0 +1,153 @@
+package commands
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/spf13/cobra"
+
+	"github.com/repowise-dev/repowise-go/internal/config"
+	"github.com/repowise-dev/repowise-go/internal/generation/runner"
+	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/repowise-dev/repowise-go/internal/providers"
+
+	// Side-effect imports — register every provider so --provider can
+	// pick any of them at runtime. Mock first for predictability when
+	// no API key is set.
+	_ "github.com/repowise-dev/repowise-go/internal/providers/anthropic"
+	_ "github.com/repowise-dev/repowise-go/internal/providers/mock"
+)
+
+// newGenerateCmd produces wiki pages from the persisted ingest state.
+// Deliberately separate from `init` so users control LLM spend.
+func newGenerateCmd() *cobra.Command {
+	var (
+		repoPath     string
+		target       string
+		providerName string
+		model        string
+		limit        int
+		force        bool
+		dryRun       bool
+	)
+	cmd := &cobra.Command{
+		Use:   "generate [PATH]",
+		Short: "Generate wiki pages for indexed files",
+		Long: `Walks the latest indexed graph and generates one wiki page per
+file using the configured LLM provider. Pages with matching source_hash
+are skipped unless --force is set. Use --dry-run to preview without
+spending tokens.
+
+Provider defaults come from .repowise/config.yaml or environment
+variables; override per-invocation with --provider and --model.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			root := repoPath
+			if len(args) > 0 {
+				root = args[0]
+			}
+			absRoot, err := filepath.Abs(root)
+			if err != nil {
+				return fmt.Errorf("resolve path: %w", err)
+			}
+
+			cfg, err := config.Load(root)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+			if providerName == "" {
+				providerName = cfg.Provider
+			}
+			if model == "" {
+				model = cfg.Model
+			}
+
+			conn, _, err := openDB(ctx, root)
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRoot, "")
+			if err != nil {
+				return fmt.Errorf("ensure repo: %w", err)
+			}
+
+			var prov providers.Provider
+			if !dryRun {
+				prov, err = buildProvider(providerName, model, cfg)
+				if err != nil {
+					return fmt.Errorf("build provider %q: %w", providerName, err)
+				}
+			}
+
+			out := cmd.OutOrStdout()
+			summary, err := runner.Run(ctx, runner.Options{
+				RepoRoot:     absRoot,
+				RepositoryID: repoRow.ID,
+				DB:           conn,
+				Provider:     prov,
+				Model:        model,
+				Target:       target,
+				Limit:        limit,
+				Force:        force,
+				DryRun:       dryRun,
+				OnProgress: func(r runner.FileResult) {
+					fmt.Fprintf(out, "  %-10s  %-50s  %s\n", r.Status, r.Path, r.Reason)
+				},
+			})
+			if err != nil {
+				return err
+			}
+
+			fmt.Fprintf(out, "\n%d generated, %d skipped, %d missing, %d errors\n",
+				summary.GeneratedCount, summary.SkippedCount, summary.MissingCount, summary.ErrorCount)
+			if summary.GeneratedCount > 0 {
+				fmt.Fprintf(out, "tokens: in=%d  out=%d  cached=%d\n",
+					summary.TotalInputTokens, summary.TotalOutputTokens, summary.TotalCachedTokens)
+			}
+			if summary.DryRunCount > 0 {
+				fmt.Fprintf(out, "[dry run] %d files would be generated\n", summary.DryRunCount)
+			}
+			if len(summary.Files) == 0 {
+				fmt.Fprintln(out, "no indexed files found (run `repowise init` first)")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path (overridden by positional PATH)")
+	cmd.Flags().StringVar(&target, "target", "", "limit generation to a single file (repo-relative)")
+	cmd.Flags().StringVar(&providerName, "provider", "", "LLM provider name (defaults to config.provider)")
+	cmd.Flags().StringVar(&model, "model", "", "model identifier (defaults to config.model)")
+	cmd.Flags().IntVar(&limit, "limit", 0, "max pages to generate this run (0 = no cap)")
+	cmd.Flags().BoolVar(&force, "force", false, "regenerate even when source_hash matches")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what would be generated without calling the provider")
+	return cmd
+}
+
+// buildProvider hydrates a Provider with config-derived options. For now
+// only api_key is plumbed through — base_url / version are advanced
+// knobs the YAML config doesn't expose yet.
+func buildProvider(name, model string, cfg config.Config) (providers.Provider, error) {
+	opts := providers.Options{}
+	switch name {
+	case "anthropic":
+		key := cfg.ProviderKeys.Anthropic
+		if key == "" {
+			key = os.Getenv("ANTHROPIC_API_KEY")
+		}
+		if key == "" {
+			return nil, fmt.Errorf("ANTHROPIC_API_KEY is required for the anthropic provider")
+		}
+		opts["api_key"] = key
+		if model != "" {
+			opts["default_model"] = model
+		}
+	case "mock":
+		if model != "" {
+			opts["model"] = model
+		}
+	}
+	return providers.NewProvider(name, opts)
+}

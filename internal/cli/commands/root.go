@@ -26,6 +26,7 @@ func Root() *cobra.Command {
 	root.AddCommand(newHealthCmd())
 	root.AddCommand(newDeadCodeCmd())
 	root.AddCommand(newDecisionsCmd())
+	root.AddCommand(newGenerateCmd())
 	root.AddCommand(newHotspotsCmd())
 	root.AddCommand(newSearchCmd())
 	root.AddCommand(newExternalsCmd())
@@ -33,6 +34,7 @@ func Root() *cobra.Command {
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newPipelineCmd())
 	root.AddCommand(newMCPCmd())
+	root.AddCommand(newCompletionCmd())
 	// Additional subcommands are added in their respective phases.
 
 	return root
