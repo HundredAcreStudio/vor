@@ -171,3 +171,52 @@ func TestAnalyze_BiomarkerKindsKnown(t *testing.T) {
 		t.Errorf("missing long_function finding")
 	}
 }
+
+func TestAnalyze_DeepNestingSeverity(t *testing.T) {
+	mkSymWithNesting := func(name string, depth int) models.Symbol {
+		s := mkSym(name, 1, 1, 5)
+		s.NestingDepth = depth
+		return s
+	}
+	a := &health.Analyzer{}
+	res := a.Analyze([]models.ParsedFile{
+		mkFile([]models.Symbol{
+			mkSymWithNesting("flat", 1),
+			mkSymWithNesting("warn", 4),
+			mkSymWithNesting("deep", 7),
+		}),
+	})
+	byFn := map[string]health.Finding{}
+	for _, f := range res.Findings {
+		if f.BiomarkerType == health.BiomarkerDeepNesting {
+			byFn[f.FunctionName] = f
+		}
+	}
+	if _, ok := byFn["flat"]; ok {
+		t.Errorf("flat shouldn't be flagged")
+	}
+	if byFn["warn"].Severity != health.SeverityMedium {
+		t.Errorf("warn severity = %s, want medium", byFn["warn"].Severity)
+	}
+	if byFn["deep"].Severity != health.SeverityHigh {
+		t.Errorf("deep severity = %s, want high", byFn["deep"].Severity)
+	}
+}
+
+func TestAnalyze_FileMaxNesting(t *testing.T) {
+	mkSymWithNesting := func(name string, depth int) models.Symbol {
+		s := mkSym(name, 1, 1, 5)
+		s.NestingDepth = depth
+		return s
+	}
+	res := (&health.Analyzer{}).Analyze([]models.ParsedFile{
+		mkFile([]models.Symbol{
+			mkSymWithNesting("a", 1),
+			mkSymWithNesting("b", 5),
+			mkSymWithNesting("c", 3),
+		}),
+	})
+	if res.FileMetrics[0].MaxNesting != 5 {
+		t.Errorf("MaxNesting = %d, want 5", res.FileMetrics[0].MaxNesting)
+	}
+}

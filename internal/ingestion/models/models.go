@@ -141,9 +141,13 @@ type Symbol struct {
 	// ComplexityEstimate is the parser's cyclomatic estimate; refined by the
 	// code-health phase. Defaults to 1.
 	ComplexityEstimate int
-	Language           string
-	ParentName         *string // for methods: containing class
-	IsExportedSymbol   bool    // C/C++ dllexport markers, Go uppercase, etc.
+	// NestingDepth is the maximum nesting depth of control-flow constructs
+	// inside the symbol's body (0 = none). Populated by the per-language
+	// parser; consumed by the deep_nesting biomarker.
+	NestingDepth int
+	Language     string
+	ParentName   *string // for methods: containing class
+	IsExportedSymbol bool // C/C++ dllexport markers, Go uppercase, etc.
 }
 
 // CallSite is a function/method call extracted from a file.

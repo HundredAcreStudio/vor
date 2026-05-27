@@ -128,9 +128,10 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 		return
 	}
 
-	complexity := 1
+	complexity, nesting := 1, 0
 	if def.Type() == "function_definition" {
 		complexity = 1 + common.CountBranchNodes(def, pythonBranchNodeTypes)
+		nesting = common.MaxNestingDepth(def, pythonBranchNodeTypes)
 	}
 
 	sym := &models.Symbol{
@@ -141,6 +142,7 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 		Visibility:         pythonVisibility(name),
 		Language:           string(langTag),
 		ComplexityEstimate: complexity,
+		NestingDepth:       nesting,
 		IsExportedSymbol:   pythonVisibility(name) == models.VisibilityPublic,
 		QualifiedName:      name,
 		IsAsync:            isAsync(def),

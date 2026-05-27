@@ -23,6 +23,7 @@ import (
 	// with the parser registry in its init(). Add languages here as they
 	// land.
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/golang"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/javascript"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/python"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/typescript"
 

@@ -30,6 +30,7 @@ const (
 const (
 	BiomarkerHighComplexity = "high_complexity"
 	BiomarkerLongFunction   = "long_function"
+	BiomarkerDeepNesting    = "deep_nesting"
 )
 
 // Finding is one biomarker hit. Persisted into health_findings.
@@ -71,6 +72,11 @@ type Thresholds struct {
 	LongFunctionLines int
 	// VeryLongFunctionLines: function lines ≥ this is flagged high.
 	VeryLongFunctionLines int
+
+	// NestingWarning: nesting depth ≥ this is flagged medium.
+	NestingWarning int
+	// NestingHigh: nesting depth ≥ this is flagged high.
+	NestingHigh int
 }
 
 // DefaultThresholds returns the recommended values.
@@ -81,6 +87,8 @@ func DefaultThresholds() Thresholds {
 		ComplexityCritical:    50,
 		LongFunctionLines:     60,
 		VeryLongFunctionLines: 120,
+		NestingWarning:        4,
+		NestingHigh:           6,
 	}
 }
 
@@ -121,6 +129,9 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 			if sym.ComplexityEstimate > fm.MaxCCN {
 				fm.MaxCCN = sym.ComplexityEstimate
 			}
+			if sym.NestingDepth > fm.MaxNesting {
+				fm.MaxNesting = sym.NestingDepth
+			}
 
 			if hit, sev := complexityHit(sym.ComplexityEstimate, thresholds); hit {
 				findings = append(findings, Finding{
@@ -150,6 +161,22 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 					Reason: fmt.Sprintf("function length = %d lines", lines),
 					Details: map[string]any{
 						"lines": lines,
+					},
+				})
+			}
+
+			if hit, sev := deepNestingHit(sym.NestingDepth, thresholds); hit {
+				findings = append(findings, Finding{
+					FilePath:      pf.FileInfo.Path,
+					BiomarkerType: BiomarkerDeepNesting,
+					Severity:      sev,
+					FunctionName:  sym.Name,
+					LineStart:     sym.StartLine,
+					LineEnd:       sym.EndLine,
+					HealthImpact:  deepNestingImpact(sym.NestingDepth, thresholds),
+					Reason: fmt.Sprintf("max nesting depth = %d", sym.NestingDepth),
+					Details: map[string]any{
+						"nesting": sym.NestingDepth,
 					},
 				})
 			}
@@ -203,6 +230,37 @@ func longFunctionHit(lines int, t Thresholds) (bool, Severity) {
 	default:
 		return false, ""
 	}
+}
+
+func deepNestingHit(depth int, t Thresholds) (bool, Severity) {
+	// A zero NestingWarning means the caller hasn't configured nesting and
+	// doesn't want this biomarker — skip rather than flag every symbol.
+	if t.NestingWarning <= 0 {
+		return false, ""
+	}
+	switch {
+	case t.NestingHigh > 0 && depth >= t.NestingHigh:
+		return true, SeverityHigh
+	case depth >= t.NestingWarning:
+		return true, SeverityMedium
+	default:
+		return false, ""
+	}
+}
+
+func deepNestingImpact(depth int, t Thresholds) float64 {
+	if depth < t.NestingWarning {
+		return 0
+	}
+	if depth >= t.NestingHigh {
+		return 2
+	}
+	span := float64(t.NestingHigh - t.NestingWarning)
+	if span <= 0 {
+		return 1
+	}
+	progress := float64(depth-t.NestingWarning) / span
+	return 1 + progress
 }
 
 // complexityImpact maps a CCN value to a 0-10 score reduction. Linear

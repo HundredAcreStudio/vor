@@ -1,85 +1,60 @@
-// Package typescript is the TypeScript/TSX parser. It registers two parsers
-// against the language registry — one for plain TypeScript files (.ts) and
-// one for TSX (.tsx) — both running the same typescript.scm query (TSX uses
-// the JSX-aware grammar variant so JSX-embedded expressions parse).
-package typescript
+// Package javascript is the JavaScript-language parser. Shares structure
+// with the typescript subpackage but binds to tree-sitter-javascript
+// instead. Handles plain .js / .mjs / .cjs / .jsx files (the TypeScript
+// parser owns .ts / .tsx).
+package javascript
 
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync"
 
 	sitter "github.com/smacker/go-tree-sitter"
-	"github.com/smacker/go-tree-sitter/typescript/tsx"
-	"github.com/smacker/go-tree-sitter/typescript/typescript"
+	"github.com/smacker/go-tree-sitter/javascript"
 
 	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/parser"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/parser/common"
 )
 
-const langTag models.LanguageTag = "typescript"
+const langTag models.LanguageTag = "javascript"
 
-// We keep one compiled query per grammar variant — the parsers reuse the
-// same .scm but tree-sitter requires the query to be compiled against the
-// specific language object.
 var (
-	tsQuery     *sitter.Query
-	tsQueryOnce sync.Once
-	tsQueryErr  error
-
-	tsxQuery     *sitter.Query
-	tsxQueryOnce sync.Once
-	tsxQueryErr  error
+	compiledQuery     *sitter.Query
+	compiledQueryOnce sync.Once
+	compiledQueryErr  error
 )
 
-func loadTSQuery() (*sitter.Query, error) {
-	return common.LoadQueryOnce("typescript.scm", typescript.GetLanguage(), &tsQueryOnce, &tsQuery, &tsQueryErr)
+func loadQuery() (*sitter.Query, error) {
+	return common.LoadQueryOnce("javascript.scm", javascript.GetLanguage(),
+		&compiledQueryOnce, &compiledQuery, &compiledQueryErr)
 }
 
-func loadTSXQuery() (*sitter.Query, error) {
-	return common.LoadQueryOnce("typescript.scm", tsx.GetLanguage(), &tsxQueryOnce, &tsxQuery, &tsxQueryErr)
-}
-
-// Parser handles TypeScript files. Decides on TS vs TSX at Parse time based
-// on the file extension so callers don't need to pre-route.
+// Parser is the registered JavaScript parser.
 type Parser struct{}
 
 func init() { parser.Register(langTag, &Parser{}) }
 
-// Parse extracts TypeScript symbols, imports, and calls.
+// Parse extracts JavaScript symbols, imports, and calls (including JSX
+// element references treated as calls to the component).
 func (p *Parser) Parse(ctx context.Context, fi models.FileInfo, source []byte) (models.ParsedFile, error) {
 	if err := ctx.Err(); err != nil {
 		return models.ParsedFile{}, err
 	}
 
-	isTSX := strings.EqualFold(filepath.Ext(fi.Path), ".tsx")
-
-	var (
-		lang  *sitter.Language
-		query *sitter.Query
-		err   error
-	)
-	if isTSX {
-		lang = tsx.GetLanguage()
-		query, err = loadTSXQuery()
-	} else {
-		lang = typescript.GetLanguage()
-		query, err = loadTSQuery()
-	}
-	if err != nil {
-		return models.ParsedFile{}, err
-	}
-
 	tsp := sitter.NewParser()
-	tsp.SetLanguage(lang)
+	tsp.SetLanguage(javascript.GetLanguage())
 	tree, err := tsp.ParseCtx(ctx, nil, source)
 	if err != nil {
 		return models.ParsedFile{}, fmt.Errorf("tree-sitter parse: %w", err)
 	}
 	defer tree.Close()
+
+	query, err := loadQuery()
+	if err != nil {
+		return models.ParsedFile{}, err
+	}
 
 	cursor := sitter.NewQueryCursor()
 	defer cursor.Close()
@@ -110,9 +85,6 @@ func (p *Parser) Parse(ctx context.Context, fi models.FileInfo, source []byte) (
 		}
 	}
 
-	// Walk the top level once to collect `export` markers, since the .scm
-	// query doesn't capture them directly. Anything under an
-	// export_statement at module level is publicly exported.
 	collectExportedNames(tree.RootNode(), source, exportedNames)
 	for i := range symbolsByDefStart {
 		if _, exported := exportedNames[symbolsByDefStart[i].Name]; exported {
@@ -125,7 +97,6 @@ func (p *Parser) Parse(ctx context.Context, fi models.FileInfo, source []byte) (
 		symbols = append(symbols, *s)
 	}
 	common.SortByStartLine(symbols)
-
 	for i := range calls {
 		calls[i].CallerSymbolID = common.EnclosingSymbolID(symbols, calls[i].Line)
 	}
@@ -152,8 +123,7 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 	name := nameNodes[0].Content(source)
 
 	startByte := def.StartByte()
-	if existing, exists := out[startByte]; exists {
-		mergeModifiers(existing, caps, source)
+	if _, exists := out[startByte]; exists {
 		return
 	}
 
@@ -161,8 +131,8 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 	switch def.Type() {
 	case "function_declaration", "generator_function_declaration",
 		"method_definition", "lexical_declaration":
-		complexity = 1 + common.CountBranchNodes(def, tsBranchNodeTypes)
-		nesting = common.MaxNestingDepth(def, tsBranchNodeTypes)
+		complexity = 1 + common.CountBranchNodes(def, jsBranchNodeTypes)
+		nesting = common.MaxNestingDepth(def, jsBranchNodeTypes)
 	}
 
 	sym := &models.Symbol{
@@ -170,7 +140,7 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 		Kind:               kindForNode(def),
 		StartLine:          int(def.StartPoint().Row) + 1,
 		EndLine:            int(def.EndPoint().Row) + 1,
-		Visibility:         models.VisibilityPublic, // default; refined below
+		Visibility:         models.VisibilityPublic, // JS has no native access modifiers
 		Language:           string(langTag),
 		ComplexityEstimate: complexity,
 		NestingDepth:       nesting,
@@ -186,28 +156,8 @@ func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node,
 		sym.ID = fmt.Sprintf("%s::%s", fi.Path, name)
 	}
 
-	mergeModifiers(sym, caps, source)
 	sym.Signature = strings.TrimSpace(common.SignatureSlice(source, def, caps["symbol.params"]))
 	out[startByte] = sym
-}
-
-func mergeModifiers(sym *models.Symbol, caps map[string][]*sitter.Node, source []byte) {
-	for _, m := range caps["symbol.modifiers"] {
-		text := strings.TrimSpace(m.Content(source))
-		switch text {
-		case "private":
-			sym.Visibility = models.VisibilityPrivate
-		case "protected":
-			sym.Visibility = models.VisibilityProtected
-		case "public":
-			sym.Visibility = models.VisibilityPublic
-		default:
-			// Decorator-ish modifiers (e.g., @Component) — store as decorators.
-			if strings.HasPrefix(text, "@") {
-				sym.Decorators = append(sym.Decorators, text)
-			}
-		}
-	}
 }
 
 func absorbImport(caps map[string][]*sitter.Node, source []byte) *models.Import {
@@ -245,38 +195,27 @@ func absorbCall(caps map[string][]*sitter.Node, source []byte) *models.CallSite 
 	return &cs
 }
 
-// tsBranchNodeTypes covers the decision-point nodes in tree-sitter-
-// typescript. switch_case includes default_case (TS grammar uses the
-// same node type for both); to avoid counting default we'd need to
-// inspect its child — for v1 we accept that default adds 1 (matches
-// most popular linters' McCabe output).
-var tsBranchNodeTypes = map[string]struct{}{
-	"if_statement":         {},
-	"for_statement":        {},
-	"for_in_statement":     {},
-	"for_of_statement":     {},
-	"while_statement":      {},
-	"do_statement":         {},
-	"switch_case":          {},
-	"catch_clause":         {},
-	"ternary_expression":   {},
-	"else_clause":          {}, // counts else-if chains
+// jsBranchNodeTypes — identical to the TS set; JS grammar uses the same
+// names except for type-system-specific forms.
+var jsBranchNodeTypes = map[string]struct{}{
+	"if_statement":       {},
+	"for_statement":      {},
+	"for_in_statement":   {},
+	"for_of_statement":   {},
+	"while_statement":    {},
+	"do_statement":       {},
+	"switch_case":        {},
+	"catch_clause":       {},
+	"ternary_expression": {},
+	"else_clause":        {},
 }
-
-// ---- TypeScript-specific rules ---------------------------------------------
 
 func kindForNode(n *sitter.Node) models.SymbolKind {
 	switch n.Type() {
 	case "function_declaration", "generator_function_declaration", "lexical_declaration":
 		return models.KindFunction
-	case "class_declaration", "abstract_class_declaration":
+	case "class_declaration":
 		return models.KindClass
-	case "interface_declaration":
-		return models.KindInterface
-	case "type_alias_declaration":
-		return models.KindTypeAlias
-	case "enum_declaration":
-		return models.KindEnum
 	case "method_definition":
 		return models.KindMethod
 	default:
@@ -284,38 +223,29 @@ func kindForNode(n *sitter.Node) models.SymbolKind {
 	}
 }
 
-// enclosingClassName walks up the AST looking for a class_declaration or
-// abstract_class_declaration ancestor, returning the class name and true.
 func enclosingClassName(def *sitter.Node, source []byte) (string, bool) {
 	for n := def.Parent(); n != nil; n = n.Parent() {
-		switch n.Type() {
-		case "class_declaration", "abstract_class_declaration":
-			nameNode := n.ChildByFieldName("name")
-			if nameNode != nil {
-				return nameNode.Content(source), true
+		if n.Type() == "class_declaration" {
+			if nm := n.ChildByFieldName("name"); nm != nil {
+				return nm.Content(source), true
 			}
 		}
 	}
 	return "", false
 }
 
-// collectExportedNames walks the module body and records names exported via
-// `export function foo`, `export class Foo`, `export const foo = ...`,
-// `export { foo, bar }`, and `export default ...`. The set is consulted to
-// flag IsExportedSymbol and build the Exports list.
+// collectExportedNames walks the module body for `export function/class/...`
+// and `export { ... }` clauses, matching the TypeScript implementation.
 func collectExportedNames(root *sitter.Node, source []byte, out map[string]struct{}) {
 	for i := 0; i < int(root.NamedChildCount()); i++ {
 		child := root.NamedChild(i)
 		if child.Type() != "export_statement" {
 			continue
 		}
-		// Direct declaration form: export function/class/const/...
 		if decl := child.ChildByFieldName("declaration"); decl != nil {
 			collectDeclNames(decl, source, out)
 			continue
 		}
-		// Named export form: export { a, b as c } from "...".
-		// We grab `export_clause` -> `export_specifier` -> name.
 		for j := 0; j < int(child.NamedChildCount()); j++ {
 			n := child.NamedChild(j)
 			if n.Type() != "export_clause" {
@@ -336,10 +266,7 @@ func collectExportedNames(root *sitter.Node, source []byte, out map[string]struc
 
 func collectDeclNames(decl *sitter.Node, source []byte, out map[string]struct{}) {
 	switch decl.Type() {
-	case "function_declaration", "generator_function_declaration",
-		"class_declaration", "abstract_class_declaration",
-		"interface_declaration", "type_alias_declaration",
-		"enum_declaration":
+	case "function_declaration", "generator_function_declaration", "class_declaration":
 		if nm := decl.ChildByFieldName("name"); nm != nil {
 			out[nm.Content(source)] = struct{}{}
 		}
