@@ -21,6 +21,7 @@ import (
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/npm"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/nuget"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/pypi"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/cpp"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/golang"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/java"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/javascript"

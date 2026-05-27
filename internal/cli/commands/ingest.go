@@ -22,6 +22,7 @@ import (
 	// Side-effect imports: each per-language parser package registers itself
 	// with the parser registry in its init(). Add languages here as they
 	// land.
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/cpp"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/golang"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/java"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/javascript"
