@@ -75,6 +75,7 @@ func New(opts Options) (*Server, error) {
 			routes.MountHealth(per, deps)
 			routes.MountExternals(per, deps)
 			routes.MountDecisions(per, deps)
+			routes.MountPages(per, deps)
 			routes.MountPipeline(per, deps)
 		})
 	})

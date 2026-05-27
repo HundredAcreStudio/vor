@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -556,6 +557,94 @@ func (s *Server) toolDecisions(ctx context.Context, req mcp.CallToolRequest) (*m
 		out = append(out, d)
 	}
 	return jsonResult(map[string]any{"decisions": out, "limit": limit})
+}
+
+// ---- tool: repowise_pages / repowise_page --------------------------------
+
+type pageSummaryPayload struct {
+	ID           string `json:"id"`
+	PageType     string `json:"pageType"`
+	TargetPath   string `json:"targetPath"`
+	Title        string `json:"title"`
+	Summary      string `json:"summary,omitempty"`
+	Version      int    `json:"version"`
+	Freshness    string `json:"freshness"`
+	ModelName    string `json:"modelName"`
+	ProviderName string `json:"providerName"`
+	InputTokens  int    `json:"inputTokens"`
+	OutputTokens int    `json:"outputTokens"`
+	CachedTokens int    `json:"cachedTokens"`
+}
+
+type pageContentPayload struct {
+	pageSummaryPayload
+	Content    string `json:"content"`
+	SourceHash string `json:"sourceHash"`
+}
+
+func (s *Server) toolPages(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	limit := clampInt(req.GetInt("limit", 100), 1, 500)
+	kind := req.GetString("kind", "")
+	staleOnly := req.GetBool("stale_only", false)
+
+	query := `SELECT id, page_type, target_path, title, summary,
+	                 version, freshness_status, model_name, provider_name,
+	                 input_tokens, output_tokens, cached_tokens
+	          FROM wiki_pages WHERE repository_id = ?`
+	args := []any{s.opts.RepositoryID}
+	if kind != "" {
+		query += " AND page_type = ?"
+		args = append(args, kind)
+	}
+	if staleOnly {
+		query += " AND freshness_status != 'fresh'"
+	}
+	query += " ORDER BY target_path LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := s.opts.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]pageSummaryPayload, 0, limit)
+	for rows.Next() {
+		var p pageSummaryPayload
+		if err := rows.Scan(&p.ID, &p.PageType, &p.TargetPath, &p.Title, &p.Summary,
+			&p.Version, &p.Freshness, &p.ModelName, &p.ProviderName,
+			&p.InputTokens, &p.OutputTokens, &p.CachedTokens); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return jsonResult(map[string]any{"pages": out, "limit": limit})
+}
+
+func (s *Server) toolPage(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	target := req.GetString("path", "")
+	if target == "" {
+		return mcp.NewToolResultError("missing required argument 'path'"), nil
+	}
+	kind := req.GetString("kind", "file_overview")
+
+	var p pageContentPayload
+	err := s.opts.DB.QueryRowContext(ctx, `
+		SELECT id, page_type, target_path, title, summary,
+		       version, freshness_status, model_name, provider_name,
+		       input_tokens, output_tokens, cached_tokens,
+		       content, source_hash
+		FROM wiki_pages
+		WHERE repository_id = ? AND page_type = ? AND target_path = ?
+	`, s.opts.RepositoryID, kind, target).Scan(
+		&p.ID, &p.PageType, &p.TargetPath, &p.Title, &p.Summary,
+		&p.Version, &p.Freshness, &p.ModelName, &p.ProviderName,
+		&p.InputTokens, &p.OutputTokens, &p.CachedTokens,
+		&p.Content, &p.SourceHash,
+	)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("page not found: %s (%s)", target, kind)), nil
+	}
+	return jsonResult(p)
 }
 
 func clampInt(v, lo, hi int) int {

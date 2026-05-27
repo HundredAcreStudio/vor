@@ -27,6 +27,7 @@ func Root() *cobra.Command {
 	root.AddCommand(newDeadCodeCmd())
 	root.AddCommand(newDecisionsCmd())
 	root.AddCommand(newGenerateCmd())
+	root.AddCommand(newPagesCmd())
 	root.AddCommand(newHotspotsCmd())
 	root.AddCommand(newSearchCmd())
 	root.AddCommand(newExternalsCmd())

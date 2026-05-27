@@ -93,10 +93,25 @@ func (s *Server) registerTools() {
 
 	s.srv.AddTool(mcp.NewTool(
 		"repowise_decisions",
-		mcp.WithDescription("Architectural decisions extracted from the codebase. Sources include inline-marker comments (DECISION:, WHY:, TRADEOFF:) plus future ADR / CHANGELOG / commit-archaeology extractors. Each record carries source provenance (file + line) so the agent can verify quotes."),
+		mcp.WithDescription("Architectural decisions extracted from the codebase. Sources include inline-marker comments (DECISION:, WHY:, TRADEOFF:), ADR files under docs/adr, BREAKING entries in CHANGELOG.md, and Conventional Commits with ! markers or BREAKING CHANGE: footers. Each record carries source provenance (file + line or commit SHA) so the agent can verify quotes."),
 		mcp.WithString("source", mcp.Description("Filter by source: inline_marker | adr | changelog | git_archaeology.")),
 		mcp.WithNumber("limit", mcp.DefaultNumber(50), mcp.Description("Maximum records to return (1–500, default 50).")),
 	), s.wrap(s.toolDecisions))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_pages",
+		mcp.WithDescription("Generated wiki page summaries (title, target file, version, freshness, token usage). Use this to discover what documentation has been produced; follow up with repowise_page to read one. Pages are produced by 'repowise generate' against the indexed graph."),
+		mcp.WithString("kind", mcp.Description("Filter by page_type: file_overview | directory_overview | symbol_detail | architecture.")),
+		mcp.WithBoolean("stale_only", mcp.DefaultBool(false), mcp.Description("If true, only return pages whose freshness_status is not 'fresh' (source has drifted).")),
+		mcp.WithNumber("limit", mcp.DefaultNumber(100), mcp.Description("Maximum pages to return (1–500, default 100).")),
+	), s.wrap(s.toolPages))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_page",
+		mcp.WithDescription("Read one wiki page's full markdown content by target path. Returns the rendered body the LLM produced plus all the per-page metadata (model, version, freshness, source_hash) the agent needs to decide whether to trust it."),
+		mcp.WithString("path", mcp.Required(), mcp.Description("Repo-relative target path (e.g. 'internal/foo/bar.go').")),
+		mcp.WithString("kind", mcp.DefaultString("file_overview"), mcp.Description("Page kind. Defaults to file_overview.")),
+	), s.wrap(s.toolPage))
 }
 
 // wrap is the common handler wrapper: it logs each tool call (method,

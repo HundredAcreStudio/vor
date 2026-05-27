@@ -13,6 +13,7 @@ import (
 
 	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
 	"github.com/repowise-dev/repowise-go/internal/analysis/health"
+	pageModels "github.com/repowise-dev/repowise-go/internal/generation/models"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
@@ -25,6 +26,7 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
 	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/repowise-dev/repowise-go/internal/persistence/wikistore"
 	srvhttp "github.com/repowise-dev/repowise-go/internal/server/http"
 )
 
@@ -121,6 +123,28 @@ func fixtureRepo(t *testing.T) (*httptest.Server, string) {
 	}
 	if err := externalstore.New(conn).ReplaceAll(ctx, repo.ID, exts); err != nil {
 		t.Fatalf("ext ReplaceAll: %v", err)
+	}
+
+	// Wiki pages — two file_overview rows, one fresh + one stale.
+	ws := wikistore.New(conn)
+	if _, err := ws.Upsert(ctx, pageModels.Page{
+		RepositoryID: repo.ID, PageType: pageModels.PageKindFileOverview,
+		Title: "calc.ts overview", Content: "# calc.ts\n\nAdds two numbers.\n",
+		Summary: "Adds two numbers.", TargetPath: "calc.ts", SourceHash: "h1",
+		ModelName: "claude-sonnet-4-6", ProviderName: "anthropic",
+		InputTokens: 100, OutputTokens: 50, Confidence: 1.0,
+	}); err != nil {
+		t.Fatalf("wikistore Upsert calc: %v", err)
+	}
+	if _, err := ws.Upsert(ctx, pageModels.Page{
+		RepositoryID: repo.ID, PageType: pageModels.PageKindFileOverview,
+		Title: "index.ts overview", Content: "# index.ts\n", Summary: "Entry.",
+		TargetPath: "index.ts", SourceHash: "h2",
+		ModelName: "claude-sonnet-4-6", ProviderName: "anthropic",
+		InputTokens: 50, OutputTokens: 25, Confidence: 1.0,
+		Freshness: pageModels.FreshnessStale,
+	}); err != nil {
+		t.Fatalf("wikistore Upsert index: %v", err)
 	}
 
 	srv, err := srvhttp.New(srvhttp.Options{DB: conn})
@@ -390,6 +414,90 @@ func TestPanic_RecoveredAs500(t *testing.T) {
 		t.Errorf("unknown route = %d, want 404", rec.Code)
 	}
 	_ = strings.Contains // keep import linter happy if all other usages drop
+}
+
+// ---- pages endpoints ----------------------------------------------------
+
+func TestListPages(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+	var body struct {
+		Pages []struct {
+			TargetPath string `json:"targetPath"`
+			PageType   string `json:"pageType"`
+			Freshness  string `json:"freshness"`
+			Version    int    `json:"version"`
+			Title      string `json:"title"`
+		} `json:"pages"`
+	}
+	hitJSON(t, srv.URL, "/api/repos/"+repoID+"/pages", &body)
+	if len(body.Pages) != 2 {
+		t.Fatalf("pages = %d, want 2", len(body.Pages))
+	}
+	gotPaths := map[string]bool{}
+	for _, p := range body.Pages {
+		gotPaths[p.TargetPath] = true
+		if p.PageType != "file_overview" {
+			t.Errorf("PageType = %q", p.PageType)
+		}
+	}
+	if !gotPaths["calc.ts"] || !gotPaths["index.ts"] {
+		t.Errorf("missing expected pages: %+v", gotPaths)
+	}
+}
+
+func TestListPages_StaleFilter(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+	var body struct {
+		Pages []struct {
+			TargetPath string `json:"targetPath"`
+			Freshness  string `json:"freshness"`
+		} `json:"pages"`
+	}
+	hitJSON(t, srv.URL, "/api/repos/"+repoID+"/pages?stale=1", &body)
+	if len(body.Pages) != 1 {
+		t.Fatalf("?stale=1 returned %d, want 1", len(body.Pages))
+	}
+	if body.Pages[0].TargetPath != "index.ts" {
+		t.Errorf("stale page = %q, want index.ts", body.Pages[0].TargetPath)
+	}
+}
+
+func TestShowPage(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+	var body struct {
+		TargetPath string `json:"targetPath"`
+		Content    string `json:"content"`
+		SourceHash string `json:"sourceHash"`
+		Version    int    `json:"version"`
+	}
+	hitJSON(t, srv.URL, "/api/repos/"+repoID+"/pages/show?path=calc.ts", &body)
+	if body.TargetPath != "calc.ts" {
+		t.Errorf("TargetPath = %q", body.TargetPath)
+	}
+	if !strings.Contains(body.Content, "Adds two numbers") {
+		t.Errorf("Content = %q", body.Content)
+	}
+	if body.SourceHash != "h1" {
+		t.Errorf("SourceHash = %q", body.SourceHash)
+	}
+}
+
+func TestShowPage_MissingPath(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+	resp, _ := http.Get(srv.URL + "/api/repos/" + repoID + "/pages/show")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("missing ?path should yield 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestShowPage_NotFound(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+	resp, _ := http.Get(srv.URL + "/api/repos/" + repoID + "/pages/show?path=no-such-file.go")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
 }
 
 // openDBForPanic is a tiny helper so TestPanic_RecoveredAs500 can construct

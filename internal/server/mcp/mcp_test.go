@@ -10,6 +10,7 @@ import (
 
 	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
 	"github.com/repowise-dev/repowise-go/internal/analysis/health"
+	pageModels "github.com/repowise-dev/repowise-go/internal/generation/models"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
@@ -22,6 +23,7 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
 	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/repowise-dev/repowise-go/internal/persistence/wikistore"
 	mcpserver "github.com/repowise-dev/repowise-go/internal/server/mcp"
 )
 
@@ -84,6 +86,16 @@ func fixtureServer(t *testing.T) (*mcpserver.Server, string) {
 	_ = externalstore.New(conn).ReplaceAll(ctx, r.ID, []external.Record{
 		{Name: "react", Ecosystem: "npm", Category: "library",
 			Version: "^18", DeclaredIn: "package.json"},
+	})
+
+	// wiki pages
+	ws := wikistore.New(conn)
+	_, _ = ws.Upsert(ctx, pageModels.Page{
+		RepositoryID: r.ID, PageType: pageModels.PageKindFileOverview,
+		Title: "lib.go overview", Content: "# lib.go\n\nDefines Helper().\n",
+		Summary: "Defines Helper().", TargetPath: "lib.go", SourceHash: "hh",
+		ModelName: "claude-sonnet-4-6", ProviderName: "anthropic",
+		InputTokens: 60, OutputTokens: 20, Confidence: 1.0,
 	})
 
 	srv, err := mcpserver.New(mcpserver.Options{DB: conn, RepositoryID: r.ID})
@@ -261,6 +273,45 @@ func TestNew_RejectsMissingDB(t *testing.T) {
 	_, err := mcpserver.New(mcpserver.Options{RepositoryID: "x"})
 	if err == nil {
 		t.Errorf("expected error when DB is nil")
+	}
+}
+
+func TestRepowisePages(t *testing.T) {
+	srv, _ := fixtureServer(t)
+	text := callTool(t, srv, "repowise_pages", map[string]any{"limit": 10})
+	if !strings.Contains(text, `"lib.go"`) {
+		t.Errorf("pages list missing lib.go: %s", text)
+	}
+	if !strings.Contains(text, `"file_overview"`) {
+		t.Errorf("pages list missing pageType: %s", text)
+	}
+}
+
+func TestRepowisePage_Found(t *testing.T) {
+	srv, _ := fixtureServer(t)
+	text := callTool(t, srv, "repowise_page", map[string]any{"path": "lib.go"})
+	if !strings.Contains(text, "Defines Helper") {
+		t.Errorf("page body missing markdown: %s", text)
+	}
+	// The JSON is pretty-printed, so match the field+value flexibly.
+	if !strings.Contains(text, `"sourceHash"`) || !strings.Contains(text, `"hh"`) {
+		t.Errorf("page payload missing sourceHash: %s", text)
+	}
+}
+
+func TestRepowisePage_NotFoundIsToolError(t *testing.T) {
+	srv, _ := fixtureServer(t)
+	// callTool would fail on tool error; use HandleMessage directly so we
+	// can inspect the IsError flag without failing the test.
+	msg := map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+		"params": map[string]any{"name": "repowise_page", "arguments": map[string]any{"path": "no-such-file"}},
+	}
+	raw, _ := json.Marshal(msg)
+	resp := srv.MCPServer().HandleMessage(context.Background(), raw)
+	respBytes, _ := json.Marshal(resp)
+	if !strings.Contains(string(respBytes), `"isError":true`) {
+		t.Errorf("expected isError=true for missing page: %s", string(respBytes))
 	}
 }
 
