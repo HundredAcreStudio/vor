@@ -207,17 +207,39 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 		return res, err
 	}
 
-	// Phase: health.
+	// Phase: health. Weave hotspot paths + co-change partners + graph
+	// edges into the analyzer so cross-cutting biomarkers (untested_hotspot,
+	// hidden_coupling) fire.
 	if err := runPhase(ctx, opts, store, PhaseHealth, res, func() error {
 		analyzer := &health.Analyzer{}
 		if len(res.GitRecords) > 0 {
 			hot := make(map[string]struct{}, len(res.GitRecords))
+			coChange := make(map[string][]string, len(res.GitRecords))
+			const minCoChange = 3
 			for _, gr := range res.GitRecords {
 				if gr.IsHotspot {
 					hot[gr.Path] = struct{}{}
 				}
+				for _, p := range gr.CoChangePartners {
+					if p.Count >= minCoChange {
+						coChange[gr.Path] = append(coChange[gr.Path], p.Path)
+					}
+				}
 			}
 			analyzer.HotspotPaths = hot
+			if len(coChange) > 0 {
+				analyzer.CoChangePairs = coChange
+			}
+		}
+		if res.Graph != nil {
+			edges := map[string]map[string]bool{}
+			for _, e := range res.Graph.Edges() {
+				if edges[e.F.StringID] == nil {
+					edges[e.F.StringID] = map[string]bool{}
+				}
+				edges[e.F.StringID][e.T.StringID] = true
+			}
+			analyzer.GraphEdges = edges
 		}
 		res.HealthResult = analyzer.Analyze(res.Parsed)
 		return nil

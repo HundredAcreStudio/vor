@@ -34,6 +34,7 @@ const (
 	BiomarkerGodClass        = "god_class"
 	BiomarkerUntestedHotspot = "untested_hotspot"
 	BiomarkerBrainMethod     = "brain_method"
+	BiomarkerHiddenCoupling  = "hidden_coupling"
 )
 
 // Finding is one biomarker hit. Persisted into health_findings.
@@ -122,6 +123,17 @@ type Analyzer struct {
 	// intelligence here. Optional — when empty, the biomarker won't
 	// fire.
 	HotspotPaths map[string]struct{}
+
+	// CoChangePairs maps a file path to the paths it has historically
+	// co-changed with. Caller is expected to pre-filter by minimum
+	// co-change count. Used by hidden_coupling.
+	CoChangePairs map[string][]string
+
+	// GraphEdges is the set of (source, target) file pairs that have
+	// a graph edge (any direction, any type). Used by hidden_coupling
+	// to detect co-changing files that DON'T already have an explicit
+	// dependency.
+	GraphEdges map[string]map[string]bool
 }
 
 // Result is the bundle returned by Analyze.
@@ -144,6 +156,12 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 	// Pre-compute "files that have a paired test file" so untested_hotspot
 	// can skip well-covered hotspots.
 	testPairs := buildTestPairs(files)
+
+	// hidden_coupling: one finding per unique unordered (a, b) pair. Track
+	// emitted pairs so we don't double-flag from both sides.
+	emittedPairs := map[string]bool{}
+	hiddenCouplingFindings := a.computeHiddenCoupling(files, emittedPairs)
+	findings = append(findings, hiddenCouplingFindings...)
 
 	for _, pf := range files {
 		fm := FileMetric{
@@ -302,6 +320,74 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 	}
 
 	return Result{Findings: findings, FileMetrics: metrics}
+}
+
+// computeHiddenCoupling returns one Finding per unique (a, b) pair where:
+//   - a and b are both files in the analyzed set
+//   - a's CoChangePairs include b (caller pre-filters by min count)
+//   - no graph edge between them in either direction
+//
+// The unordered pair (a,b) is emitted as a single finding tagged to file
+// a (the lex-smaller of the two). emittedPairs tracks de-dup state so
+// repeated calls (which currently can't happen) stay clean.
+func (a *Analyzer) computeHiddenCoupling(files []models.ParsedFile, emittedPairs map[string]bool) []Finding {
+	if len(a.CoChangePairs) == 0 {
+		return nil
+	}
+	// Index file paths in the analyzed set so we only flag pairs we
+	// actually parsed (saves noise from co-change with vendored files).
+	inSet := map[string]bool{}
+	for _, f := range files {
+		inSet[f.FileInfo.Path] = true
+	}
+
+	var out []Finding
+	for src, partners := range a.CoChangePairs {
+		if !inSet[src] {
+			continue
+		}
+		for _, partner := range partners {
+			if !inSet[partner] {
+				continue
+			}
+			lo, hi := src, partner
+			if hi < lo {
+				lo, hi = hi, lo
+			}
+			pairKey := lo + "\x00" + hi
+			if emittedPairs[pairKey] {
+				continue
+			}
+			if hasGraphEdge(a.GraphEdges, lo, hi) {
+				continue
+			}
+			emittedPairs[pairKey] = true
+			out = append(out, Finding{
+				FilePath:      lo,
+				BiomarkerType: BiomarkerHiddenCoupling,
+				Severity:      SeverityMedium,
+				HealthImpact:  1.5,
+				Reason: fmt.Sprintf("co-changes with %s but no graph edge between them", hi),
+				Details: map[string]any{
+					"partner": hi,
+				},
+			})
+		}
+	}
+	return out
+}
+
+func hasGraphEdge(edges map[string]map[string]bool, a, b string) bool {
+	if edges == nil {
+		return false
+	}
+	if dst, ok := edges[a]; ok && dst[b] {
+		return true
+	}
+	if dst, ok := edges[b]; ok && dst[a] {
+		return true
+	}
+	return false
 }
 
 // isBrainMethod returns true when ALL three axes — complexity, nesting,

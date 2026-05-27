@@ -434,6 +434,87 @@ func TestAnalyze_BrainMethod(t *testing.T) {
 	}
 }
 
+func TestAnalyze_HiddenCoupling(t *testing.T) {
+	files := []models.ParsedFile{
+		{FileInfo: models.FileInfo{Path: "pkg/foo.go", Language: "go"}},
+		{FileInfo: models.FileInfo{Path: "pkg/bar.go", Language: "go"}},
+		{FileInfo: models.FileInfo{Path: "pkg/baz.go", Language: "go"}},
+	}
+	// foo co-changes with bar (no graph edge → flagged) and baz (HAS
+	// graph edge → not flagged).
+	a := &health.Analyzer{
+		CoChangePairs: map[string][]string{
+			"pkg/foo.go": {"pkg/bar.go", "pkg/baz.go"},
+		},
+		GraphEdges: map[string]map[string]bool{
+			"pkg/foo.go": {"pkg/baz.go": true},
+		},
+	}
+	res := a.Analyze(files)
+
+	got := map[string]string{} // pair → partner from Details
+	for _, f := range res.Findings {
+		if f.BiomarkerType == health.BiomarkerHiddenCoupling {
+			got[f.FilePath] = f.Details["partner"].(string)
+		}
+	}
+	if got["pkg/bar.go"] != "pkg/foo.go" && got["pkg/foo.go"] != "pkg/bar.go" {
+		t.Errorf("expected one finding for foo↔bar pair, got %v", got)
+	}
+	for path, partner := range got {
+		if path == "pkg/baz.go" || partner == "pkg/baz.go" {
+			t.Errorf("foo↔baz has a graph edge — shouldn't be flagged: %v", got)
+		}
+	}
+}
+
+func TestAnalyze_HiddenCoupling_DedupesPair(t *testing.T) {
+	// Both directions of co-change present; we should still emit one
+	// finding for the unordered pair.
+	files := []models.ParsedFile{
+		{FileInfo: models.FileInfo{Path: "a.go", Language: "go"}},
+		{FileInfo: models.FileInfo{Path: "b.go", Language: "go"}},
+	}
+	a := &health.Analyzer{
+		CoChangePairs: map[string][]string{
+			"a.go": {"b.go"},
+			"b.go": {"a.go"},
+		},
+	}
+	res := a.Analyze(files)
+	count := 0
+	for _, f := range res.Findings {
+		if f.BiomarkerType == health.BiomarkerHiddenCoupling {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected 1 hidden_coupling finding, got %d", count)
+	}
+}
+
+func TestAnalyze_HiddenCoupling_NoEdgeMapMeansNoSuppression(t *testing.T) {
+	// If GraphEdges is nil, no pair is suppressed → all co-change pairs
+	// flagged. Validates the nil-map safety in hasGraphEdge.
+	files := []models.ParsedFile{
+		{FileInfo: models.FileInfo{Path: "a.go", Language: "go"}},
+		{FileInfo: models.FileInfo{Path: "b.go", Language: "go"}},
+	}
+	a := &health.Analyzer{
+		CoChangePairs: map[string][]string{"a.go": {"b.go"}},
+	}
+	res := a.Analyze(files)
+	found := false
+	for _, f := range res.Findings {
+		if f.BiomarkerType == health.BiomarkerHiddenCoupling {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected flagging with nil GraphEdges, got none")
+	}
+}
+
 func TestAnalyze_BrainMethod_DisabledViaZeroThresholds(t *testing.T) {
 	syms := []models.Symbol{
 		{Name: "verybad", ComplexityEstimate: 100, NestingDepth: 10,
