@@ -24,6 +24,8 @@ func Root() *cobra.Command {
 	root.AddCommand(newStatusCmd())
 	root.AddCommand(newHealthCmd())
 	root.AddCommand(newDeadCodeCmd())
+	root.AddCommand(newHotspotsCmd())
+	root.AddCommand(newSearchCmd())
 	root.AddCommand(newMCPCmd())
 	// Additional subcommands are added in their respective phases.
 

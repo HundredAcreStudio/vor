@@ -76,6 +76,14 @@ func (s *Server) registerTools() {
 		mcp.WithBoolean("dev_only", mcp.DefaultBool(false), mcp.Description("If true, return only dev/test dependencies.")),
 		mcp.WithNumber("limit", mcp.DefaultNumber(200), mcp.Description("Maximum records to return (1–1000, default 200).")),
 	), s.wrap(s.toolExternals))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_search",
+		mcp.WithDescription("Search graph nodes (files + symbols) by name, qualified name, or node_id. Substring match, ranked by PageRank. Use when you don't already know the canonical node_id."),
+		mcp.WithString("query", mcp.Required(), mcp.Description("Substring to match against name / qualified_name / node_id.")),
+		mcp.WithString("node_type", mcp.Description("Filter to 'file' or 'symbol'.")),
+		mcp.WithNumber("limit", mcp.DefaultNumber(25), mcp.Description("Maximum matches to return (1–200, default 25).")),
+	), s.wrap(s.toolSearch))
 }
 
 // wrap is the common handler wrapper: it logs each tool call (method,

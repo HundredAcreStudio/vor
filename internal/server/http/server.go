@@ -69,6 +69,7 @@ func New(opts Options) (*Server, error) {
 		api.Route("/{repoID}", func(per chi.Router) {
 			routes.MountGraph(per, deps)
 			routes.MountSymbols(per, deps)
+			routes.MountSearch(per, deps)
 			routes.MountHotspots(per, deps)
 			routes.MountDeadCode(per, deps)
 			routes.MountHealth(per, deps)

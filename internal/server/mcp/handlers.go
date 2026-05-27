@@ -412,6 +412,61 @@ func (s *Server) toolExternals(ctx context.Context, req mcp.CallToolRequest) (*m
 	})
 }
 
+// ---- tool: repowise_search -----------------------------------------------
+
+type searchResultPayload struct {
+	NodeID    string  `json:"nodeId"`
+	NodeType  string  `json:"nodeType"`
+	Kind      string  `json:"kind,omitempty"`
+	Name      string  `json:"name,omitempty"`
+	FilePath  string  `json:"filePath,omitempty"`
+	StartLine int     `json:"startLine,omitempty"`
+	PageRank  float64 `json:"pagerank"`
+}
+
+func (s *Server) toolSearch(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	q, err := req.RequireString("query")
+	if err != nil {
+		return nil, err
+	}
+	limit := clampInt(req.GetInt("limit", 25), 1, 200)
+	nodeType := req.GetString("node_type", "")
+
+	pattern := "%" + q + "%"
+	sqlQ := `SELECT node_id, node_type, COALESCE(kind,''), COALESCE(name,''),
+	                COALESCE(file_path,''), COALESCE(start_line,0), pagerank
+	         FROM graph_nodes
+	         WHERE repository_id = ?
+	           AND (name LIKE ? OR qualified_name LIKE ? OR node_id LIKE ?)`
+	args := []any{s.opts.RepositoryID, pattern, pattern, pattern}
+	if nodeType != "" {
+		sqlQ += " AND node_type = ?"
+		args = append(args, nodeType)
+	}
+	sqlQ += " ORDER BY pagerank DESC, node_id LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := s.opts.DB.QueryContext(ctx, sqlQ, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]searchResultPayload, 0, limit)
+	for rows.Next() {
+		var r searchResultPayload
+		if err := rows.Scan(&r.NodeID, &r.NodeType, &r.Kind, &r.Name, &r.FilePath, &r.StartLine, &r.PageRank); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return jsonResult(map[string]any{
+		"query":   q,
+		"matches": out,
+		"limit":   limit,
+	})
+}
+
 func clampInt(v, lo, hi int) int {
 	if v < lo {
 		return lo
