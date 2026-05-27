@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
+	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/parser"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/repowise-dev/repowise-go/internal/ingestion/traverser"
 	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
+	"github.com/repowise-dev/repowise-go/internal/persistence/gitstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
 	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
@@ -54,6 +56,8 @@ func newIngestCmd() *cobra.Command {
 		parseAST      bool
 		buildGraph    bool
 		scanExternals bool
+		gitIndex      bool
+		gitMaxCommits int
 		persist       bool
 	)
 	cmd := &cobra.Command{
@@ -85,10 +89,12 @@ func newIngestCmd() *cobra.Command {
 				return fmt.Errorf("walk: %w", err)
 			}
 
-			// --persist implies --graph + --externals; --graph implies --parse.
+			// --persist implies --graph + --externals + --git; --graph
+			// implies --parse.
 			if persist {
 				buildGraph = true
 				scanExternals = true
+				gitIndex = true
 			}
 			if buildGraph {
 				parseAST = true
@@ -159,8 +165,23 @@ func newIngestCmd() *cobra.Command {
 				}
 			}
 
+			var gitRecords []git.PerFile
+			if gitIndex {
+				ix := &git.Indexer{MaxCommits: gitMaxCommits}
+				recs, err := ix.Index(ctx, absRoot)
+				if err != nil {
+					// Treat "not a git repo" as a soft warning rather than
+					// a fatal error — many ingestion targets aren't tracked
+					// with git locally.
+					fmt.Fprintf(out, "\ngit intelligence skipped: %v\n", err)
+				} else {
+					gitRecords = recs
+					printGitSummary(out, recs)
+				}
+			}
+
 			if persist {
-				if err := persistAll(ctx, root, absRoot, g, extRecords); err != nil {
+				if err := persistAll(ctx, root, absRoot, g, extRecords, gitRecords); err != nil {
 					return fmt.Errorf("persist: %w", err)
 				}
 				fmt.Fprintf(out, "\npersisted to %s\n", databaseTarget(root))
@@ -173,7 +194,9 @@ func newIngestCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&parseAST, "parse", false, "parse each file's AST and report symbol/import/call counts")
 	cmd.Flags().BoolVar(&buildGraph, "graph", false, "build the dependency graph + metrics (implies --parse)")
 	cmd.Flags().BoolVar(&scanExternals, "externals", false, "scan manifest files for third-party dependencies")
-	cmd.Flags().BoolVar(&persist, "persist", false, "persist graph + externals to the database (implies --graph --externals)")
+	cmd.Flags().BoolVar(&gitIndex, "git", false, "extract per-file git intelligence (hotspots, ownership, co-change)")
+	cmd.Flags().IntVar(&gitMaxCommits, "git-max-commits", 0, "cap commits walked by --git (0 = default 10000)")
+	cmd.Flags().BoolVar(&persist, "persist", false, "persist graph + externals + git intelligence (implies --graph --externals --git)")
 	cmd.Flags().IntVar(&maxKB, "max-kb", 0, "max file size in KB (0 = default 500)")
 	cmd.Flags().StringArrayVar(&extraExcl, "exclude", nil, "extra gitignore-syntax patterns to skip (repeatable)")
 	return cmd
@@ -300,9 +323,9 @@ func printExternalsSummary(w io.Writer, records []external.Record) {
 }
 
 // persistAll opens the configured DB, runs pending migrations, ensures the
-// repository row, and writes both the graph snapshot and external systems
+// repository row, and writes graph + externals + git intelligence
 // (whichever inputs are non-nil).
-func persistAll(ctx context.Context, repoArg, absRoot string, g *graph.Graph, exts []external.Record) error {
+func persistAll(ctx context.Context, repoArg, absRoot string, g *graph.Graph, exts []external.Record, gitRecs []git.PerFile) error {
 	conn, dialect, err := openDB(ctx, repoArg)
 	if err != nil {
 		return err
@@ -313,9 +336,15 @@ func persistAll(ctx context.Context, repoArg, absRoot string, g *graph.Graph, ex
 		return fmt.Errorf("apply migrations: %w", err)
 	}
 
-	repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRoot, "")
+	repoStore := repos.New(conn)
+	repoRow, err := repoStore.EnsureByLocalPath(ctx, absRoot, "")
 	if err != nil {
 		return fmt.Errorf("ensure repository: %w", err)
+	}
+
+	// Best-effort: stamp the head_commit when git is available.
+	if head, err := git.ResolveHeadCommit(absRoot); err == nil {
+		_ = repoStore.UpdateHeadCommit(ctx, repoRow.ID, head.String())
 	}
 
 	if g != nil {
@@ -326,7 +355,47 @@ func persistAll(ctx context.Context, repoArg, absRoot string, g *graph.Graph, ex
 	if err := externalstore.New(conn).ReplaceAll(ctx, repoRow.ID, exts); err != nil {
 		return fmt.Errorf("externals: %w", err)
 	}
+	if err := gitstore.New(conn).ReplaceAll(ctx, repoRow.ID, gitRecs); err != nil {
+		return fmt.Errorf("git_metadata: %w", err)
+	}
 	return nil
+}
+
+// printGitSummary prints a top-line overview of git intelligence: total
+// files seen, hotspot count, and the top-5 hotspots by churn percentile.
+func printGitSummary(w io.Writer, records []git.PerFile) {
+	hotspots := 0
+	for _, r := range records {
+		if r.IsHotspot {
+			hotspots++
+		}
+	}
+	fmt.Fprintf(w, "\nGit intelligence: %d files (%d hotspots)\n", len(records), hotspots)
+	if len(records) == 0 {
+		return
+	}
+	// Sort hotspots by churn pctl desc and show up to 5.
+	rec := append([]git.PerFile(nil), records...)
+	sort.Slice(rec, func(i, j int) bool { return rec[i].ChurnPercentile > rec[j].ChurnPercentile })
+	top := 5
+	if len(rec) < top {
+		top = len(rec)
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	defer tw.Flush()
+	for i := 0; i < top; i++ {
+		r := rec[i]
+		owner := "(unknown)"
+		if r.PrimaryOwner != nil {
+			owner = r.PrimaryOwner.Name
+		}
+		hotspot := ""
+		if r.IsHotspot {
+			hotspot = " HOT"
+		}
+		fmt.Fprintf(tw, "  %.2f%s\t%s\towner=%s\t(commits=%d 90d=%d)\n",
+			r.ChurnPercentile, hotspot, r.Path, owner, r.CommitCountTotal, r.CommitCount90d)
+	}
 }
 
 func databaseTarget(repoArg string) string {
