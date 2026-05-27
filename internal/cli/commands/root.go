@@ -21,6 +21,7 @@ func Root() *cobra.Command {
 	root.AddCommand(newServeCmd())
 	root.AddCommand(newDBCmd())
 	root.AddCommand(newIngestCmd())
+	root.AddCommand(newStatusCmd())
 	// Additional subcommands are added in their respective phases.
 
 	return root
