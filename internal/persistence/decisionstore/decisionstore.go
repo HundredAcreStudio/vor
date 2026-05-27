@@ -140,6 +140,134 @@ func (s *Store) ReplaceAll(ctx context.Context, repoID string, records []decisio
 	return nil
 }
 
+// Insert appends a single decision_records row plus a matching
+// decision_evidence row. Used by `repowise decision add` where the
+// user creates a record by hand instead of mining one. Returns the
+// generated id.
+func (s *Store) Insert(ctx context.Context, repoID string, r decisions.Record) (string, error) {
+	if repoID == "" {
+		return "", fmt.Errorf("repoID is required")
+	}
+	if r.Title == "" {
+		return "", fmt.Errorf("Title is required")
+	}
+	id := newID()
+	altsJSON, _ := jsonEncode(r.Alternatives)
+	consJSON, _ := jsonEncode(r.Consequences)
+	filesJSON, _ := jsonEncode(r.AffectedFiles)
+	tagsJSON, _ := jsonEncode(r.Tags)
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var evidenceFile interface{}
+	if r.EvidenceFile != "" {
+		evidenceFile = r.EvidenceFile
+	}
+	var evidenceLine interface{}
+	if r.EvidenceLine > 0 {
+		evidenceLine = r.EvidenceLine
+	}
+
+	if _, err := tx.ExecContext(ctx, `INSERT INTO decision_records (
+		id, repository_id, title, status, context, decision, rationale,
+		alternatives_json, consequences_json, affected_files_json,
+		affected_modules_json, tags_json, evidence_commits_json,
+		source, evidence_file, evidence_line, confidence, verification
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, repoID, r.Title, defaultIfEmpty(r.Status, decisions.DefaultStatus),
+		r.Context, r.Decision, r.Rationale,
+		altsJSON, consJSON, filesJSON, "[]", tagsJSON, "[]",
+		defaultIfEmpty(r.Source, "cli"),
+		evidenceFile, evidenceLine,
+		r.Confidence, defaultIfEmpty(r.Verification, decisions.VerificationExact),
+	); err != nil {
+		return "", fmt.Errorf("insert decision_records: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO decision_evidence (
+		id, decision_id, source, source_rank,
+		evidence_file, evidence_line, evidence_commit, source_quote,
+		confidence, verification
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		newID(), id, defaultIfEmpty(r.Source, "cli"), 1,
+		evidenceFile, evidenceLine, r.EvidenceCommit, r.SourceQuote,
+		r.Confidence, defaultIfEmpty(r.Verification, decisions.VerificationExact),
+	); err != nil {
+		return "", fmt.Errorf("insert decision_evidence: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// SetStatus moves a decision to the given status (active, deprecated,
+// superseded, ...). Used by confirm / dismiss / deprecate.
+func (s *Store) SetStatus(ctx context.Context, id, status string) error {
+	if id == "" || status == "" {
+		return fmt.Errorf("id and status required")
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE decision_records SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		status, id)
+	if err != nil {
+		return fmt.Errorf("update status: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("no decision found with id %s", id)
+	}
+	return nil
+}
+
+// SetConfidence updates the confidence + verification fields. Used by
+// confirm (1.0/exact) and dismiss (0/whatever).
+func (s *Store) SetConfidence(ctx context.Context, id string, confidence float64, verification string) error {
+	if id == "" {
+		return fmt.Errorf("id required")
+	}
+	if verification == "" {
+		verification = decisions.VerificationExact
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE decision_records SET confidence = ?, verification = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		confidence, verification, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("no decision found with id %s", id)
+	}
+	return nil
+}
+
+// Get fetches one decision by id.
+func (s *Store) Get(ctx context.Context, id string) (decisions.Record, string, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, title, status, COALESCE(context, ''), COALESCE(decision, ''),
+		       COALESCE(rationale, ''), source,
+		       COALESCE(evidence_file, ''), COALESCE(evidence_line, 0),
+		       confidence, verification, affected_files_json, tags_json
+		FROM decision_records WHERE id = ?
+	`, id)
+	var r decisions.Record
+	var foundID, affectedJSON, tagsJSON string
+	if err := row.Scan(&foundID, &r.Title, &r.Status, &r.Context, &r.Decision, &r.Rationale,
+		&r.Source, &r.EvidenceFile, &r.EvidenceLine, &r.Confidence, &r.Verification,
+		&affectedJSON, &tagsJSON); err != nil {
+		return decisions.Record{}, "", err
+	}
+	if affectedJSON != "" && affectedJSON != "null" {
+		_ = json.Unmarshal([]byte(affectedJSON), &r.AffectedFiles)
+	}
+	if tagsJSON != "" && tagsJSON != "null" {
+		_ = json.Unmarshal([]byte(tagsJSON), &r.Tags)
+	}
+	return r, foundID, nil
+}
+
 // Count returns the number of decision_records rows for a repository.
 func (s *Store) Count(ctx context.Context, repoID string) (int, error) {
 	var n int
@@ -196,3 +324,9 @@ func defaultIfEmpty(s, fallback string) string {
 }
 
 func newID() string { return strings.ReplaceAll(uuid.New().String(), "-", "") }
+
+// jsonUnmarshalLocal wraps encoding/json.Unmarshal so the caller can
+// stay one indirection from the import.
+func jsonUnmarshalLocal(s string, v any) error {
+	return json.Unmarshal([]byte(s), v)
+}
