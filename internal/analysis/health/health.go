@@ -33,6 +33,7 @@ const (
 	BiomarkerDeepNesting     = "deep_nesting"
 	BiomarkerGodClass        = "god_class"
 	BiomarkerUntestedHotspot = "untested_hotspot"
+	BiomarkerBrainMethod     = "brain_method"
 )
 
 // Finding is one biomarker hit. Persisted into health_findings.
@@ -84,6 +85,14 @@ type Thresholds struct {
 	GodClassMethods int
 	// GodClassMethodsHigh: classes with ≥ this many methods are flagged high.
 	GodClassMethodsHigh int
+
+	// BrainMethodCCN / BrainMethodNesting / BrainMethodLines are the
+	// thresholds a function must exceed simultaneously to be flagged as
+	// a brain_method. The composite captures "doing too much" better than
+	// any single dimension. Defaults pick mid-tier values from each axis.
+	BrainMethodCCN     int
+	BrainMethodNesting int
+	BrainMethodLines   int
 }
 
 // DefaultThresholds returns the recommended values.
@@ -98,6 +107,9 @@ func DefaultThresholds() Thresholds {
 		NestingHigh:           6,
 		GodClassMethods:       15,
 		GodClassMethodsHigh:   25,
+		BrainMethodCCN:        10,
+		BrainMethodNesting:    3,
+		BrainMethodLines:      50,
 	}
 }
 
@@ -222,6 +234,28 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 				})
 			}
 
+			// brain_method: bad on all three axes simultaneously (CCN +
+			// nesting + length). High severity always — these are the
+			// most refactor-worthy functions in any codebase.
+			if isBrainMethod(sym.ComplexityEstimate, sym.NestingDepth, lines, thresholds) {
+				findings = append(findings, Finding{
+					FilePath:      pf.FileInfo.Path,
+					BiomarkerType: BiomarkerBrainMethod,
+					Severity:      SeverityHigh,
+					FunctionName:  sym.Name,
+					LineStart:     sym.StartLine,
+					LineEnd:       sym.EndLine,
+					HealthImpact:  4.0,
+					Reason: fmt.Sprintf("complexity=%d, nesting=%d, lines=%d (all above brain-method thresholds)",
+						sym.ComplexityEstimate, sym.NestingDepth, lines),
+					Details: map[string]any{
+						"complexity": sym.ComplexityEstimate,
+						"nesting":    sym.NestingDepth,
+						"lines":      lines,
+					},
+				})
+			}
+
 			// god_class fires once per class-like symbol whose method count
 			// exceeds the threshold.
 			if classKind(sym.Kind) {
@@ -268,6 +302,18 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 	}
 
 	return Result{Findings: findings, FileMetrics: metrics}
+}
+
+// isBrainMethod returns true when ALL three axes — complexity, nesting,
+// and length — are above their brain-method thresholds simultaneously.
+// Skips when any threshold is zero (the caller hasn't configured it).
+func isBrainMethod(ccn, nesting, lines int, t Thresholds) bool {
+	if t.BrainMethodCCN <= 0 || t.BrainMethodNesting <= 0 || t.BrainMethodLines <= 0 {
+		return false
+	}
+	return ccn >= t.BrainMethodCCN &&
+		nesting >= t.BrainMethodNesting &&
+		lines >= t.BrainMethodLines
 }
 
 // buildTestPairs walks files and returns a map of production paths whose

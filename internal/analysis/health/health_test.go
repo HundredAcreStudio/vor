@@ -397,3 +397,58 @@ func TestAnalyze_TestPairingPatterns(t *testing.T) {
 		}
 	}
 }
+
+// TestAnalyze_BrainMethod exercises the composite biomarker: a function
+// must be high on all three axes simultaneously (CCN, nesting, lines).
+// Each "bad on one axis only" case asserts the biomarker does NOT fire.
+func TestAnalyze_BrainMethod(t *testing.T) {
+	mkSymFull := func(name string, ccn, nesting, startLine, endLine int) models.Symbol {
+		s := mkSym(name, ccn, startLine, endLine)
+		s.NestingDepth = nesting
+		return s
+	}
+
+	// Default thresholds: CCN≥10, nesting≥3, lines≥50.
+	syms := []models.Symbol{
+		mkSymFull("brain", 15, 4, 1, 80),         // bad on all 3 → flagged
+		mkSymFull("just_complex", 15, 1, 100, 110), // CCN only
+		mkSymFull("just_nested", 2, 5, 200, 210),   // nesting only
+		mkSymFull("just_long", 2, 1, 300, 400),     // lines only
+		mkSymFull("clean", 3, 1, 500, 510),         // nothing
+	}
+	res := (&health.Analyzer{}).Analyze([]models.ParsedFile{mkFile(syms)})
+
+	brainHits := map[string]bool{}
+	for _, f := range res.Findings {
+		if f.BiomarkerType == health.BiomarkerBrainMethod {
+			brainHits[f.FunctionName] = true
+		}
+	}
+	if !brainHits["brain"] {
+		t.Errorf("'brain' should fire brain_method (bad on all 3 axes)")
+	}
+	for _, name := range []string{"just_complex", "just_nested", "just_long", "clean"} {
+		if brainHits[name] {
+			t.Errorf("%s shouldn't fire brain_method (only one axis bad): %v", name, brainHits)
+		}
+	}
+}
+
+func TestAnalyze_BrainMethod_DisabledViaZeroThresholds(t *testing.T) {
+	syms := []models.Symbol{
+		{Name: "verybad", ComplexityEstimate: 100, NestingDepth: 10,
+			StartLine: 1, EndLine: 500, Language: "go"},
+	}
+	a := &health.Analyzer{Thresholds: health.Thresholds{
+		ComplexityWarning:  5, // need to set something so default fallback doesn't kick in
+		ComplexityHigh:     10,
+		ComplexityCritical: 100,
+		// BrainMethod thresholds left at 0 → skip
+	}}
+	res := a.Analyze([]models.ParsedFile{mkFile(syms)})
+	for _, f := range res.Findings {
+		if f.BiomarkerType == health.BiomarkerBrainMethod {
+			t.Errorf("brain_method shouldn't fire with zero thresholds: %+v", f)
+		}
+	}
+}
