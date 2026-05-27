@@ -507,6 +507,57 @@ func (s *Server) toolPipelineLog(ctx context.Context, req mcp.CallToolRequest) (
 	})
 }
 
+// ---- tool: repowise_decisions ---------------------------------------------
+
+type decisionPayload struct {
+	Title         string  `json:"title"`
+	Source        string  `json:"source"`
+	EvidenceFile  string  `json:"evidenceFile,omitempty"`
+	EvidenceLine  int     `json:"evidenceLine,omitempty"`
+	Confidence    float64 `json:"confidence"`
+	Verification  string  `json:"verification"`
+	Decision      string  `json:"decision,omitempty"`
+	Rationale     string  `json:"rationale,omitempty"`
+	SourceQuote   string  `json:"sourceQuote,omitempty"`
+}
+
+func (s *Server) toolDecisions(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	limit := clampInt(req.GetInt("limit", 50), 1, 500)
+	source := req.GetString("source", "")
+
+	query := `SELECT dr.title, dr.source, COALESCE(dr.evidence_file,''),
+	                 COALESCE(dr.evidence_line,0), dr.confidence, dr.verification,
+	                 dr.decision, dr.rationale,
+	                 COALESCE((SELECT source_quote FROM decision_evidence de
+	                           WHERE de.decision_id = dr.id LIMIT 1), '')
+	          FROM decision_records dr
+	          WHERE dr.repository_id = ?`
+	args := []any{s.opts.RepositoryID}
+	if source != "" {
+		query += " AND dr.source = ?"
+		args = append(args, source)
+	}
+	query += " ORDER BY dr.confidence DESC, dr.evidence_file, dr.evidence_line LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := s.opts.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]decisionPayload, 0, limit)
+	for rows.Next() {
+		var d decisionPayload
+		if err := rows.Scan(&d.Title, &d.Source, &d.EvidenceFile, &d.EvidenceLine,
+			&d.Confidence, &d.Verification, &d.Decision, &d.Rationale, &d.SourceQuote); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return jsonResult(map[string]any{"decisions": out, "limit": limit})
+}
+
 func clampInt(v, lo, hi int) int {
 	if v < lo {
 		return lo

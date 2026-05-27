@@ -90,6 +90,13 @@ func (s *Server) registerTools() {
 		mcp.WithDescription("Recent pipeline phase executions for this repository, newest first. Each entry is one row of pipeline_jobs (phase, state, started_at, error if failed). Useful for diagnosing 'why is my data out of date?'"),
 		mcp.WithNumber("limit", mcp.DefaultNumber(20), mcp.Description("Maximum rows to return (1–200, default 20).")),
 	), s.wrap(s.toolPipelineLog))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_decisions",
+		mcp.WithDescription("Architectural decisions extracted from the codebase. Sources include inline-marker comments (DECISION:, WHY:, TRADEOFF:) plus future ADR / CHANGELOG / commit-archaeology extractors. Each record carries source provenance (file + line) so the agent can verify quotes."),
+		mcp.WithString("source", mcp.Description("Filter by source: inline_marker | adr | changelog | git_archaeology.")),
+		mcp.WithNumber("limit", mcp.DefaultNumber(50), mcp.Description("Maximum records to return (1–500, default 50).")),
+	), s.wrap(s.toolDecisions))
 }
 
 // wrap is the common handler wrapper: it logs each tool call (method,

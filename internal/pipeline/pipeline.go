@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
+	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
 	"github.com/repowise-dev/repowise-go/internal/analysis/health"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/external/cargo"
@@ -40,7 +41,13 @@ import (
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/python"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/rust"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/typescript"
+
+	// Side-effect import — registers the inline-marker decision extractor.
+	// Future ADR / CHANGELOG / commit extractors go here as they land.
+	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/inline"
+
 	"github.com/repowise-dev/repowise-go/internal/persistence/deadstore"
+	"github.com/repowise-dev/repowise-go/internal/persistence/decisionstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/gitstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
@@ -71,6 +78,7 @@ const (
 	PhaseDeadCode  = "deadcode"
 	PhaseHealth    = "health"
 	PhaseExternals = "externals"
+	PhaseDecisions = "decisions"
 	PhasePersist   = "persist"
 )
 
@@ -101,12 +109,13 @@ type Options struct {
 // Result is the bundle the caller can persist or inspect after Run.
 type Result struct {
 	Files        []models.FileInfo
-	Parsed       []models.ParsedFile
-	Graph        *graph.Graph
-	GitRecords   []git.PerFile
-	DeadCode     []deadcode.Finding
-	HealthResult health.Result
-	Externals    []external.Record
+	Parsed         []models.ParsedFile
+	Graph          *graph.Graph
+	GitRecords     []git.PerFile
+	DeadCode       []deadcode.Finding
+	HealthResult   health.Result
+	Externals      []external.Record
+	Decisions      []decisions.Record
 	TraversalStats models.TraversalStats
 
 	// Phases records the IDs of pipeline_jobs rows written this run, in
@@ -285,6 +294,19 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 		return res, err
 	}
 
+	// Phase: decisions. Runs every registered Extractor (inline_marker
+	// in Pass A; ADR / CHANGELOG / commits in Pass B+) and collects
+	// records de-duplicated by source + evidence location.
+	if err := runPhase(ctx, opts, store, PhaseDecisions, res, func() error {
+		res.Decisions = decisions.Engine{}.Run(ctx, decisions.Input{
+			RepoRoot:    opts.RepoPath,
+			ParsedFiles: res.Parsed,
+		})
+		return nil
+	}); err != nil {
+		return res, err
+	}
+
 	// Phase: persist (writes all stores in one tx-per-table). Reuses the
 	// existing per-store ReplaceAll APIs.
 	if err := runPhase(ctx, opts, store, PhasePersist, res, func() error {
@@ -306,6 +328,9 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 		}
 		if err := externalstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.Externals); err != nil {
 			return fmt.Errorf("externals: %w", err)
+		}
+		if err := decisionstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.Decisions); err != nil {
+			return fmt.Errorf("decisions: %w", err)
 		}
 		return nil
 	}); err != nil {

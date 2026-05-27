@@ -69,8 +69,8 @@ func TestRun_FullPipeline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if len(res.Phases) != 8 {
-		t.Errorf("Phases = %d, want 8", len(res.Phases))
+	if len(res.Phases) != 9 {
+		t.Errorf("Phases = %d, want 9", len(res.Phases))
 	}
 	for _, p := range res.Phases {
 		if p.State != pipelinestore.StateCompleted {
@@ -84,11 +84,11 @@ func TestRun_FullPipeline(t *testing.T) {
 		t.Errorf("expected one external (uuid) from go.mod, got 0")
 	}
 
-	// pipeline_jobs should have 8 rows for this run.
+	// pipeline_jobs should have one row per phase.
 	store := pipelinestore.New(conn)
 	counts, _ := store.CountByState(ctx, repoID)
-	if counts[pipelinestore.StateCompleted] != 8 {
-		t.Errorf("completed rows = %d, want 8 (%+v)", counts[pipelinestore.StateCompleted], counts)
+	if counts[pipelinestore.StateCompleted] != 9 {
+		t.Errorf("completed rows = %d, want 9 (%+v)", counts[pipelinestore.StateCompleted], counts)
 	}
 }
 
