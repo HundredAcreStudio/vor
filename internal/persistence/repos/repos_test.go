@@ -1,0 +1,133 @@
+package repos_test
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"path/filepath"
+	"testing"
+
+	"github.com/repowise-dev/repowise-go/internal/persistence/db"
+	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
+	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+)
+
+// freshDB opens a fresh SQLite database, applies migrations, and registers
+// a cleanup. Returns the *sql.DB the test should use.
+func freshDB(t *testing.T) *sql.DB {
+	t.Helper()
+	tmp := t.TempDir()
+	url := "sqlite:" + filepath.Join(tmp, "wiki.db")
+	ctx := context.Background()
+
+	conn, dialect, err := db.Open(ctx, db.OpenOptions{URL: url})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	if err := migrations.Up(ctx, conn, dialect); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return conn
+}
+
+func TestEnsureByLocalPath_CreatesNewRow(t *testing.T) {
+	conn := freshDB(t)
+	store := repos.New(conn)
+	ctx := context.Background()
+
+	r, err := store.EnsureByLocalPath(ctx, "/path/to/myrepo", "")
+	if err != nil {
+		t.Fatalf("EnsureByLocalPath: %v", err)
+	}
+	if r.ID == "" {
+		t.Errorf("ID should be set, got empty")
+	}
+	if r.Name != "myrepo" {
+		t.Errorf("Name = %q, want \"myrepo\" (inferred from path)", r.Name)
+	}
+	if r.LocalPath != "/path/to/myrepo" {
+		t.Errorf("LocalPath = %q", r.LocalPath)
+	}
+	if r.DefaultBranch != "main" {
+		t.Errorf("DefaultBranch = %q, want \"main\"", r.DefaultBranch)
+	}
+	if r.SettingsJSON != "{}" {
+		t.Errorf("SettingsJSON = %q, want \"{}\"", r.SettingsJSON)
+	}
+}
+
+func TestEnsureByLocalPath_ReturnsExisting(t *testing.T) {
+	conn := freshDB(t)
+	store := repos.New(conn)
+	ctx := context.Background()
+
+	r1, err := store.EnsureByLocalPath(ctx, "/path", "first")
+	if err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	r2, err := store.EnsureByLocalPath(ctx, "/path", "second-name-should-be-ignored")
+	if err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if r1.ID != r2.ID {
+		t.Errorf("IDs differ: %s vs %s — should be same row", r1.ID, r2.ID)
+	}
+	if r2.Name != "first" {
+		t.Errorf("Name = %q, want \"first\" (existing row should win)", r2.Name)
+	}
+}
+
+func TestUpdateHeadCommit(t *testing.T) {
+	conn := freshDB(t)
+	store := repos.New(conn)
+	ctx := context.Background()
+
+	r, _ := store.EnsureByLocalPath(ctx, "/r", "r")
+	if err := store.UpdateHeadCommit(ctx, r.ID, "abc123"); err != nil {
+		t.Fatalf("UpdateHeadCommit: %v", err)
+	}
+	got, _ := store.Get(ctx, r.ID)
+	if got.HeadCommit != "abc123" {
+		t.Errorf("HeadCommit = %q, want abc123", got.HeadCommit)
+	}
+}
+
+func TestList(t *testing.T) {
+	conn := freshDB(t)
+	store := repos.New(conn)
+	ctx := context.Background()
+
+	_, _ = store.EnsureByLocalPath(ctx, "/a", "alpha")
+	_, _ = store.EnsureByLocalPath(ctx, "/b", "beta")
+	_, _ = store.EnsureByLocalPath(ctx, "/c", "gamma")
+
+	all, err := store.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(all) != 3 {
+		t.Errorf("List returned %d rows, want 3", len(all))
+	}
+	// ORDER BY name → alpha, beta, gamma
+	if all[0].Name != "alpha" || all[1].Name != "beta" || all[2].Name != "gamma" {
+		t.Errorf("List order = %v %v %v, want alpha/beta/gamma",
+			all[0].Name, all[1].Name, all[2].Name)
+	}
+}
+
+func TestDelete(t *testing.T) {
+	conn := freshDB(t)
+	store := repos.New(conn)
+	ctx := context.Background()
+
+	r, _ := store.EnsureByLocalPath(ctx, "/r", "r")
+	if err := store.Delete(ctx, r.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	_, err := store.Get(ctx, r.ID)
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("Get after Delete: err = %v, want sql.ErrNoRows", err)
+	}
+}
