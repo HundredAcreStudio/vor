@@ -250,7 +250,14 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 	// edges into the analyzer so cross-cutting biomarkers (untested_hotspot,
 	// hidden_coupling) fire.
 	if err := runPhase(ctx, opts, store, PhaseHealth, res, func() error {
-		analyzer := &health.Analyzer{}
+		analyzer := &health.Analyzer{
+			// Duplication biomarker reads source bytes lazily under
+			// the repo root. Closing over opts.RepoPath keeps the
+			// analyzer agnostic of the pipeline's I/O strategy.
+			SourceLoader: func(rel string) ([]byte, error) {
+				return readFile(filepath.Join(opts.RepoPath, rel))
+			},
+		}
 		if len(res.GitRecords) > 0 {
 			hot := make(map[string]struct{}, len(res.GitRecords))
 			coChange := make(map[string][]string, len(res.GitRecords))

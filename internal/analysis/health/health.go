@@ -27,6 +27,8 @@ const (
 )
 
 // Biomarker names. Stored as biomarker_type on health_findings.
+// BiomarkerDuplication is declared in duplication.go (lives next to
+// its implementation).
 const (
 	BiomarkerHighComplexity  = "high_complexity"
 	BiomarkerLongFunction    = "long_function"
@@ -134,6 +136,18 @@ type Analyzer struct {
 	// to detect co-changing files that DON'T already have an explicit
 	// dependency.
 	GraphEdges map[string]map[string]bool
+
+	// SourceLoader returns the raw bytes of a file by repo-relative
+	// path. Required for the duplication biomarker; when nil, that
+	// biomarker is skipped silently (other biomarkers don't need
+	// source bytes). The pipeline wires this to os.ReadFile under
+	// the repo root.
+	SourceLoader SourceLoader
+
+	// DuplicationWindow overrides the default 6-line window used by
+	// the duplication biomarker. Zero -> default. Values <3 are
+	// clamped up to 3 — below that the signal/noise ratio is hostile.
+	DuplicationWindow int
 }
 
 // Result is the bundle returned by Analyze.
@@ -162,6 +176,10 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 	emittedPairs := map[string]bool{}
 	hiddenCouplingFindings := a.computeHiddenCoupling(files, emittedPairs)
 	findings = append(findings, hiddenCouplingFindings...)
+
+	// duplication: cross-file Rabin-Karp on normalized line windows.
+	// Skipped silently when SourceLoader is nil.
+	findings = append(findings, a.computeDuplication(files)...)
 
 	for _, pf := range files {
 		fm := FileMetric{
