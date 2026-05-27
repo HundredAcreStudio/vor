@@ -1,0 +1,3 @@
+build/
+*.log
+ignored_by_gitignore.py
