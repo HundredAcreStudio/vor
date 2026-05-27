@@ -51,7 +51,21 @@ type Context struct {
 	GoModulePath string
 
 	// RustCrateName is the [package].name from Cargo.toml when present.
+	// Used by the Rust resolver to match `<crate_name>::...` imports in
+	// addition to the literal `crate::...` prefix.
 	RustCrateName string
+
+	// JavaSourceRoots are directory prefixes treated as source roots
+	// when resolving Java's dotted imports
+	// ("com.example.foo.Bar" → src/main/java/com/example/foo/Bar.java).
+	// Defaults to ["src/main/java", "src", ""] when the caller leaves
+	// this empty.
+	JavaSourceRoots []string
+
+	// CppIncludeDirs are directories to try when resolving
+	// `#include "header.h"` after the importer's own directory.
+	// Defaults to ["include", ""] when empty.
+	CppIncludeDirs []string
 }
 
 var (
