@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/repowise-dev/repowise-go/internal/persistence/db"
 	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
@@ -161,6 +162,13 @@ func TestRun_ResumeAdoptsPreviousRunID(t *testing.T) {
 	j2, _ := store.Begin(ctx, repoID, "graph", "previous-run")
 	_ = store.Start(ctx, j2.ID)
 	_ = store.Fail(ctx, j2.ID, "graph failed")
+
+	// SQLite's CURRENT_TIMESTAMP has 1-second resolution. Sleep so
+	// the resume's new rows have a strictly-later updated_at than
+	// the seeded failed graph row — otherwise classifyRun's latest-
+	// per-phase tiebreaker becomes UUID-string ordering, which is
+	// nondeterministic.
+	time.Sleep(1100 * time.Millisecond)
 
 	// Resume should pick up that run_id.
 	res, err := pipeline.Run(ctx, pipeline.Options{
