@@ -220,3 +220,81 @@ func TestAnalyze_FileMaxNesting(t *testing.T) {
 		t.Errorf("MaxNesting = %d, want 5", res.FileMetrics[0].MaxNesting)
 	}
 }
+
+func TestAnalyze_GodClass(t *testing.T) {
+	parent := "BigClass"
+	syms := []models.Symbol{
+		{ID: "f.go::BigClass", Name: "BigClass", Kind: models.KindClass,
+			Language: "go", StartLine: 1, EndLine: 200, Visibility: models.VisibilityPublic},
+	}
+	// 17 methods → above default 15 threshold (medium), below 25 (high).
+	for i := 0; i < 17; i++ {
+		syms = append(syms, models.Symbol{
+			ID: "f.go::BigClass::m" + string(rune('a'+i)),
+			Name: "m" + string(rune('a'+i)),
+			Kind: models.KindMethod, ParentName: &parent,
+			Language: "go", StartLine: i * 5, EndLine: i*5 + 4,
+		})
+	}
+	res := (&health.Analyzer{}).Analyze([]models.ParsedFile{mkFile(syms)})
+	var found *health.Finding
+	for i := range res.Findings {
+		if res.Findings[i].BiomarkerType == health.BiomarkerGodClass {
+			found = &res.Findings[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("god_class finding missing: %+v", res.Findings)
+	}
+	if found.FunctionName != "BigClass" {
+		t.Errorf("FunctionName = %q, want BigClass", found.FunctionName)
+	}
+	if found.Severity != health.SeverityMedium {
+		t.Errorf("Severity = %s, want medium", found.Severity)
+	}
+}
+
+func TestAnalyze_GodClass_HighSeverity(t *testing.T) {
+	parent := "Huge"
+	syms := []models.Symbol{
+		{ID: "f.go::Huge", Name: "Huge", Kind: models.KindClass,
+			Language: "go", StartLine: 1, EndLine: 500, Visibility: models.VisibilityPublic},
+	}
+	// 30 methods → above 25 high threshold.
+	for i := 0; i < 30; i++ {
+		syms = append(syms, models.Symbol{
+			ID:         "f.go::Huge::m" + string(rune('a'+i)),
+			Name:       "m" + string(rune('a'+i)),
+			Kind:       models.KindMethod, ParentName: &parent,
+			Language:   "go",
+		})
+	}
+	res := (&health.Analyzer{}).Analyze([]models.ParsedFile{mkFile(syms)})
+	for _, f := range res.Findings {
+		if f.BiomarkerType == health.BiomarkerGodClass {
+			if f.Severity != health.SeverityHigh {
+				t.Errorf("Severity = %s, want high", f.Severity)
+			}
+		}
+	}
+}
+
+func TestAnalyze_GodClass_BelowThreshold(t *testing.T) {
+	parent := "Small"
+	syms := []models.Symbol{
+		{ID: "f.go::Small", Name: "Small", Kind: models.KindClass,
+			Language: "go", Visibility: models.VisibilityPublic},
+	}
+	for i := 0; i < 5; i++ {
+		syms = append(syms, models.Symbol{
+			ID: "f.go::Small::m", Name: "m" + string(rune('a'+i)),
+			Kind: models.KindMethod, ParentName: &parent, Language: "go",
+		})
+	}
+	res := (&health.Analyzer{}).Analyze([]models.ParsedFile{mkFile(syms)})
+	for _, f := range res.Findings {
+		if f.BiomarkerType == health.BiomarkerGodClass {
+			t.Errorf("Small class (5 methods) shouldn't be flagged: %+v", f)
+		}
+	}
+}

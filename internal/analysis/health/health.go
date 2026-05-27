@@ -31,6 +31,7 @@ const (
 	BiomarkerHighComplexity = "high_complexity"
 	BiomarkerLongFunction   = "long_function"
 	BiomarkerDeepNesting    = "deep_nesting"
+	BiomarkerGodClass       = "god_class"
 )
 
 // Finding is one biomarker hit. Persisted into health_findings.
@@ -77,6 +78,11 @@ type Thresholds struct {
 	NestingWarning int
 	// NestingHigh: nesting depth ≥ this is flagged high.
 	NestingHigh int
+
+	// GodClassMethods: classes with ≥ this many methods are flagged medium.
+	GodClassMethods int
+	// GodClassMethodsHigh: classes with ≥ this many methods are flagged high.
+	GodClassMethodsHigh int
 }
 
 // DefaultThresholds returns the recommended values.
@@ -89,6 +95,8 @@ func DefaultThresholds() Thresholds {
 		VeryLongFunctionLines: 120,
 		NestingWarning:        4,
 		NestingHigh:           6,
+		GodClassMethods:       15,
+		GodClassMethodsHigh:   25,
 	}
 }
 
@@ -118,6 +126,15 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 		fm := FileMetric{
 			FilePath: pf.FileInfo.Path,
 			Score:    10.0,
+		}
+
+		// Count methods per parent class for the god_class biomarker.
+		// One pre-pass keeps the per-symbol loop O(n).
+		methodsByParent := map[string]int{}
+		for _, sym := range pf.Symbols {
+			if sym.ParentName != nil && (sym.Kind == models.KindMethod || sym.Kind == models.KindFunction) {
+				methodsByParent[*sym.ParentName]++
+			}
 		}
 
 		// Per-symbol biomarkers + file metric accumulation.
@@ -179,6 +196,27 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 						"nesting": sym.NestingDepth,
 					},
 				})
+			}
+
+			// god_class fires once per class-like symbol whose method count
+			// exceeds the threshold.
+			if classKind(sym.Kind) {
+				methodCount := methodsByParent[sym.Name]
+				if hit, sev := godClassHit(methodCount, thresholds); hit {
+					findings = append(findings, Finding{
+						FilePath:      pf.FileInfo.Path,
+						BiomarkerType: BiomarkerGodClass,
+						Severity:      sev,
+						FunctionName:  sym.Name,
+						LineStart:     sym.StartLine,
+						LineEnd:       sym.EndLine,
+						HealthImpact:  godClassImpact(methodCount, thresholds),
+						Reason: fmt.Sprintf("%s has %d methods", sym.Name, methodCount),
+						Details: map[string]any{
+							"methodCount": methodCount,
+						},
+					})
+				}
 			}
 		}
 
@@ -260,6 +298,45 @@ func deepNestingImpact(depth int, t Thresholds) float64 {
 		return 1
 	}
 	progress := float64(depth-t.NestingWarning) / span
+	return 1 + progress
+}
+
+// classKind returns true for symbol kinds that can host methods. Used by
+// the god_class biomarker to decide where to look.
+func classKind(k models.SymbolKind) bool {
+	switch k {
+	case models.KindClass, models.KindStruct, models.KindInterface, models.KindTrait, models.KindImpl:
+		return true
+	}
+	return false
+}
+
+func godClassHit(methodCount int, t Thresholds) (bool, Severity) {
+	if t.GodClassMethods <= 0 {
+		return false, ""
+	}
+	switch {
+	case t.GodClassMethodsHigh > 0 && methodCount >= t.GodClassMethodsHigh:
+		return true, SeverityHigh
+	case methodCount >= t.GodClassMethods:
+		return true, SeverityMedium
+	default:
+		return false, ""
+	}
+}
+
+func godClassImpact(methodCount int, t Thresholds) float64 {
+	if methodCount < t.GodClassMethods {
+		return 0
+	}
+	if methodCount >= t.GodClassMethodsHigh {
+		return 2
+	}
+	span := float64(t.GodClassMethodsHigh - t.GodClassMethods)
+	if span <= 0 {
+		return 1
+	}
+	progress := float64(methodCount-t.GodClassMethods) / span
 	return 1 + progress
 }
 
