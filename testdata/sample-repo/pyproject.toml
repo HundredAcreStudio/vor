@@ -1,0 +1,10 @@
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = [
+    "requests>=2.31",
+    "httpx>=0.27,<1"
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]

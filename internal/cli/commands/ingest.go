@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/parser"
@@ -22,7 +23,15 @@ import (
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/python"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/typescript"
 
+	// Side-effect imports: each manifest extractor registers itself.
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/cargo"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/npm"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/nuget"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/pypi"
+
 	"github.com/repowise-dev/repowise-go/internal/ingestion/traverser"
+	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
 	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
@@ -38,13 +47,14 @@ import (
 //   - --persist: --graph plus write the graph to the configured DB
 func newIngestCmd() *cobra.Command {
 	var (
-		listFiles bool
-		maxKB     int
-		extraExcl []string
-		showStats bool
-		parseAST  bool
-		buildGraph bool
-		persist   bool
+		listFiles     bool
+		maxKB         int
+		extraExcl     []string
+		showStats     bool
+		parseAST      bool
+		buildGraph    bool
+		scanExternals bool
+		persist       bool
 	)
 	cmd := &cobra.Command{
 		Use:   "ingest [PATH]",
@@ -75,9 +85,10 @@ func newIngestCmd() *cobra.Command {
 				return fmt.Errorf("walk: %w", err)
 			}
 
-			// --persist implies --graph implies --parse.
+			// --persist implies --graph + --externals; --graph implies --parse.
 			if persist {
 				buildGraph = true
+				scanExternals = true
 			}
 			if buildGraph {
 				parseAST = true
@@ -123,21 +134,36 @@ func newIngestCmd() *cobra.Command {
 					parseSummary.Parsed, parseSummary.Skipped, parseSummary.Errored)
 			}
 
+			var (
+				g          *graph.Graph
+				extRecords []external.Record
+			)
 			if buildGraph {
 				b := graph.NewBuilder(nil, graph.Options{})
 				for _, p := range parsedFiles {
 					b.AddFile(p)
 				}
-				g := b.Build()
+				g = b.Build()
 				g.ComputeMetrics()
 				printGraphSummary(out, g)
+			}
 
-				if persist {
-					if err := persistGraph(ctx, root, absRoot, g); err != nil {
-						return fmt.Errorf("persist: %w", err)
-					}
-					fmt.Fprintf(out, "\npersisted to %s\n", databaseTarget(root))
+			if scanExternals || persist {
+				records, err := external.ScanRoot(ctx, absRoot)
+				if err != nil {
+					return fmt.Errorf("scan externals: %w", err)
 				}
+				extRecords = records
+				if scanExternals {
+					printExternalsSummary(out, records)
+				}
+			}
+
+			if persist {
+				if err := persistAll(ctx, root, absRoot, g, extRecords); err != nil {
+					return fmt.Errorf("persist: %w", err)
+				}
+				fmt.Fprintf(out, "\npersisted to %s\n", databaseTarget(root))
 			}
 			return nil
 		},
@@ -146,7 +172,8 @@ func newIngestCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&showStats, "stats", false, "also print summary stats when --list is set")
 	cmd.Flags().BoolVar(&parseAST, "parse", false, "parse each file's AST and report symbol/import/call counts")
 	cmd.Flags().BoolVar(&buildGraph, "graph", false, "build the dependency graph + metrics (implies --parse)")
-	cmd.Flags().BoolVar(&persist, "persist", false, "persist the graph to the database (implies --graph)")
+	cmd.Flags().BoolVar(&scanExternals, "externals", false, "scan manifest files for third-party dependencies")
+	cmd.Flags().BoolVar(&persist, "persist", false, "persist graph + externals to the database (implies --graph --externals)")
 	cmd.Flags().IntVar(&maxKB, "max-kb", 0, "max file size in KB (0 = default 500)")
 	cmd.Flags().StringArrayVar(&extraExcl, "exclude", nil, "extra gitignore-syntax patterns to skip (repeatable)")
 	return cmd
@@ -245,10 +272,37 @@ func printGraphSummary(w io.Writer, g *graph.Graph) {
 	}
 }
 
-// persistGraph opens the configured DB, runs pending migrations (so the
-// caller doesn't have to `db migrate` first), ensures the repository row,
-// and writes the graph snapshot.
-func persistGraph(ctx context.Context, repoArg, absRoot string, g *graph.Graph) error {
+// printExternalsSummary writes a per-ecosystem count plus a sample of
+// resolved deps. Mirrors the graph summary's shape.
+func printExternalsSummary(w io.Writer, records []external.Record) {
+	fmt.Fprintf(w, "\nExternal systems: %d records\n", len(records))
+	if len(records) == 0 {
+		return
+	}
+	byEco := map[string]int{}
+	devByEco := map[string]int{}
+	for _, r := range records {
+		byEco[r.Ecosystem]++
+		if r.IsDevDep {
+			devByEco[r.Ecosystem]++
+		}
+	}
+	ecosystems := make([]string, 0, len(byEco))
+	for e := range byEco {
+		ecosystems = append(ecosystems, e)
+	}
+	sort.Strings(ecosystems)
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	defer tw.Flush()
+	for _, e := range ecosystems {
+		fmt.Fprintf(tw, "  %s\ttotal=%d\tdev=%d\n", e, byEco[e], devByEco[e])
+	}
+}
+
+// persistAll opens the configured DB, runs pending migrations, ensures the
+// repository row, and writes both the graph snapshot and external systems
+// (whichever inputs are non-nil).
+func persistAll(ctx context.Context, repoArg, absRoot string, g *graph.Graph, exts []external.Record) error {
 	conn, dialect, err := openDB(ctx, repoArg)
 	if err != nil {
 		return err
@@ -263,7 +317,16 @@ func persistGraph(ctx context.Context, repoArg, absRoot string, g *graph.Graph) 
 	if err != nil {
 		return fmt.Errorf("ensure repository: %w", err)
 	}
-	return graphstore.New(conn).ReplaceGraph(ctx, repoRow.ID, g)
+
+	if g != nil {
+		if err := graphstore.New(conn).ReplaceGraph(ctx, repoRow.ID, g); err != nil {
+			return fmt.Errorf("graph: %w", err)
+		}
+	}
+	if err := externalstore.New(conn).ReplaceAll(ctx, repoRow.ID, exts); err != nil {
+		return fmt.Errorf("externals: %w", err)
+	}
+	return nil
 }
 
 func databaseTarget(repoArg string) string {
