@@ -17,11 +17,14 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/providers/middleware"
 	"github.com/repowise-dev/repowise-go/internal/providers/ratelimit"
 
-	// Side-effect imports — register every provider so --provider can
-	// pick any of them at runtime. Mock first for predictability when
-	// no API key is set.
+	// Side-effect imports — register every provider + embedder so
+	// --provider / config.embedder can pick any of them at runtime.
 	_ "github.com/repowise-dev/repowise-go/internal/providers/anthropic"
+	_ "github.com/repowise-dev/repowise-go/internal/providers/google"
+	_ "github.com/repowise-dev/repowise-go/internal/providers/litellm"
 	_ "github.com/repowise-dev/repowise-go/internal/providers/mock"
+	_ "github.com/repowise-dev/repowise-go/internal/providers/ollama"
+	_ "github.com/repowise-dev/repowise-go/internal/providers/openai"
 )
 
 // newGenerateCmd produces wiki pages from the persisted ingest state.
@@ -220,10 +223,61 @@ func buildProvider(name, model string, cfg config.Config) (providers.Provider, e
 		if model != "" {
 			opts["default_model"] = model
 		}
+	case "openai":
+		key := firstSet(cfg.ProviderKeys.OpenAI, os.Getenv("OPENAI_API_KEY"))
+		if key == "" {
+			return nil, fmt.Errorf("OPENAI_API_KEY is required for the openai provider")
+		}
+		opts["api_key"] = key
+		if b := os.Getenv("REPOWISE_OPENAI_BASE_URL"); b != "" {
+			opts["base_url"] = b
+		}
+		if model != "" {
+			opts["default_model"] = model
+		}
+	case "google":
+		key := firstSet(cfg.ProviderKeys.Gemini, os.Getenv("GEMINI_API_KEY"), os.Getenv("GOOGLE_API_KEY"))
+		if key == "" {
+			return nil, fmt.Errorf("GEMINI_API_KEY or GOOGLE_API_KEY is required for the google provider")
+		}
+		opts["api_key"] = key
+		if model != "" {
+			opts["default_model"] = model
+		}
+	case "ollama":
+		// Local server — no key. Base URL overridable for remote hosts.
+		if b := os.Getenv("REPOWISE_OLLAMA_BASE_URL"); b != "" {
+			opts["base_url"] = b
+		}
+		if model != "" {
+			opts["default_model"] = model
+		}
+	case "litellm":
+		base := os.Getenv("REPOWISE_LITELLM_BASE_URL")
+		if base == "" {
+			return nil, fmt.Errorf("REPOWISE_LITELLM_BASE_URL is required for the litellm provider")
+		}
+		opts["base_url"] = base
+		if key := firstSet(cfg.ProviderKeys.OpenRouter, os.Getenv("LITELLM_API_KEY")); key != "" {
+			opts["api_key"] = key
+		}
+		if model != "" {
+			opts["default_model"] = model
+		}
 	case "mock":
 		if model != "" {
 			opts["model"] = model
 		}
 	}
 	return providers.NewProvider(name, opts)
+}
+
+// firstSet returns the first non-empty string, or "".
+func firstSet(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

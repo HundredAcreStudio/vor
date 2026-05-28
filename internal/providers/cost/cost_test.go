@@ -15,6 +15,31 @@ func TestCatalog_PrefixMatch(t *testing.T) {
 	}
 }
 
+// Real model ids use dotted version segments (gemini-2.0-flash,
+// gpt-4o-mini); the catalog keys must prefix-match those exactly.
+func TestCatalog_RealModelIDsResolve(t *testing.T) {
+	cases := []struct{ provider, model string }{
+		{"openai", "gpt-4o-2024-08-06"},
+		{"openai", "gpt-4o-mini"},
+		{"openai", "gpt-4.1-mini"},
+		{"google", "gemini-2.0-flash"},
+		{"google", "gemini-1.5-pro-latest"},
+		{"google", "gemini-1.5-flash"},
+	}
+	for _, c := range cases {
+		p := cost.Catalog(c.provider, c.model)
+		if p.InputPerMillion == 0 && p.OutputPerMillion == 0 {
+			t.Errorf("%s/%s should resolve to non-zero pricing; got %+v", c.provider, c.model, p)
+		}
+	}
+	// gpt-4o-mini must win the longest-prefix match over gpt-4o.
+	mini := cost.Catalog("openai", "gpt-4o-mini")
+	full := cost.Catalog("openai", "gpt-4o")
+	if mini == full {
+		t.Errorf("gpt-4o-mini should price differently from gpt-4o (longest-prefix): %+v", mini)
+	}
+}
+
 func TestCatalog_UnknownReturnsZero(t *testing.T) {
 	p := cost.Catalog("nope", "anything")
 	if p.InputPerMillion != 0 || p.OutputPerMillion != 0 {

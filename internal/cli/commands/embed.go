@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -163,7 +164,8 @@ func hashText(s string) string {
 }
 
 // buildEmbedder constructs the configured embedder. Falls back to mock
-// when unset so `embed` works zero-config.
+// when unset so `embed` works zero-config. Real embedders need the same
+// credentials/base-URL plumbing as their generation counterparts.
 func buildEmbedder(cfg config.Config) (providers.Embedder, error) {
 	name := cfg.Embedder
 	if name == "" {
@@ -175,6 +177,23 @@ func buildEmbedder(cfg config.Config) (providers.Embedder, error) {
 	}
 	if cfg.EmbeddingDims > 0 {
 		opts["dimensions"] = cfg.EmbeddingDims
+	}
+	switch name {
+	case "openai":
+		if key := firstSet(cfg.ProviderKeys.OpenAI, os.Getenv("OPENAI_API_KEY")); key != "" {
+			opts["api_key"] = key
+		}
+		if b := os.Getenv("REPOWISE_OPENAI_BASE_URL"); b != "" {
+			opts["base_url"] = b
+		}
+	case "google":
+		if key := firstSet(cfg.ProviderKeys.Gemini, os.Getenv("GEMINI_API_KEY"), os.Getenv("GOOGLE_API_KEY")); key != "" {
+			opts["api_key"] = key
+		}
+	case "ollama":
+		if b := os.Getenv("REPOWISE_OLLAMA_BASE_URL"); b != "" {
+			opts["base_url"] = b
+		}
 	}
 	return providers.NewEmbedder(name, opts)
 }

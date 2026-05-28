@@ -99,8 +99,8 @@ For a feature-by-feature comparison against the Python implementation
 | Git intelligence — hotspots, ownership, co-change, bus factor | ✅ |
 | Dead code detection | ✅ |
 | Code health biomarkers (8: complexity, long_function, deep_nesting, god_class, untested_hotspot, brain_method, hidden_coupling, duplication) | ✅ |
-| LLM providers — Mock + **Anthropic** + cost/ratelimit/retry middleware | ✅ |
-| LLM providers — OpenAI / Gemini | ⏳ |
+| LLM providers — Mock + **Anthropic / OpenAI / Gemini / Ollama / LiteLLM** + cost/ratelimit/retry middleware | ✅ |
+| Embedders — Mock + OpenAI / Gemini / Ollama (real semantic search) | ✅ |
 | Documentation generation — file / directory / symbol pages | ✅ |
 | Documentation generation — architecture page | ⏳ |
 | Decision intelligence — inline markers, ADR, CHANGELOG, commit archaeology | ✅ |
@@ -141,7 +141,7 @@ internal/
     decisions/           # inline / ADR / changelog / commit extractors
     health/              # 8 code-health biomarkers
   generation/            # wiki page generation (context → templates → pages → wikistore)
-  providers/             # LLM interface + Mock + Anthropic + cost/ratelimit/retry middleware
+  providers/             # LLM interface + Mock/Anthropic/OpenAI/Gemini/Ollama/LiteLLM + cost/ratelimit/retry middleware
   persistence/           # SQLite/Postgres schema, repository CRUD, per-domain stores
   pipeline/              # phase orchestrator (run_id grouping + resume)
   server/

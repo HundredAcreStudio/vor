@@ -131,12 +131,15 @@ consolidate what Python splits.
 |---|---|
 | Mock (deterministic) | ✅ |
 | Anthropic (Messages API, streaming, prompt cache) | ✅ |
-| OpenAI | ⏳ |
-| Gemini | ⏳ |
-| Ollama / LiteLLM passthrough | ⏳ |
+| OpenAI (chat completions + streaming + embeddings) | ✅ |
+| Gemini (generateContent + streaming + embeddings) | ✅ |
+| Ollama (local /api/chat + /api/embed, NDJSON stream) | ✅ |
+| LiteLLM (OpenAI-compatible proxy passthrough) | ✅ |
 
-Cost catalog, rate limiting, retry, and the middleware that composes
-them are all done and provider-agnostic.
+Every provider speaks its vendor API directly over net/http (no SDK
+dependency). Embedders ship for OpenAI, Gemini, Ollama, and Mock. Cost
+catalog, rate limiting, retry, and the composing middleware are all done
+and provider-agnostic.
 
 ---
 

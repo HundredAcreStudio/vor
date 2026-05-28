@@ -21,7 +21,7 @@ working binary and tests, same as the original plan.
 | Persistence | SQLite + Postgres, goose, 29 tables, FTS, vector store | pgvector/LanceDB native index |
 | Ingestion | 8 parsers, graph + metrics, externals (5 ecosystems) | 6 more languages; API-contract extraction |
 | Git intelligence | hotspots, ownership, co-change, bus factor | — |
-| Providers | Mock + Anthropic, cost/retry/ratelimit middleware | OpenAI, Gemini, Ollama, LiteLLM; real embedders |
+| Providers | Mock + Anthropic + OpenAI/Gemini/Ollama/LiteLLM, cost/retry/ratelimit middleware | — (Phase 12 ✅) |
 | Generation | pages (file/dir/symbol), context (RAG), templates, resume | architecture page kind |
 | Analysis | 8 biomarkers, dead code, 4-source decisions | 9 more biomarkers; coverage ingest; Louvain/Leiden; security scan |
 | Pipeline | init/update, phase timing, checkpoint/resume | true incremental (update == full re-index today) |
@@ -32,24 +32,32 @@ working binary and tests, same as the original plan.
 
 ---
 
-## Phase 12 — Production LLM providers & embedders
+## ✅ Phase 12 — Production LLM providers & embedders (done)
 
-Today only Mock and Anthropic providers are real, and the only embedder
-is the deterministic Mock. Generation and semantic search both work
-end-to-end but aren't useful in production without real models.
+All providers speak their vendor API directly over net/http (no SDK
+dependency), matching the existing Anthropic implementation.
 
-- OpenAI provider (`Generate`, `GenerateStream`, batch) via `openai-go`.
-- Google Gemini provider via `google.golang.org/genai`.
-- Ollama provider (local models) via its HTTP API.
-- LiteLLM as an OpenAI-compatible HTTP proxy target.
-- Real embedders: OpenAI `text-embedding-3-*` and Gemini, registered
-  under their names so `config.embedder` selects them.
-- Cost tracking persisted to `llm_costs` for every real provider.
+- ✅ OpenAI provider — `/v1/chat/completions` Generate + SSE
+  GenerateStream; exported `NewCompatible` for reuse.
+- ✅ Google Gemini provider — `:generateContent` + `:streamGenerateContent`
+  (SSE), `x-goog-api-key` auth, `model` role mapping.
+- ✅ Ollama provider — local `/api/chat` (NDJSON stream), no key, free.
+- ✅ LiteLLM — thin OpenAI-compatible passthrough (own name for cost
+  attribution, `base_url` required).
+- ✅ Real embedders: OpenAI `/v1/embeddings` (text-embedding-3-* with
+  Matryoshka `dimensions`), Gemini `:batchEmbedContents`, Ollama
+  `/api/embed` — all registered under their provider name.
+- ✅ Cost catalog updated (incl. fixed dotted Gemini ids) so generation
+  through any provider records to `llm_costs` via the existing middleware.
+- ✅ CLI wiring: `--provider openai|google|ollama|litellm` and
+  `config.embedder` resolve keys/base-URLs from env
+  (`OPENAI_API_KEY`, `GEMINI_API_KEY`/`GOOGLE_API_KEY`,
+  `REPOWISE_OLLAMA_BASE_URL`, `REPOWISE_LITELLM_BASE_URL`).
 
-**Acceptance:** `repowise generate --provider openai|google|ollama`
-round-trips a real page; `repowise embed` with a real embedder produces
-non-mock vectors; costs land in `llm_costs`; semantic search ranks
-meaningfully on a real corpus.
+All four providers + embedders are covered by httptest-based unit tests.
+The remaining caveat is empirical: meaningful semantic-search ranking
+needs a real embedder key at runtime (the mock stays the zero-config
+default).
 
 ## Phase 13 — Language coverage (→ 14 languages)
 

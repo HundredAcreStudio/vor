@@ -68,18 +68,25 @@ var table = map[string]map[string]Pricing{
 		"claude-3-opus":     {InputPerMillion: 15, OutputPerMillion: 75, CachedReadPerMillion: 1.5},
 	},
 	"openai": {
-		"gpt-4o":      {InputPerMillion: 2.5, OutputPerMillion: 10},
-		"gpt-4o-mini": {InputPerMillion: 0.15, OutputPerMillion: 0.6},
-		"gpt-4-turbo": {InputPerMillion: 10, OutputPerMillion: 30},
-		"gpt-4":       {InputPerMillion: 30, OutputPerMillion: 60},
-		"gpt-3.5":     {InputPerMillion: 0.5, OutputPerMillion: 1.5},
-		"o1":          {InputPerMillion: 15, OutputPerMillion: 60},
-		"o3":          {InputPerMillion: 20, OutputPerMillion: 80},
+		"gpt-4o":       {InputPerMillion: 2.5, OutputPerMillion: 10, CachedReadPerMillion: 1.25},
+		"gpt-4o-mini":  {InputPerMillion: 0.15, OutputPerMillion: 0.6, CachedReadPerMillion: 0.075},
+		"gpt-4.1":      {InputPerMillion: 2, OutputPerMillion: 8, CachedReadPerMillion: 0.5},
+		"gpt-4.1-mini": {InputPerMillion: 0.4, OutputPerMillion: 1.6, CachedReadPerMillion: 0.1},
+		"gpt-4-turbo":  {InputPerMillion: 10, OutputPerMillion: 30},
+		"gpt-4":        {InputPerMillion: 30, OutputPerMillion: 60},
+		"gpt-3.5":      {InputPerMillion: 0.5, OutputPerMillion: 1.5},
+		"o1":           {InputPerMillion: 15, OutputPerMillion: 60},
+		"o3-mini":      {InputPerMillion: 1.1, OutputPerMillion: 4.4},
+		"o3":           {InputPerMillion: 2, OutputPerMillion: 8},
 	},
 	"google": {
-		"gemini-2-0":     {InputPerMillion: 0.1, OutputPerMillion: 0.4},
-		"gemini-1-5-pro": {InputPerMillion: 1.25, OutputPerMillion: 5},
-		"gemini-1-5":     {InputPerMillion: 0.075, OutputPerMillion: 0.3},
+		// Keys are prefixes of the lowercased model name; the dotted
+		// version segments must match real model ids (e.g. gemini-2.0-flash).
+		"gemini-2.5-pro":   {InputPerMillion: 1.25, OutputPerMillion: 10},
+		"gemini-2.0-flash": {InputPerMillion: 0.1, OutputPerMillion: 0.4},
+		"gemini-1.5-pro":   {InputPerMillion: 1.25, OutputPerMillion: 5},
+		"gemini-1.5-flash": {InputPerMillion: 0.075, OutputPerMillion: 0.3},
+		"gemini-1.5":       {InputPerMillion: 0.075, OutputPerMillion: 0.3},
 	},
 	"mock": {
 		// Mock provider is free.
