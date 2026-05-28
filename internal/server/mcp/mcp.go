@@ -69,6 +69,12 @@ type Options struct {
 	// provider pick its default.
 	Model string
 
+	// Embedder powers semantic search in repowise_search. Optional —
+	// when nil (or when no embeddings exist for the repo) the tool
+	// falls back to the LIKE path over graph_nodes. Must match the
+	// embedder used by `repowise embed` for results to be meaningful.
+	Embedder providers.Embedder
+
 	// Logger receives structured tool-call logs. Defaults to slog.Default().
 	Logger *slog.Logger
 }

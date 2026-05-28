@@ -16,7 +16,9 @@ A terminal tool for **indexing and inspecting** repositories. You run it interac
 repowise init <path>              # full index: traverse → parse → git → graph → deadcode → health → externals → decisions → persist
 repowise update <path>            # re-index (incremental intent); auto-regenerates CLAUDE.md
 repowise generate --provider anthropic   # LLM wiki pages (file / directory / symbol overviews)
+repowise embed <path>             # index wiki pages into the vector store for semantic search
 repowise status | health | hotspots | dead-code | decisions | externals | costs | pages   # read views
+repowise search <query>           # substring search; add --semantic to rank pages by embedding
 repowise watch <path>             # debounced auto-update on file change
 repowise hook install             # post-commit auto-sync
 repowise workspace add / register # multi-repo registries
@@ -119,6 +121,8 @@ export REPOWISE_DB_URL=sqlite:$PWD/.repowise/wiki.db
 ./bin/repowise status                       # one-screen summary (+ daemon state if running)
 ./bin/repowise health --refactoring-targets # ranked by impact / effort
 ./bin/repowise generate --provider mock     # wiki pages (use --provider anthropic with a key)
+./bin/repowise embed .                       # index pages for semantic search
+./bin/repowise search --semantic "auth flow" # rank pages by embedding similarity
 ./bin/repowise serve --addr :7337           # HTTP API + MCP daemon
 ```
 

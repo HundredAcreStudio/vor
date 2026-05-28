@@ -100,7 +100,8 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 				// synthesise rather than returning raw context. Degrades
 				// to nil (raw context) when no key is configured.
 				provider, model := buildOptionalProvider(cfg)
-				mcpOpts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model}
+				embedder, _ := buildEmbedder(cfg)
+				mcpOpts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model, Embedder: embedder}
 				if provider != nil {
 					logger.Info("serve: LLM synthesis enabled", "provider", cfg.Provider)
 				}

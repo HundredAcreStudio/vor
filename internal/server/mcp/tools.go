@@ -158,10 +158,11 @@ func (s *Server) registerTools() {
 
 	s.srv.AddTool(mcp.NewTool(
 		"repowise_search",
-		mcp.WithDescription("Search graph nodes (files + symbols) by name, qualified name, or node_id. Substring match, ranked by PageRank. Use when you don't already know the canonical node_id."),
+		mcp.WithDescription("Search the codebase. Default is a substring match over graph nodes (files + symbols) ranked by PageRank. Set semantic=true to rank wiki pages by embedding similarity instead (requires `repowise embed` to have run; falls back to substring match otherwise)."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
-		mcp.WithString("query", mcp.Required(), mcp.Description("Substring to match against name / qualified_name / node_id.")),
-		mcp.WithString("node_type", mcp.Description("Filter to 'file' or 'symbol'.")),
+		mcp.WithString("query", mcp.Required(), mcp.Description("Substring to match against name / qualified_name / node_id, or a natural-language query when semantic=true.")),
+		mcp.WithString("node_type", mcp.Description("Filter to 'file' or 'symbol' (lexical mode only).")),
+		mcp.WithBoolean("semantic", mcp.DefaultBool(false), mcp.Description("Rank wiki pages by embedding similarity instead of substring matching node names.")),
 		mcp.WithNumber("limit", mcp.DefaultNumber(25), mcp.Description("Maximum matches to return (1–200, default 25).")),
 	), s.wrap(s.toolSearch))
 

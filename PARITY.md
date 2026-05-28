@@ -58,7 +58,7 @@ yet the LLM-synthesis layer.
 | `get_callers_callees` | `repowise_callers` + `repowise_dependents` | ✅ (split in two) |
 | `get_dead_code` | `repowise_dead_code` | ✅ |
 | `get_health` | `repowise_health` + `repowise_health_findings` | ✅ |
-| `search_codebase` | `repowise_search` | 🟡 LIKE vs embedding/BM25 |
+| `search_codebase` | `repowise_search` | ✅ substring (default) + `semantic=true` embedding ranking |
 | `get_graph_metrics` | `repowise_status` (partial) | 🟡 |
 | `get_community` | `repowise_get_community` | ✅ |
 | `get_dependency_path` | `repowise_get_dependency_path` | ✅ |
@@ -78,9 +78,14 @@ the graph-traversal tools (`get_community`, `get_dependency_path`,
 Synthesis tools degrade gracefully without a provider; graph tools
 are deterministic and need none.
 
-**Remaining MCP gaps:** embedding-backed semantic `search_codebase`
-(Go uses LIKE/FTS today — needs a vector index) and the richer
-`get_risk` PR-mode `directive` block. Everything else has parity.
+Semantic `search_codebase` is now backed by a vector index: `repowise
+embed` embeds wiki pages with the configured embedder (default `mock`;
+real embedders register by name) into the `embeddings` table, and
+`repowise_search` / `repowise search --semantic` rank pages by cosine
+similarity, falling back to the substring path when no embeddings exist.
+
+**Remaining MCP gaps:** the richer `get_risk` PR-mode `directive`
+block. Everything else has parity.
 
 ---
 

@@ -63,8 +63,9 @@ Workspace mode — one daemon serving every member repo:
 			// returning raw retrieved material — the server still starts.
 			cfg, _ := config.Load(repoPath)
 			provider, model := buildOptionalProvider(cfg)
+			embedder, _ := buildEmbedder(cfg)
 
-			opts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model}
+			opts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model, Embedder: embedder}
 
 			if workspaceMode {
 				wsRoot := workspaceRootIn

@@ -10,6 +10,7 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
+	"github.com/repowise-dev/repowise-go/internal/persistence/vector"
 	"github.com/repowise-dev/repowise-go/internal/workspace"
 )
 
@@ -517,6 +518,17 @@ func (s *Server) toolSearch(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	limit := clampInt(req.GetInt("limit", 25), 1, 200)
 	nodeType := req.GetString("node_type", "")
 
+	// Semantic mode: embed the query and rank wiki pages by cosine
+	// similarity. Falls through to the lexical path below when no
+	// embedder is configured or the repo has no embeddings yet.
+	if req.GetBool("semantic", false) {
+		if res, ok, err := s.semanticSearch(ctx, rid, q, limit); err != nil {
+			return nil, err
+		} else if ok {
+			return res, nil
+		}
+	}
+
 	pattern := "%" + q + "%"
 	sqlQ := `SELECT node_id, node_type, COALESCE(kind,''), COALESCE(name,''),
 	                COALESCE(file_path,''), COALESCE(start_line,0), pagerank
@@ -550,6 +562,49 @@ func (s *Server) toolSearch(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 		"matches": out,
 		"limit":   limit,
 	})
+}
+
+type semanticMatch struct {
+	TargetPath string  `json:"targetPath"`
+	Title      string  `json:"title,omitempty"`
+	Score      float64 `json:"score"`
+}
+
+// semanticSearch embeds the query and ranks wiki pages by cosine
+// similarity via the vector store. Returns ok=false (not an error)
+// when semantic search isn't possible — no embedder configured, or no
+// embeddings stored for the repo — so the caller falls back to lexical.
+func (s *Server) semanticSearch(ctx context.Context, rid, q string, limit int) (*mcp.CallToolResult, bool, error) {
+	if s.opts.Embedder == nil {
+		return nil, false, nil
+	}
+	vstore := vector.New(s.opts.DB)
+	if n, err := vstore.Count(ctx, rid); err != nil || n == 0 {
+		return nil, false, nil
+	}
+	vecs, err := s.opts.Embedder.Embed(ctx, []string{q})
+	if err != nil || len(vecs) != 1 {
+		return nil, false, nil
+	}
+	matches, err := vstore.Search(ctx, rid, vecs[0], vector.KindPage, limit)
+	if err != nil {
+		return nil, false, err
+	}
+	out := make([]semanticMatch, 0, len(matches))
+	for _, m := range matches {
+		sm := semanticMatch{TargetPath: m.TargetPath, Score: m.Score}
+		_ = s.opts.DB.QueryRowContext(ctx,
+			`SELECT COALESCE(title,'') FROM wiki_pages WHERE repository_id = ? AND target_path = ?`,
+			rid, m.TargetPath).Scan(&sm.Title)
+		out = append(out, sm)
+	}
+	res, err := jsonResult(map[string]any{
+		"query":    q,
+		"semantic": true,
+		"matches":  out,
+		"limit":    limit,
+	})
+	return res, true, err
 }
 
 // ---- tool: repowise_pipeline_log ------------------------------------------
