@@ -16,6 +16,7 @@ import (
 
 	"github.com/HundredAcreStudio/vor/internal/server/http/httpx"
 	"github.com/HundredAcreStudio/vor/internal/server/http/routes"
+	"github.com/HundredAcreStudio/vor/internal/server/registry"
 	"github.com/HundredAcreStudio/vor/internal/version"
 )
 
@@ -42,6 +43,10 @@ type Options struct {
 	// (Streamable HTTP transport) instead of spawning a stdio process.
 	// Nil disables the route.
 	MCPHandler http.Handler
+
+	// Registrar powers the live /api/repos/register|unregister endpoints.
+	// Nil leaves those endpoints returning 503.
+	Registrar *registry.Registrar
 }
 
 // Server is the HTTP API for vor. Implements http.Handler so it can
@@ -69,7 +74,7 @@ func New(opts Options) (*Server, error) {
 	r.Get("/api/health", healthHandler())
 
 	// Per-domain route packages mount themselves on /api.
-	deps := routes.Deps{DB: opts.DB, Logger: opts.Logger}
+	deps := routes.Deps{DB: opts.DB, Logger: opts.Logger, Registrar: opts.Registrar}
 	r.Route("/api", func(api chi.Router) {
 		// Workspace-level routes — these need to live under the same
 		// /api subtree as /repos so chi's prefix routing resolves

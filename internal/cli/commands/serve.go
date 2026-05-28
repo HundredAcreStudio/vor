@@ -26,6 +26,7 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/server/autoindex"
 	rhttp "github.com/HundredAcreStudio/vor/internal/server/http"
 	"github.com/HundredAcreStudio/vor/internal/server/mcp"
+	"github.com/HundredAcreStudio/vor/internal/server/registry"
 	"github.com/HundredAcreStudio/vor/internal/userconfig"
 	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
@@ -141,6 +142,31 @@ repository id.`,
 				logger.Info("serve: tracking repos from config", "count", len(ids))
 			}
 
+			// Auto-reindex watcher + registrar. The watcher watches the DB's
+			// tracked repos and supports runtime register/unregister; the
+			// registrar is the shared service the REST + MCP endpoints call.
+			// Enablement: config/env default, with an explicit --watch winning.
+			watchOn := watchEnabled
+			if !cmd.Flags().Changed("watch") && cfg.Watch.Enabled != nil {
+				watchOn = *cfg.Watch.Enabled
+			}
+			var (
+				watcher *autoindex.Watcher
+				reg     *registry.Registrar
+			)
+			if watchOn {
+				var debounce time.Duration
+				if cfg.Watch.Debounce != "" {
+					if d, perr := time.ParseDuration(cfg.Watch.Debounce); perr == nil {
+						debounce = d
+					} else {
+						logger.Warn("invalid watch.debounce, using default", "value", cfg.Watch.Debounce, "err", perr)
+					}
+				}
+				watcher = autoindex.New(autoindex.Options{DB: conn, Logger: logger, Debounce: debounce})
+				reg = registry.New(conn, watcher, logger)
+			}
+
 			bind := addr
 			if bind == "" {
 				bind = fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
@@ -155,10 +181,11 @@ repository id.`,
 				ReadTimeout:  10 * time.Second,
 				WriteTimeout: 30 * time.Second,
 				IdleTimeout:  60 * time.Second,
+				Registrar:    reg,
 			}
 
 			if mcpEnabled {
-				handler, err := buildMCPHandler(ctx, conn, cfg, logger, repoPath, workspaceRootIn, autoMode, workspaceMode, reposDefaultID)
+				handler, err := buildMCPHandler(ctx, conn, cfg, logger, repoPath, workspaceRootIn, autoMode, workspaceMode, reposDefaultID, reg)
 				if err != nil {
 					return err
 				}
@@ -194,29 +221,13 @@ repository id.`,
 				printMCPInstructions(cmd.OutOrStdout(), bind)
 			}
 
-			// Keep the index fresh for the daemon's lifetime: one incremental
-			// reindex per repo at startup (so a daemon launched before its
-			// first ingest finished doesn't serve an empty graph), then watch
-			// each repo's source tree. Tied to ctx so shutdown cancels it.
-			//
-			// Resolution: config file / env set the default; an explicit
-			// --watch on the command line wins over both.
-			watchOn := watchEnabled
-			if !cmd.Flags().Changed("watch") && cfg.Watch.Enabled != nil {
-				watchOn = *cfg.Watch.Enabled
-			}
-			if watchOn {
-				var debounce time.Duration
-				if cfg.Watch.Debounce != "" {
-					if d, err := time.ParseDuration(cfg.Watch.Debounce); err == nil {
-						debounce = d
-					} else {
-						logger.Warn("invalid watch.debounce, using default", "value", cfg.Watch.Debounce, "err", err)
-					}
-				}
-				w := autoindex.New(autoindex.Options{DB: conn, Logger: logger, Debounce: debounce})
+			// Run the auto-reindex watcher for the daemon's lifetime. It
+			// watches the DB's tracked repos and is driven at runtime by the
+			// register/unregister endpoints through the registrar. Tied to ctx
+			// so shutdown cancels any in-flight reindex cleanly.
+			if watcher != nil {
 				go func() {
-					if err := w.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+					if err := watcher.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 						logger.Error("auto-reindex watcher stopped", "err", err)
 					}
 				}()
@@ -240,10 +251,10 @@ repository id.`,
 
 // buildMCPHandler wires an MCP server (LLM synthesis when configured) and
 // returns its Streamable-HTTP handler for mounting at /mcp.
-func buildMCPHandler(ctx context.Context, conn *sql.DB, cfg config.Config, logger *slog.Logger, repoPath, workspaceRootIn string, autoMode, workspaceMode bool, reposDefaultID string) (http.Handler, error) {
+func buildMCPHandler(ctx context.Context, conn *sql.DB, cfg config.Config, logger *slog.Logger, repoPath, workspaceRootIn string, autoMode, workspaceMode bool, reposDefaultID string, reg *registry.Registrar) (http.Handler, error) {
 	provider, model := buildOptionalProvider(cfg)
 	embedder, _ := buildEmbedder(cfg)
-	mcpOpts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model, Embedder: embedder}
+	mcpOpts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model, Embedder: embedder, Registrar: reg}
 	if provider != nil {
 		logger.Info("serve: LLM synthesis enabled", "provider", cfg.Provider)
 	}
@@ -353,6 +364,10 @@ func registerGlobalRepos(ctx context.Context, conn *sql.DB, paths []string, logg
 		r, err := store.EnsureByLocalPath(ctx, abs, "")
 		if err != nil {
 			logger.Warn("repos: could not register, skipping", "path", abs, "err", err)
+			continue
+		}
+		if err := store.SetTracked(ctx, r.ID, true, false); err != nil {
+			logger.Warn("repos: could not mark tracked, skipping", "path", abs, "err", err)
 			continue
 		}
 		seen[abs] = true

@@ -194,6 +194,22 @@ func (s *Server) registerTools() {
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 	), s.wrap(s.toolSecurityScan))
 
+	// Daemon registry control — only when a registrar (live watcher) is wired.
+	if s.opts.Registrar != nil {
+		s.srv.AddTool(mcp.NewTool(
+			"vor_track",
+			mcp.WithDescription("Register a repo/worktree with the running daemon so it's indexed and watched for changes. For a throwaway agent worktree, pass ephemeral=true so vor_untrack later purges its data. Returns immediately; the initial index runs in the background (poll vor_pipeline_log)."),
+			mcp.WithString("path", mcp.Required(), mcp.Description("Filesystem path of the repo/worktree to track.")),
+			mcp.WithBoolean("ephemeral", mcp.DefaultBool(false), mcp.Description("If true, the repo's indexed data is purged on vor_untrack (use for disposable worktrees).")),
+		), s.wrap(s.toolTrack))
+
+		s.srv.AddTool(mcp.NewTool(
+			"vor_untrack",
+			mcp.WithDescription("Stop watching a previously-tracked repo. An ephemeral repo's indexed data is purged; a durable repo keeps its index. Identify the repo by repository id or local path."),
+			mcp.WithString("repo", mcp.Required(), mcp.Description("Repository id or local path to untrack.")),
+		), s.wrap(s.toolUntrack))
+	}
+
 	s.srv.AddTool(mcp.NewTool(
 		"vor_decisions",
 		mcp.WithDescription("Architectural decisions extracted from the codebase. Sources include inline-marker comments (DECISION:, WHY:, TRADEOFF:), ADR files under docs/adr, BREAKING entries in CHANGELOG.md, and Conventional Commits with ! markers or BREAKING CHANGE: footers. Each record carries source provenance (file + line or commit SHA) so the agent can verify quotes."),

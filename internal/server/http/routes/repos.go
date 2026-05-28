@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -15,7 +16,77 @@ import (
 func MountRepos(r chi.Router, deps Deps) {
 	store := repos.New(deps.DB)
 	r.Get("/", listRepos(store))
+	// Daemon registry control. Static segments register before the
+	// /{repoID} wildcard so they take precedence.
+	r.Get("/tracked", listTracked(deps))
+	r.Post("/register", registerRepo(deps))
+	r.Post("/unregister", unregisterRepo(deps))
 	r.Get("/{repoID}", getRepo(store))
+}
+
+// registerRepo handles POST /api/repos/register {path, ephemeral}: track a
+// repo and start watching it on the live daemon.
+func registerRepo(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.Registrar == nil {
+			httpx.Error(w, http.StatusServiceUnavailable, "registration unavailable (no watcher running)")
+			return
+		}
+		var body struct {
+			Path      string `json:"path"`
+			Ephemeral bool   `json:"ephemeral"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Path == "" {
+			httpx.BadRequest(w, `body must be {"path": "...", "ephemeral": bool}`)
+			return
+		}
+		repo, err := deps.Registrar.Register(r.Context(), body.Path, body.Ephemeral)
+		if err != nil {
+			httpx.BadRequest(w, err.Error())
+			return
+		}
+		httpx.JSON(w, http.StatusOK, repo)
+	}
+}
+
+// unregisterRepo handles POST /api/repos/unregister {repo}: stop watching a
+// repo (id or path); ephemeral repos are purged.
+func unregisterRepo(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.Registrar == nil {
+			httpx.Error(w, http.StatusServiceUnavailable, "registration unavailable (no watcher running)")
+			return
+		}
+		var body struct {
+			Repo string `json:"repo"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Repo == "" {
+			httpx.BadRequest(w, `body must be {"repo": "<id or path>"}`)
+			return
+		}
+		repo, err := deps.Registrar.Unregister(r.Context(), body.Repo)
+		if err != nil {
+			httpx.BadRequest(w, err.Error())
+			return
+		}
+		httpx.JSON(w, http.StatusOK, repo)
+	}
+}
+
+// listTracked handles GET /api/repos/tracked: the daemon's current watch set.
+func listTracked(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.Registrar == nil {
+			httpx.JSON(w, http.StatusOK, []any{})
+			return
+		}
+		list, err := deps.Registrar.ListTracked(r.Context())
+		if err != nil {
+			httpx.Internal(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, list)
+	}
 }
 
 type repoDTO struct {

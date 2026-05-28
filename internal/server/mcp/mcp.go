@@ -33,6 +33,7 @@ import (
 
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 	"github.com/HundredAcreStudio/vor/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/server/registry"
 	"github.com/HundredAcreStudio/vor/internal/version"
 	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
@@ -77,6 +78,10 @@ type Options struct {
 
 	// Logger receives structured tool-call logs. Defaults to slog.Default().
 	Logger *slog.Logger
+
+	// Registrar powers the vor_track / vor_untrack tools so an agent can
+	// register the worktree it's working in. Nil disables those tools.
+	Registrar *registry.Registrar
 }
 
 // workspaceRoots returns the effective list of workspace roots: the

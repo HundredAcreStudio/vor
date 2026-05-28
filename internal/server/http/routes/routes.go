@@ -7,6 +7,8 @@ package routes
 import (
 	"database/sql"
 	"log/slog"
+
+	"github.com/HundredAcreStudio/vor/internal/server/registry"
 )
 
 // Deps is the bag of dependencies handlers need. Adding new dependencies
@@ -15,4 +17,7 @@ import (
 type Deps struct {
 	DB     *sql.DB
 	Logger *slog.Logger
+	// Registrar drives the daemon's live register/unregister. Nil when the
+	// server runs without a watcher (the register endpoints then 503).
+	Registrar *registry.Registrar
 }

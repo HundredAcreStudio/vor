@@ -127,6 +127,22 @@ func (s *Store) Get(ctx context.Context, id string) (*Repository, error) {
 	return r, nil
 }
 
+// GetByLocalPath returns the repository row for an exact local_path, or
+// nil + sql.ErrNoRows. Read-only — unlike EnsureByLocalPath it never
+// creates a row.
+func (s *Store) GetByLocalPath(ctx context.Context, path string) (*Repository, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+repoColumns+` FROM repositories WHERE local_path = ?`, path)
+	r, err := scanRepo(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("scan repository: %w", err)
+	}
+	return r, nil
+}
+
 // List returns every repository row, ordered by name.
 func (s *Store) List(ctx context.Context) ([]Repository, error) {
 	return s.queryRepos(ctx, `SELECT `+repoColumns+` FROM repositories ORDER BY name`)

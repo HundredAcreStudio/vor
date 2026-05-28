@@ -80,6 +80,58 @@ func (s *Server) toolReindex(ctx context.Context, req mcp.CallToolRequest) (*mcp
 	})
 }
 
+// ---- tools: vor_track / vor_untrack ---------------------------------
+//
+// Register/unregister a repo with the running daemon. An agent working in
+// a throwaway git worktree calls vor_track with ephemeral=true on start and
+// vor_untrack on teardown — the daemon indexes + watches it while it lives
+// and purges its data when it's gone.
+
+func (s *Server) toolTrack(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if s.opts.Registrar == nil {
+		return mcp.NewToolResultError("registration unavailable (no watcher running)"), nil
+	}
+	path := req.GetString("path", "")
+	if path == "" {
+		return mcp.NewToolResultError("`path` is required"), nil
+	}
+	repo, err := s.opts.Registrar.Register(ctx, path, req.GetBool("ephemeral", false))
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return jsonResult(map[string]any{
+		"status":    "tracking",
+		"repo":      repo.ID,
+		"path":      repo.Path,
+		"ephemeral": repo.Ephemeral,
+		"note":      "initial index started; the daemon now watches this path",
+	})
+}
+
+func (s *Server) toolUntrack(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if s.opts.Registrar == nil {
+		return mcp.NewToolResultError("registration unavailable (no watcher running)"), nil
+	}
+	spec := req.GetString("repo", "")
+	if spec == "" {
+		return mcp.NewToolResultError("`repo` (id or path) is required"), nil
+	}
+	repo, err := s.opts.Registrar.Unregister(ctx, spec)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	status := "untracked"
+	if repo.Ephemeral {
+		status = "untracked_and_purged"
+	}
+	return jsonResult(map[string]any{
+		"status":    status,
+		"repo":      repo.ID,
+		"path":      repo.Path,
+		"ephemeral": repo.Ephemeral,
+	})
+}
+
 // ---- tool: vor_security_scan ----------------------------------------
 //
 // Mutating tool: runs the pattern-based security scanner over the repo and
