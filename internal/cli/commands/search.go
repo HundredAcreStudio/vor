@@ -65,8 +65,8 @@ func newSearchCmd() *cobra.Command {
 			for rows.Next() {
 				var (
 					nodeID, ntype, kind, name, filePath string
-					startLine                            int
-					pagerank                             float64
+					startLine                           int
+					pagerank                            float64
 				)
 				if err := rows.Scan(&nodeID, &ntype, &kind, &name, &filePath, &startLine, &pagerank); err != nil {
 					return err

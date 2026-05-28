@@ -44,7 +44,7 @@ func (p *stubProvider) Generate(ctx context.Context, req providers.Request) (pro
 		return r.resp, r.err
 	}
 	return providers.Response{
-		Model: p.model,
+		Model:   p.model,
 		Content: "ok",
 		Usage:   providers.Usage{InputTokens: 100, OutputTokens: 20},
 	}, nil
@@ -153,7 +153,7 @@ func TestWrap_PersistsCostOnSuccess(t *testing.T) {
 		name: "anthropic", model: "claude-sonnet-4-6",
 		responses: []stubResponse{
 			{resp: providers.Response{
-				Model: "claude-sonnet-4-6",
+				Model:   "claude-sonnet-4-6",
 				Content: "ok",
 				Usage:   providers.Usage{InputTokens: 1_000_000, OutputTokens: 200_000, CachedTokens: 500_000},
 			}},

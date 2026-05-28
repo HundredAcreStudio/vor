@@ -1,10 +1,10 @@
 // Package inline mines architectural decisions from comment markers
 // embedded in source code. The supported markers are:
 //
-//   DECISION:  the call made
-//   WHY:       the rationale
-//   TRADEOFF:  the cost of the chosen path
-//   RATIONALE: synonym for WHY
+//	DECISION:  the call made
+//	WHY:       the rationale
+//	TRADEOFF:  the cost of the chosen path
+//	RATIONALE: synonym for WHY
 //
 // Markers are matched anywhere on a line — comment syntax varies by
 // language and the keywords are unusual enough outside of intentional
@@ -100,16 +100,16 @@ func scanFile(absPath, relPath string, now time.Time) ([]decisions.Record, error
 		// in a sensible UI display range. The kind prefix is ~10 chars;
 		// 80 bytes total keeps titles on one terminal line in most fonts.
 		rec := decisions.Record{
-			Title:        truncate(kind+": "+body, 80),
-			Status:       decisions.DefaultStatus,
-			Source:       decisions.SourceInlineMarker,
-			EvidenceFile: relPath,
-			EvidenceLine: lineIdx + 1,
-			SourceQuote:  strings.TrimSpace(line),
-			Confidence:   1.0,
-			Verification: decisions.VerificationExact,
-			CreatedAt:    now,
-			Tags:         []string{strings.ToLower(kind)},
+			Title:         truncate(kind+": "+body, 80),
+			Status:        decisions.DefaultStatus,
+			Source:        decisions.SourceInlineMarker,
+			EvidenceFile:  relPath,
+			EvidenceLine:  lineIdx + 1,
+			SourceQuote:   strings.TrimSpace(line),
+			Confidence:    1.0,
+			Verification:  decisions.VerificationExact,
+			CreatedAt:     now,
+			Tags:          []string{strings.ToLower(kind)},
 			AffectedFiles: []string{relPath},
 		}
 		switch kind {

@@ -12,9 +12,9 @@ import (
 
 // Pricing is per-million-token USD prices for one model.
 type Pricing struct {
-	InputPerMillion        float64
-	OutputPerMillion       float64
-	CachedReadPerMillion   float64 // Anthropic / OpenAI prompt-cache read rate
+	InputPerMillion      float64
+	OutputPerMillion     float64
+	CachedReadPerMillion float64 // Anthropic / OpenAI prompt-cache read rate
 }
 
 // Catalog returns the price for (provider, model), or the zero Pricing
@@ -60,12 +60,12 @@ func EstimateFor(provider, model string, usage providers.Usage) float64 {
 // updates are obvious — no nesting, no inheritance.
 var table = map[string]map[string]Pricing{
 	"anthropic": {
-		"claude-opus-4":       {InputPerMillion: 15, OutputPerMillion: 75, CachedReadPerMillion: 1.5},
-		"claude-sonnet-4":     {InputPerMillion: 3, OutputPerMillion: 15, CachedReadPerMillion: 0.3},
-		"claude-haiku-4-5":    {InputPerMillion: 1, OutputPerMillion: 5, CachedReadPerMillion: 0.1},
-		"claude-3-5-sonnet":   {InputPerMillion: 3, OutputPerMillion: 15, CachedReadPerMillion: 0.3},
-		"claude-3-5-haiku":    {InputPerMillion: 0.8, OutputPerMillion: 4, CachedReadPerMillion: 0.08},
-		"claude-3-opus":       {InputPerMillion: 15, OutputPerMillion: 75, CachedReadPerMillion: 1.5},
+		"claude-opus-4":     {InputPerMillion: 15, OutputPerMillion: 75, CachedReadPerMillion: 1.5},
+		"claude-sonnet-4":   {InputPerMillion: 3, OutputPerMillion: 15, CachedReadPerMillion: 0.3},
+		"claude-haiku-4-5":  {InputPerMillion: 1, OutputPerMillion: 5, CachedReadPerMillion: 0.1},
+		"claude-3-5-sonnet": {InputPerMillion: 3, OutputPerMillion: 15, CachedReadPerMillion: 0.3},
+		"claude-3-5-haiku":  {InputPerMillion: 0.8, OutputPerMillion: 4, CachedReadPerMillion: 0.08},
+		"claude-3-opus":     {InputPerMillion: 15, OutputPerMillion: 75, CachedReadPerMillion: 1.5},
 	},
 	"openai": {
 		"gpt-4o":      {InputPerMillion: 2.5, OutputPerMillion: 10},

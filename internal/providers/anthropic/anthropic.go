@@ -248,11 +248,11 @@ func (p *Provider) GenerateStream(ctx context.Context, req providers.Request) (<
 // streamSSE parses the SSE stream and emits decoded events into ch.
 // Anthropic's event types we care about:
 //
-//   message_start         — carries initial usage (input_tokens)
-//   content_block_delta   — text delta on a content block
-//   message_delta         — carries final usage (output_tokens)
-//   message_stop          — terminal event
-//   error                 — terminal error event
+//	message_start         — carries initial usage (input_tokens)
+//	content_block_delta   — text delta on a content block
+//	message_delta         — carries final usage (output_tokens)
+//	message_stop          — terminal event
+//	error                 — terminal error event
 func streamSSE(ctx context.Context, body io.Reader, ch chan<- providers.StreamEvent) {
 	reader := bufio.NewReader(body)
 	usage := providers.Usage{}

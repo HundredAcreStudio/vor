@@ -4,8 +4,8 @@
 // We use a pragmatic heuristic: look for .cs files in a directory path
 // that matches the dotted namespace.
 //
-//   `using Demo.Util` → search for any .cs file under a `Demo/Util/`
-//                       prefix in the analyzed set.
+//	`using Demo.Util` → search for any .cs file under a `Demo/Util/`
+//	                    prefix in the analyzed set.
 //
 // This works for conventional layouts (the common case in modern .NET
 // projects); unconventional layouts where namespace doesn't match

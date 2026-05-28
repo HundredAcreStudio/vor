@@ -46,9 +46,9 @@ func (Extractor) Source() string { return decisions.SourceCommit }
 // conventionalBangRE matches the Conventional Commits subject form
 // where the "!" before the colon marks a breaking change:
 //
-//   feat!:           subject
-//   fix(api)!:       subject
-//   chore(scope)!:   subject
+//	feat!:           subject
+//	fix(api)!:       subject
+//	chore(scope)!:   subject
 var conventionalBangRE = regexp.MustCompile(
 	`^([a-zA-Z]+)(\([^)]+\))?!:\s+(.+)$`,
 )

@@ -31,8 +31,8 @@ func newWatchedCmd() *cobra.Command {
 
 func newWatchedListCmd() *cobra.Command {
 	var (
-		stale       bool
-		sortByPath  bool
+		stale      bool
+		sortByPath bool
 	)
 	cmd := &cobra.Command{
 		Use:   "list",

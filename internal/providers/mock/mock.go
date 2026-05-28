@@ -190,7 +190,7 @@ func deterministicVector(s string, dim int) []float32 {
 		// Convert 4-byte chunks to float32 in [-1, 1).
 		for i := 0; i+4 <= len(src) && pos < dim; i += 4 {
 			u := binary.LittleEndian.Uint32(src[i : i+4])
-			f := (float32(u) / float32(^uint32(0))) * 2.0 - 1.0
+			f := (float32(u)/float32(^uint32(0)))*2.0 - 1.0
 			out[pos] = f
 			pos++
 		}

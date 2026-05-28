@@ -41,15 +41,15 @@ const (
 
 // Finding is one biomarker hit. Persisted into health_findings.
 type Finding struct {
-	FilePath     string
+	FilePath      string
 	BiomarkerType string
-	Severity     Severity
-	FunctionName string
-	LineStart    int
-	LineEnd      int
-	HealthImpact float64 // 0–10, contribution to file score reduction
-	Reason       string
-	Details      map[string]any
+	Severity      Severity
+	FunctionName  string
+	LineStart     int
+	LineEnd       int
+	HealthImpact  float64 // 0–10, contribution to file score reduction
+	Reason        string
+	Details       map[string]any
 }
 
 // FileMetric is one per-file aggregate row. Persisted into
@@ -231,7 +231,7 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 					LineStart:     sym.StartLine,
 					LineEnd:       sym.EndLine,
 					HealthImpact:  complexityImpact(sym.ComplexityEstimate, thresholds),
-					Reason: fmt.Sprintf("cyclomatic complexity = %d", sym.ComplexityEstimate),
+					Reason:        fmt.Sprintf("cyclomatic complexity = %d", sym.ComplexityEstimate),
 					Details: map[string]any{
 						"complexity": sym.ComplexityEstimate,
 					},
@@ -247,7 +247,7 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 					LineStart:     sym.StartLine,
 					LineEnd:       sym.EndLine,
 					HealthImpact:  longFunctionImpact(lines, thresholds),
-					Reason: fmt.Sprintf("function length = %d lines", lines),
+					Reason:        fmt.Sprintf("function length = %d lines", lines),
 					Details: map[string]any{
 						"lines": lines,
 					},
@@ -263,7 +263,7 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 					LineStart:     sym.StartLine,
 					LineEnd:       sym.EndLine,
 					HealthImpact:  deepNestingImpact(sym.NestingDepth, thresholds),
-					Reason: fmt.Sprintf("max nesting depth = %d", sym.NestingDepth),
+					Reason:        fmt.Sprintf("max nesting depth = %d", sym.NestingDepth),
 					Details: map[string]any{
 						"nesting": sym.NestingDepth,
 					},
@@ -305,7 +305,7 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 						LineStart:     sym.StartLine,
 						LineEnd:       sym.EndLine,
 						HealthImpact:  godClassImpact(methodCount, thresholds),
-						Reason: fmt.Sprintf("%s has %d methods", sym.Name, methodCount),
+						Reason:        fmt.Sprintf("%s has %d methods", sym.Name, methodCount),
 						Details: map[string]any{
 							"methodCount": methodCount,
 						},
@@ -385,7 +385,7 @@ func (a *Analyzer) computeHiddenCoupling(files []models.ParsedFile, emittedPairs
 				BiomarkerType: BiomarkerHiddenCoupling,
 				Severity:      SeverityMedium,
 				HealthImpact:  1.5,
-				Reason: fmt.Sprintf("co-changes with %s but no graph edge between them", hi),
+				Reason:        fmt.Sprintf("co-changes with %s but no graph edge between them", hi),
 				Details: map[string]any{
 					"partner": hi,
 				},

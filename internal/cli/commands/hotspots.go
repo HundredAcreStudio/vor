@@ -55,10 +55,10 @@ func newHotspotsCmd() *cobra.Command {
 			count := 0
 			for rows.Next() {
 				var (
-					path, owner                                         string
-					pctl                                                float64
-					commits, c90, busFactor, contributors, adds, dels   int
-					hotInt                                              int
+					path, owner                                       string
+					pctl                                              float64
+					commits, c90, busFactor, contributors, adds, dels int
+					hotInt                                            int
 				)
 				if err := rows.Scan(&path, &pctl, &commits, &c90, &owner, &busFactor, &contributors, &adds, &dels, &hotInt); err != nil {
 					return err

@@ -131,4 +131,3 @@ func printRunSummary(cmd *cobra.Command, r *pipeline.Result, failed bool) {
 	fmt.Fprintf(out, "\n%d files indexed, %d graph nodes, %d health findings\n",
 		r.TraversalStats.Included, r.Graph.NodeCount(), len(r.HealthResult.Findings))
 }
-

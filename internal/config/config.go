@@ -109,9 +109,9 @@ func Defaults() Config {
 // Load resolves the configuration for the given repo path. The merge
 // chain is, in increasing precedence:
 //
-//   defaults  →  ~/.config/repowise/config.yaml  →
-//   <repo>/.repowise/config.yaml                 →
-//   REPOWISE_* env vars
+//	defaults  →  ~/.config/repowise/config.yaml  →
+//	<repo>/.repowise/config.yaml                 →
+//	REPOWISE_* env vars
 //
 // A missing config file at any layer is not an error — that layer is
 // just skipped.

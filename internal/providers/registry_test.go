@@ -11,8 +11,8 @@ import (
 // fake is a minimal in-test Provider used to verify the registry surface.
 type fake struct{ name string }
 
-func (f *fake) Name() string                                                              { return f.name }
-func (f *fake) Models() []string                                                          { return []string{f.name + "-1"} }
+func (f *fake) Name() string     { return f.name }
+func (f *fake) Models() []string { return []string{f.name + "-1"} }
 func (f *fake) Generate(_ context.Context, _ providers.Request) (providers.Response, error) {
 	return providers.Response{Content: "ok"}, nil
 }

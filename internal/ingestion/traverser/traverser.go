@@ -49,10 +49,10 @@ type Options struct {
 
 // Defaults applied when Options zero-values are encountered.
 const (
-	defaultMaxFileSizeKB    = 500
-	defaultExtraIgnoreFile  = ".repowiseIgnore"
-	binarySniffBytes        = 8192
-	generatedSniffBytes     = 512
+	defaultMaxFileSizeKB   = 500
+	defaultExtraIgnoreFile = ".repowiseIgnore"
+	binarySniffBytes       = 8192
+	generatedSniffBytes    = 512
 )
 
 // blockedDirs is the hardcoded directory blocklist. Mirrors the Python list.
@@ -360,13 +360,13 @@ func (t *FileTraverser) classifyFile(path, rel string, d fs.DirEntry) (models.Fi
 	}
 
 	info := models.FileInfo{
-		Path:         rel,
-		AbsPath:      path,
-		Language:     spec.Tag,
-		SizeBytes:    statInfo.Size(),
-		LastModified: statInfo.ModTime(),
-		IsTest:       detectIsTest(rel, base),
-		IsConfig:     spec.IsConfig,
+		Path:          rel,
+		AbsPath:       path,
+		Language:      spec.Tag,
+		SizeBytes:     statInfo.Size(),
+		LastModified:  statInfo.ModTime(),
+		IsTest:        detectIsTest(rel, base),
+		IsConfig:      spec.IsConfig,
 		IsAPIContract: spec.IsAPIContract || isAPIContractFilename(base),
 		IsEntryPoint:  detectIsEntryPoint(base, spec),
 	}

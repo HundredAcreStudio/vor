@@ -230,13 +230,13 @@ func absorbCall(caps map[string][]*sitter.Node, source []byte) *models.CallSite 
 }
 
 var cppBranchNodeTypes = map[string]struct{}{
-	"if_statement":          {},
-	"for_statement":         {},
-	"for_range_loop":        {},
-	"while_statement":       {},
-	"do_statement":          {},
-	"case_statement":        {},
-	"catch_clause":          {},
+	"if_statement":           {},
+	"for_statement":          {},
+	"for_range_loop":         {},
+	"while_statement":        {},
+	"do_statement":           {},
+	"case_statement":         {},
+	"catch_clause":           {},
 	"conditional_expression": {},
 }
 

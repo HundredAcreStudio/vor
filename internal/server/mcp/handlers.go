@@ -201,10 +201,10 @@ func (s *Server) toolDeadCode(ctx context.Context, req mcp.CallToolRequest) (*mc
 // ---- tool: repowise_health -----------------------------------------------
 
 type healthSummaryPayload struct {
-	AverageScore       float64           `json:"averageScore"`
-	FindingCount       int               `json:"findingCount"`
-	FindingsByBiomarker map[string]int   `json:"findingsByBiomarker"`
-	WorstFiles         []healthFileEntry `json:"worstFiles"`
+	AverageScore        float64           `json:"averageScore"`
+	FindingCount        int               `json:"findingCount"`
+	FindingsByBiomarker map[string]int    `json:"findingsByBiomarker"`
+	WorstFiles          []healthFileEntry `json:"worstFiles"`
 }
 
 type healthFileEntry struct {
@@ -422,8 +422,8 @@ func (s *Server) toolDependents(ctx context.Context, req mcp.CallToolRequest) (*
 	out := make([]dependentEdgePayload, 0, limit)
 	for rows.Next() {
 		var (
-			d           dependentEdgePayload
-			namesJSON   string
+			d         dependentEdgePayload
+			namesJSON string
 		)
 		if err := rows.Scan(&d.From, &d.Confidence, &namesJSON); err != nil {
 			return nil, err
@@ -599,15 +599,15 @@ func (s *Server) toolPipelineLog(ctx context.Context, req mcp.CallToolRequest) (
 // ---- tool: repowise_decisions ---------------------------------------------
 
 type decisionPayload struct {
-	Title         string  `json:"title"`
-	Source        string  `json:"source"`
-	EvidenceFile  string  `json:"evidenceFile,omitempty"`
-	EvidenceLine  int     `json:"evidenceLine,omitempty"`
-	Confidence    float64 `json:"confidence"`
-	Verification  string  `json:"verification"`
-	Decision      string  `json:"decision,omitempty"`
-	Rationale     string  `json:"rationale,omitempty"`
-	SourceQuote   string  `json:"sourceQuote,omitempty"`
+	Title        string  `json:"title"`
+	Source       string  `json:"source"`
+	EvidenceFile string  `json:"evidenceFile,omitempty"`
+	EvidenceLine int     `json:"evidenceLine,omitempty"`
+	Confidence   float64 `json:"confidence"`
+	Verification string  `json:"verification"`
+	Decision     string  `json:"decision,omitempty"`
+	Rationale    string  `json:"rationale,omitempty"`
+	SourceQuote  string  `json:"sourceQuote,omitempty"`
 }
 
 func (s *Server) toolDecisions(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

@@ -14,14 +14,14 @@ import (
 // (middle), giving users a "set once per box" knob without polluting
 // each repo's .repowise/config.yaml.
 type Config struct {
-	Provider     string `yaml:"provider,omitempty"`
-	Model        string `yaml:"model,omitempty"`
-	DatabaseURL  string `yaml:"database_url,omitempty"`
-	LogLevel     string `yaml:"log_level,omitempty"`
-	Reasoning    *bool  `yaml:"reasoning,omitempty"`
-	RPM          int    `yaml:"rpm,omitempty"`
-	TPM          int    `yaml:"tpm,omitempty"`
-	WatchDebounceMs int `yaml:"watch_debounce_ms,omitempty"`
+	Provider        string `yaml:"provider,omitempty"`
+	Model           string `yaml:"model,omitempty"`
+	DatabaseURL     string `yaml:"database_url,omitempty"`
+	LogLevel        string `yaml:"log_level,omitempty"`
+	Reasoning       *bool  `yaml:"reasoning,omitempty"`
+	RPM             int    `yaml:"rpm,omitempty"`
+	TPM             int    `yaml:"tpm,omitempty"`
+	WatchDebounceMs int    `yaml:"watch_debounce_ms,omitempty"`
 }
 
 // LoadConfig reads ConfigPath() into a Config. Returns (Config{}, nil)

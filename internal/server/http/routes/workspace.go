@@ -75,9 +75,9 @@ func listWorkspaceRepos(deps Deps) http.HandlerFunc {
 			out = append(out, entry)
 		}
 		httpx.JSON(w, http.StatusOK, map[string]any{
-			"root":          root,
-			"repos":         out,
-			"defaultAlias":  state.DefaultAlias,
+			"root":         root,
+			"repos":        out,
+			"defaultAlias": state.DefaultAlias,
 		})
 	}
 }

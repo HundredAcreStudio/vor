@@ -4,15 +4,15 @@
 //
 // The server can be configured in two modes:
 //
-//   1. Single-repo (legacy). Options.RepositoryID is set; every tool
-//      call queries that repo unless the call explicitly overrides via
-//      the `repo` argument.
+//  1. Single-repo (legacy). Options.RepositoryID is set; every tool
+//     call queries that repo unless the call explicitly overrides via
+//     the `repo` argument.
 //
-//   2. Multi-repo / workspace. Options.WorkspaceRoot points at a
-//      directory holding .repowise/workspace.json. Each tool call
-//      MUST supply a `repo` argument (alias, full id, or local path).
-//      A repowise_workspace_repos tool lets agents discover the
-//      registered repos.
+//  2. Multi-repo / workspace. Options.WorkspaceRoot points at a
+//     directory holding .repowise/workspace.json. Each tool call
+//     MUST supply a `repo` argument (alias, full id, or local path).
+//     A repowise_workspace_repos tool lets agents discover the
+//     registered repos.
 //
 // The two modes can coexist: if both RepositoryID and WorkspaceRoot
 // are set, RepositoryID is the default and the workspace data is
@@ -145,9 +145,9 @@ func ResolveRepositoryID(ctx context.Context, db *sql.DB, localPath string) (str
 // resolveRepoID picks the repository ID for a single tool call. The
 // resolution order:
 //
-//   1. The call's `repo` argument, if present. Tried as workspace
-//      alias → full repo id → local path. The first match wins.
-//   2. opts.RepositoryID, the construction-time default.
+//  1. The call's `repo` argument, if present. Tried as workspace
+//     alias → full repo id → local path. The first match wins.
+//  2. opts.RepositoryID, the construction-time default.
 //
 // Returns an error when neither is available (workspace-only mode +
 // no `repo` arg supplied).

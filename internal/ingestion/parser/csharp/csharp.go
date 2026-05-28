@@ -206,13 +206,13 @@ func absorbCall(caps map[string][]*sitter.Node, source []byte) *models.CallSite 
 }
 
 var csharpBranchNodeTypes = map[string]struct{}{
-	"if_statement":          {},
-	"for_statement":         {},
-	"foreach_statement":     {},
-	"while_statement":       {},
-	"do_statement":          {},
-	"switch_section":        {},
-	"catch_clause":          {},
+	"if_statement":           {},
+	"for_statement":          {},
+	"foreach_statement":      {},
+	"while_statement":        {},
+	"do_statement":           {},
+	"switch_section":         {},
+	"catch_clause":           {},
 	"conditional_expression": {},
 }
 

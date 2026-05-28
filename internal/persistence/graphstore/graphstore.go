@@ -88,7 +88,7 @@ func insertNodes(ctx context.Context, tx *sql.Tx, repoID string, nodes []*graph.
 		}
 		var (
 			kind, name, qname, filePath, vis, sig, parentID interface{}
-			startLine, endLine                                interface{}
+			startLine, endLine                              interface{}
 		)
 		if n.Symbol != nil {
 			kind = string(n.Symbol.Kind)

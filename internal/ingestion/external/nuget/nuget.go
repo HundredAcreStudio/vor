@@ -29,7 +29,7 @@ type xmlPackageReference struct {
 	Include       string `xml:"Include,attr"`
 	Update        string `xml:"Update,attr"`
 	Version       string `xml:"Version,attr"`
-	VersionInner  string `xml:"Version"`        // <Version>x</Version> form
+	VersionInner  string `xml:"Version"` // <Version>x</Version> form
 	PrivateAssets string `xml:"PrivateAssets,attr"`
 }
 

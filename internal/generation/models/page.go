@@ -30,26 +30,26 @@ const (
 // Page is the in-memory representation of a wiki_pages row. Field names
 // match the schema column names.
 type Page struct {
-	ID            string
-	RepositoryID  string
-	PageType      PageKind
-	Title         string
-	Content       string
-	Summary       string
-	TargetPath    string
-	SourceHash    string
-	ModelName     string
-	ProviderName  string
-	InputTokens   int
-	OutputTokens  int
-	CachedTokens  int
-	GenLevel      int
-	Version       int
-	Confidence    float64
-	Freshness     FreshnessStatus
-	Metadata      map[string]string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID           string
+	RepositoryID string
+	PageType     PageKind
+	Title        string
+	Content      string
+	Summary      string
+	TargetPath   string
+	SourceHash   string
+	ModelName    string
+	ProviderName string
+	InputTokens  int
+	OutputTokens int
+	CachedTokens int
+	GenLevel     int
+	Version      int
+	Confidence   float64
+	Freshness    FreshnessStatus
+	Metadata     map[string]string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // FreshnessStatus labels how current a page is relative to the underlying
@@ -57,7 +57,7 @@ type Page struct {
 type FreshnessStatus string
 
 const (
-	FreshnessFresh     FreshnessStatus = "fresh"      // generated against current source
-	FreshnessStale     FreshnessStatus = "stale"      // source has changed since generation
-	FreshnessOutdated  FreshnessStatus = "outdated"   // generation is older than the staleness threshold
+	FreshnessFresh    FreshnessStatus = "fresh"    // generated against current source
+	FreshnessStale    FreshnessStatus = "stale"    // source has changed since generation
+	FreshnessOutdated FreshnessStatus = "outdated" // generation is older than the staleness threshold
 )

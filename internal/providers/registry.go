@@ -25,9 +25,9 @@ type embedderFactory func(opts Options) (Embedder, error)
 type Options map[string]any
 
 var (
-	registryMu  sync.RWMutex
-	providers   = map[string]providerFactory{}
-	embedders   = map[string]embedderFactory{}
+	registryMu sync.RWMutex
+	providers  = map[string]providerFactory{}
+	embedders  = map[string]embedderFactory{}
 )
 
 // RegisterProvider installs a provider factory under name.

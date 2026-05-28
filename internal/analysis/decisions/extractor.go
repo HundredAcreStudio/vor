@@ -26,10 +26,10 @@ type Extractor interface {
 // Input is the read-only view of the repository an extractor sees.
 // Different extractors consume different fields:
 //
-//   inline_marker:  ParsedFiles (for FileInfo) + RepoRoot (to re-read source)
-//   adr:            RepoRoot (filesystem walk under docs/adr/)
-//   changelog:      RepoRoot (CHANGELOG.md / HISTORY.md / etc.)
-//   git_archaeology: GitRepo (commit walk)
+//	inline_marker:  ParsedFiles (for FileInfo) + RepoRoot (to re-read source)
+//	adr:            RepoRoot (filesystem walk under docs/adr/)
+//	changelog:      RepoRoot (CHANGELOG.md / HISTORY.md / etc.)
+//	git_archaeology: GitRepo (commit walk)
 type Input struct {
 	// RepoRoot is the absolute path to the repository being analyzed.
 	RepoRoot string

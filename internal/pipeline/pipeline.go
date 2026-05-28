@@ -132,7 +132,7 @@ type Options struct {
 
 // Result is the bundle the caller can persist or inspect after Run.
 type Result struct {
-	Files        []models.FileInfo
+	Files          []models.FileInfo
 	Parsed         []models.ParsedFile
 	Graph          *graph.Graph
 	GitRecords     []git.PerFile

@@ -137,7 +137,7 @@ func TestAnalyze_CustomThresholds(t *testing.T) {
 	}}
 	res := a.Analyze([]models.ParsedFile{
 		mkFile([]models.Symbol{
-			mkSym("low", 4, 1, 5),  // below new warning
+			mkSym("low", 4, 1, 5),   // below new warning
 			mkSym("hit", 5, 10, 15), // hits new warning
 		}),
 	})
@@ -230,7 +230,7 @@ func TestAnalyze_GodClass(t *testing.T) {
 	// 17 methods → above default 15 threshold (medium), below 25 (high).
 	for i := 0; i < 17; i++ {
 		syms = append(syms, models.Symbol{
-			ID: "f.go::BigClass::m" + string(rune('a'+i)),
+			ID:   "f.go::BigClass::m" + string(rune('a'+i)),
 			Name: "m" + string(rune('a'+i)),
 			Kind: models.KindMethod, ParentName: &parent,
 			Language: "go", StartLine: i * 5, EndLine: i*5 + 4,
@@ -263,10 +263,10 @@ func TestAnalyze_GodClass_HighSeverity(t *testing.T) {
 	// 30 methods → above 25 high threshold.
 	for i := 0; i < 30; i++ {
 		syms = append(syms, models.Symbol{
-			ID:         "f.go::Huge::m" + string(rune('a'+i)),
-			Name:       "m" + string(rune('a'+i)),
-			Kind:       models.KindMethod, ParentName: &parent,
-			Language:   "go",
+			ID:   "f.go::Huge::m" + string(rune('a'+i)),
+			Name: "m" + string(rune('a'+i)),
+			Kind: models.KindMethod, ParentName: &parent,
+			Language: "go",
 		})
 	}
 	res := (&health.Analyzer{}).Analyze([]models.ParsedFile{mkFile(syms)})
@@ -372,12 +372,12 @@ func TestAnalyze_TestPairingPatterns(t *testing.T) {
 	cases := []struct {
 		prod, test string
 	}{
-		{"pkg/foo.go", "pkg/foo_test.go"},     // Go
-		{"app/util.py", "app/test_util.py"},   // Python prefix
-		{"app/util.py", "app/util_test.py"},   // Python suffix
-		{"web/calc.ts", "web/calc.test.ts"},   // TS .test
-		{"web/calc.ts", "web/calc.spec.ts"},   // TS .spec
-		{"src/Foo.java", "src/FooTest.java"},  // Java
+		{"pkg/foo.go", "pkg/foo_test.go"},    // Go
+		{"app/util.py", "app/test_util.py"},  // Python prefix
+		{"app/util.py", "app/util_test.py"},  // Python suffix
+		{"web/calc.ts", "web/calc.test.ts"},  // TS .test
+		{"web/calc.ts", "web/calc.spec.ts"},  // TS .spec
+		{"src/Foo.java", "src/FooTest.java"}, // Java
 	}
 	for _, tc := range cases {
 		files := []models.ParsedFile{
@@ -410,7 +410,7 @@ func TestAnalyze_BrainMethod(t *testing.T) {
 
 	// Default thresholds: CCN≥10, nesting≥3, lines≥50.
 	syms := []models.Symbol{
-		mkSymFull("brain", 15, 4, 1, 80),         // bad on all 3 → flagged
+		mkSymFull("brain", 15, 4, 1, 80),           // bad on all 3 → flagged
 		mkSymFull("just_complex", 15, 1, 100, 110), // CCN only
 		mkSymFull("just_nested", 2, 5, 200, 210),   // nesting only
 		mkSymFull("just_long", 2, 1, 300, 400),     // lines only

@@ -139,10 +139,10 @@ func (a *Analyzer) computeDuplication(files []models.ParsedFile) []Finding {
 				Reason: fmt.Sprintf("%d-line block duplicated at %d other location(s)",
 					window, clusterSize-1),
 				Details: map[string]any{
-					"window_lines":      window,
-					"cluster_size":      clusterSize,
-					"fingerprint_hex":   fmt.Sprintf("%x", fp),
-					"duplicate_sites":   others,
+					"window_lines":    window,
+					"cluster_size":    clusterSize,
+					"fingerprint_hex": fmt.Sprintf("%x", fp),
+					"duplicate_sites": others,
 				},
 			})
 		}

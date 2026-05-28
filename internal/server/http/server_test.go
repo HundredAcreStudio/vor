@@ -159,6 +159,19 @@ func fixtureRepo(t *testing.T) (*httptest.Server, string) {
 	return httpSrv, repo.ID
 }
 
+// mustGet issues a GET and fails the test on transport error. The
+// caller owns Body.Close(). Centralising the error check keeps the
+// status-code assertion sites terse and satisfies `go vet`'s
+// "using resp before checking for errors" check.
+func mustGet(t *testing.T, url string) *http.Response {
+	t.Helper()
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	return resp
+}
+
 // hitJSON is a tiny helper: GET path, expect status 200, decode body into out.
 func hitJSON(t *testing.T, base, path string, out any) {
 	t.Helper()
@@ -202,7 +215,7 @@ func TestListRepos(t *testing.T) {
 
 func TestGetRepo_NotFound(t *testing.T) {
 	srv, _ := fixtureRepo(t)
-	resp, _ := http.Get(srv.URL + "/api/repos/no-such-id")
+	resp := mustGet(t, srv.URL+"/api/repos/no-such-id")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
@@ -248,9 +261,9 @@ func TestListHotspots(t *testing.T) {
 	srv, repoID := fixtureRepo(t)
 	var body struct {
 		Hotspots []struct {
-			Path             string  `json:"path"`
-			ChurnPercentile  float64 `json:"churnPercentile"`
-			PrimaryOwner     string  `json:"primaryOwner"`
+			Path            string  `json:"path"`
+			ChurnPercentile float64 `json:"churnPercentile"`
+			PrimaryOwner    string  `json:"primaryOwner"`
 		} `json:"hotspots"`
 	}
 	hitJSON(t, srv.URL, "/api/repos/"+repoID+"/hotspots", &body)
@@ -277,7 +290,7 @@ func TestGetSymbol(t *testing.T) {
 
 func TestGetSymbol_NotFound(t *testing.T) {
 	srv, repoID := fixtureRepo(t)
-	resp, _ := http.Get(srv.URL + "/api/repos/" + repoID + "/symbol?symbol_id=nope")
+	resp := mustGet(t, srv.URL+"/api/repos/"+repoID+"/symbol?symbol_id=nope")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
@@ -297,7 +310,7 @@ func TestGetDependents(t *testing.T) {
 
 func TestGetSymbol_MissingQuery(t *testing.T) {
 	srv, repoID := fixtureRepo(t)
-	resp, _ := http.Get(srv.URL + "/api/repos/" + repoID + "/symbol")
+	resp := mustGet(t, srv.URL+"/api/repos/"+repoID+"/symbol")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("missing symbol_id should yield 400; got %d", resp.StatusCode)
@@ -484,7 +497,7 @@ func TestShowPage(t *testing.T) {
 
 func TestShowPage_MissingPath(t *testing.T) {
 	srv, repoID := fixtureRepo(t)
-	resp, _ := http.Get(srv.URL + "/api/repos/" + repoID + "/pages/show")
+	resp := mustGet(t, srv.URL+"/api/repos/"+repoID+"/pages/show")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("missing ?path should yield 400, got %d", resp.StatusCode)
@@ -493,7 +506,7 @@ func TestShowPage_MissingPath(t *testing.T) {
 
 func TestShowPage_NotFound(t *testing.T) {
 	srv, repoID := fixtureRepo(t)
-	resp, _ := http.Get(srv.URL + "/api/repos/" + repoID + "/pages/show?path=no-such-file.go")
+	resp := mustGet(t, srv.URL+"/api/repos/"+repoID+"/pages/show?path=no-such-file.go")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)

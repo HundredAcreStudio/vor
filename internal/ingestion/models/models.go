@@ -144,19 +144,19 @@ type Symbol struct {
 	// NestingDepth is the maximum nesting depth of control-flow constructs
 	// inside the symbol's body (0 = none). Populated by the per-language
 	// parser; consumed by the deep_nesting biomarker.
-	NestingDepth int
-	Language     string
-	ParentName   *string // for methods: containing class
-	IsExportedSymbol bool // C/C++ dllexport markers, Go uppercase, etc.
+	NestingDepth     int
+	Language         string
+	ParentName       *string // for methods: containing class
+	IsExportedSymbol bool    // C/C++ dllexport markers, Go uppercase, etc.
 }
 
 // CallSite is a function/method call extracted from a file.
 type CallSite struct {
-	TargetName      string
-	ReceiverName    *string // object/class for method calls
-	CallerSymbolID  *string // enclosing symbol; nil if top-level call
-	Line            int     // 1-indexed
-	ArgumentCount   *int    // nil if unknown
+	TargetName     string
+	ReceiverName   *string // object/class for method calls
+	CallerSymbolID *string // enclosing symbol; nil if top-level call
+	Line           int     // 1-indexed
+	ArgumentCount  *int    // nil if unknown
 }
 
 // HeritageRelation describes one extends/implements/trait_impl/mixin link.

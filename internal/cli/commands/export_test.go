@@ -38,23 +38,23 @@ func exportFixture(t *testing.T) (string, string) {
 	ws := wikistore.New(conn)
 	if _, err := ws.Upsert(context.Background(), models.Page{
 		RepositoryID: repoRow.ID, PageType: models.PageKindFileOverview,
-		Title:        "main.go overview",
-		Content:      "# main.go\n\nThe entrypoint.\n",
-		Summary:      "Entrypoint",
-		TargetPath:   "main.go",
-		SourceHash:   "h1", ModelName: "mock-1", ProviderName: "mock",
-		InputTokens:  5, OutputTokens: 2, Confidence: 1.0,
+		Title:      "main.go overview",
+		Content:    "# main.go\n\nThe entrypoint.\n",
+		Summary:    "Entrypoint",
+		TargetPath: "main.go",
+		SourceHash: "h1", ModelName: "mock-1", ProviderName: "mock",
+		InputTokens: 5, OutputTokens: 2, Confidence: 1.0,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ws.Upsert(context.Background(), models.Page{
 		RepositoryID: repoRow.ID, PageType: models.PageKindSymbolDetail,
-		Title:        "main:Sym",
-		Content:      "# Sym\n\nA function.\n",
-		Summary:      "fn",
-		TargetPath:   "main.go::Sym",
-		SourceHash:   "h2", ModelName: "mock-1", ProviderName: "mock",
-		InputTokens:  3, OutputTokens: 1, Confidence: 1.0,
+		Title:      "main:Sym",
+		Content:    "# Sym\n\nA function.\n",
+		Summary:    "fn",
+		TargetPath: "main.go::Sym",
+		SourceHash: "h2", ModelName: "mock-1", ProviderName: "mock",
+		InputTokens: 3, OutputTokens: 1, Confidence: 1.0,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -188,4 +188,3 @@ func TestExport_UnknownFormatErrors(t *testing.T) {
 		t.Error("expected error for unknown format")
 	}
 }
-

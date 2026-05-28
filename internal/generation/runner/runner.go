@@ -76,21 +76,21 @@ type Status string
 
 const (
 	StatusGenerated Status = "generated"
-	StatusSkipped   Status = "skipped"   // fresh page already exists; --force overrides
+	StatusSkipped   Status = "skipped" // fresh page already exists; --force overrides
 	StatusDryRun    Status = "dry_run"
 	StatusError     Status = "error"
-	StatusMissing   Status = "missing"   // graph_nodes points at a path that's no longer on disk
+	StatusMissing   Status = "missing" // graph_nodes points at a path that's no longer on disk
 )
 
 // Summary is the aggregate result of Run.
 type Summary struct {
-	Files            []FileResult
-	GeneratedCount   int
-	SkippedCount     int
-	ErrorCount       int
-	MissingCount     int
-	DryRunCount      int
-	TotalInputTokens int
+	Files             []FileResult
+	GeneratedCount    int
+	SkippedCount      int
+	ErrorCount        int
+	MissingCount      int
+	DryRunCount       int
+	TotalInputTokens  int
 	TotalOutputTokens int
 	TotalCachedTokens int
 }

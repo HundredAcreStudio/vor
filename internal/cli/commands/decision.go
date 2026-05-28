@@ -176,15 +176,15 @@ func newDecisionShowCmd() *cobra.Command {
 
 func newDecisionAddCmd() *cobra.Command {
 	var (
-		repoPath      string
-		repoID        string
-		title         string
-		decisionText  string
-		rationale     string
-		status        string
-		tagsCSV       string
-		affectedCSV   string
-		confidence    float64
+		repoPath     string
+		repoID       string
+		title        string
+		decisionText string
+		rationale    string
+		status       string
+		tagsCSV      string
+		affectedCSV  string
+		confidence   float64
 	)
 	cmd := &cobra.Command{
 		Use:   "add",

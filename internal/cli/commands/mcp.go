@@ -16,9 +16,9 @@ import (
 // Claude Code / Cursor as the configured MCP command.
 //
 // Two operating modes:
-//   * default — single repo. Resolves --repo to one repository_id;
+//   - default — single repo. Resolves --repo to one repository_id;
 //     every tool call queries that repo.
-//   * --workspace — the daemon serves N repos from one shared DB.
+//   - --workspace — the daemon serves N repos from one shared DB.
 //     Tool calls pass a `repo` argument (alias / id / path). A new
 //     `repowise_workspace_repos` tool lists the registered repos so
 //     agents can discover them.

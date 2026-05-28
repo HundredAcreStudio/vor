@@ -64,15 +64,15 @@ func TestTraverse_FiltersAreApplied(t *testing.T) {
 
 	// Must NOT include any of these.
 	notWant := []string{
-		"node_modules/lib/junk.js",   // blocked dir
-		"build/built.js",             // .gitignore'd
-		"bundle.min.js",              // blocked filename pattern
-		"package-lock.json",          // blocked filename pattern
-		"secret.txt",                 // .repowiseIgnore
-		"ignored_by_repowise.py",     // .repowiseIgnore
-		"ignored_by_gitignore.py",    // .gitignore
-		"pkg/generated.go",           // generated header marker
-		"pkg/binary.go",              // null byte → binary
+		"node_modules/lib/junk.js", // blocked dir
+		"build/built.js",           // .gitignore'd
+		"bundle.min.js",            // blocked filename pattern
+		"package-lock.json",        // blocked filename pattern
+		"secret.txt",               // .repowiseIgnore
+		"ignored_by_repowise.py",   // .repowiseIgnore
+		"ignored_by_gitignore.py",  // .gitignore
+		"pkg/generated.go",         // generated header marker
+		"pkg/binary.go",            // null byte → binary
 	}
 	for _, nw := range notWant {
 		if slices.Contains(paths, nw) {

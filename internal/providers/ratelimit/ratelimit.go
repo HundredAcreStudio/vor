@@ -19,10 +19,10 @@ import (
 // effort" smoothing layer. Errors from actual provider rate limiting still
 // need to be handled by the retry layer.
 type Limiter struct {
-	rpm   *rate.Limiter
-	tpm   *rate.Limiter
-	rpmN  int
-	tpmN  int
+	rpm  *rate.Limiter
+	tpm  *rate.Limiter
+	rpmN int
+	tpmN int
 }
 
 // New constructs a Limiter with the given requests-per-minute and

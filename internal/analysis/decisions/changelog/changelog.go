@@ -1,13 +1,13 @@
 // Package changelog mines decisions from CHANGELOG.md (and HISTORY.md,
 // CHANGES.md) in the repo root. Recognises Keep-a-Changelog v1.x format:
 //
-//   ## [1.0.0] - 2024-01-15
-//   ### Added
-//   - new feature x
-//   ### Changed
-//   - **BREAKING**: switched from y to z
-//   ### Removed
-//   - old foo API
+//	## [1.0.0] - 2024-01-15
+//	### Added
+//	- new feature x
+//	### Changed
+//	- **BREAKING**: switched from y to z
+//	### Removed
+//	- old foo API
 //
 // Each release section produces zero or more decision Records depending
 // on its sub-sections. Items under "Changed" and "Removed" that mention
@@ -54,10 +54,12 @@ var candidateFilenames = []string{
 }
 
 // versionHeader matches Keep-a-Changelog section headers:
-//   ## [1.0.0] - 2024-01-15
-//   ## v1.2.3
-//   ## 0.9.0
-//   ## [Unreleased]
+//
+//	## [1.0.0] - 2024-01-15
+//	## v1.2.3
+//	## 0.9.0
+//	## [Unreleased]
+//
 // Group 1 captures the version label, group 2 the trailing date if any.
 var versionHeader = regexp.MustCompile(
 	`^##\s*\[?(v?\d+\.\d+\.\d+(?:[-+][\w.\-]+)?|Unreleased|UNRELEASED)\]?(?:\s*[-–—]\s*(.*))?$`,
@@ -109,17 +111,17 @@ func parseChangelog(src, relPath string, now time.Time) []decisions.Record {
 		}
 		title := "BREAKING (" + currentVersion + "): " + truncate(body, 60)
 		rec := decisions.Record{
-			Title:         title,
-			Source:        decisions.SourceChangelog,
-			Status:        decisions.DefaultStatus,
-			Decision:      body,
-			EvidenceFile:  relPath,
-			EvidenceLine:  i + 1,
-			SourceQuote:   trimmed,
-			Confidence:    0.85,
-			Verification:  decisions.VerificationExact,
-			CreatedAt:     now,
-			Tags:          []string{"changelog", "breaking", currentVersion},
+			Title:        title,
+			Source:       decisions.SourceChangelog,
+			Status:       decisions.DefaultStatus,
+			Decision:     body,
+			EvidenceFile: relPath,
+			EvidenceLine: i + 1,
+			SourceQuote:  trimmed,
+			Confidence:   0.85,
+			Verification: decisions.VerificationExact,
+			CreatedAt:    now,
+			Tags:         []string{"changelog", "breaking", currentVersion},
 		}
 		if currentDate != "" {
 			rec.Tags = append(rec.Tags, currentDate)

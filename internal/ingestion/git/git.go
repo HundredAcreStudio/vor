@@ -68,9 +68,9 @@ type PerFile struct {
 	FirstCommitAt time.Time
 	LastCommitAt  time.Time
 
-	TopAuthors         []AuthorShare    // sorted by CommitCount desc, capped at 10
-	PrimaryOwner       *AuthorShare     // top of TopAuthors
-	RecentOwner        *AuthorShare     // top author within 90d window
+	TopAuthors         []AuthorShare     // sorted by CommitCount desc, capped at 10
+	PrimaryOwner       *AuthorShare      // top of TopAuthors
+	RecentOwner        *AuthorShare      // top author within 90d window
 	CoChangePartners   []CoChangePartner // sorted by Count desc, capped at 10
 	SignificantCommits []string          // commit SHAs flagged "significant" — empty for v1
 

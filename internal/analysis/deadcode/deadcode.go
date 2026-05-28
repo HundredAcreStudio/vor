@@ -14,10 +14,10 @@
 // finding's Confidence reflects how confident we are that the node is
 // truly dead vs maybe-called-dynamically:
 //
-//  - 1.0  unreachable file with zero in-edges (no one ever imports it)
-//  - 0.8  unreachable symbol with zero in-edges
-//  - 0.5  unreachable symbol that has some in-edges (those edges point at
-//         dead callers too, so it's circular dead code — still likely dead)
+//   - 1.0  unreachable file with zero in-edges (no one ever imports it)
+//   - 0.8  unreachable symbol with zero in-edges
+//   - 0.5  unreachable symbol that has some in-edges (those edges point at
+//     dead callers too, so it's circular dead code — still likely dead)
 //
 // Confidence thresholds live on the Analyzer so callers can tune.
 package deadcode

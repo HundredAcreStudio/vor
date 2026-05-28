@@ -59,8 +59,8 @@ to findings the analyzer flagged SafeToDelete (confidence ≥ 0.9).`,
 			for rows.Next() {
 				var (
 					kind, path, symbolName, symbolKind, reason string
-					conf                                         float64
-					safe                                         int
+					conf                                       float64
+					safe                                       int
 				)
 				if err := rows.Scan(&kind, &path, &symbolName, &symbolKind, &conf, &reason, &safe); err != nil {
 					return err

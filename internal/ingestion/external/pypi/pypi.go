@@ -34,9 +34,9 @@ type pyproject struct {
 
 	Tool struct {
 		Poetry struct {
-			Dependencies    map[string]any            `toml:"dependencies"`
-			DevDependencies map[string]any            `toml:"dev-dependencies"`
-			Group           map[string]poetryGroup    `toml:"group"`
+			Dependencies    map[string]any         `toml:"dependencies"`
+			DevDependencies map[string]any         `toml:"dev-dependencies"`
+			Group           map[string]poetryGroup `toml:"group"`
 		} `toml:"poetry"`
 	} `toml:"tool"`
 }

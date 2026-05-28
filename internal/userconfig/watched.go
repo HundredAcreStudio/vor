@@ -23,13 +23,13 @@ type WatchedRegistry struct {
 }
 
 type WatchedRepo struct {
-	Path           string    `json:"path"`
-	Alias          string    `json:"alias,omitempty"`
-	WorkspaceRoot  string    `json:"workspace_root,omitempty"`
-	FirstSeenAt    time.Time `json:"first_seen_at"`
-	LastWatchedAt  time.Time `json:"last_watched_at"`
-	LastUpdatedAt  time.Time `json:"last_updated_at,omitempty"`
-	UpdateCount    int       `json:"update_count"`
+	Path          string    `json:"path"`
+	Alias         string    `json:"alias,omitempty"`
+	WorkspaceRoot string    `json:"workspace_root,omitempty"`
+	FirstSeenAt   time.Time `json:"first_seen_at"`
+	LastWatchedAt time.Time `json:"last_watched_at"`
+	LastUpdatedAt time.Time `json:"last_updated_at,omitempty"`
+	UpdateCount   int       `json:"update_count"`
 }
 
 // LoadWatched reads the registry. Returns an empty *WatchedRegistry

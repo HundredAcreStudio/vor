@@ -211,14 +211,14 @@ func absorbCall(caps map[string][]*sitter.Node, source []byte) *models.CallSite 
 }
 
 var javaBranchNodeTypes = map[string]struct{}{
-	"if_statement":          {},
-	"for_statement":         {},
+	"if_statement":           {},
+	"for_statement":          {},
 	"enhanced_for_statement": {},
-	"while_statement":       {},
-	"do_statement":          {},
-	"switch_label":          {},
-	"catch_clause":          {},
-	"ternary_expression":    {},
+	"while_statement":        {},
+	"do_statement":           {},
+	"switch_label":           {},
+	"catch_clause":           {},
+	"ternary_expression":     {},
 }
 
 func kindForNode(n *sitter.Node) models.SymbolKind {

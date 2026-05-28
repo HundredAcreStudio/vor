@@ -1,11 +1,11 @@
 // Package integration runs end-to-end tests of the ingest pipeline
 // against language-specific fixture repositories. Each test:
 //
-//   1. Opens a fresh SQLite DB in t.TempDir() so persistence is isolated.
-//   2. Points pipeline.Run() at testdata/fixtures/<lang>-project.
-//   3. Asserts the resulting graph has the import edges the language
-//      resolver should have produced — proving the modular resolver
-//      registry handles each language end-to-end.
+//  1. Opens a fresh SQLite DB in t.TempDir() so persistence is isolated.
+//  2. Points pipeline.Run() at testdata/fixtures/<lang>-project.
+//  3. Asserts the resulting graph has the import edges the language
+//     resolver should have produced — proving the modular resolver
+//     registry handles each language end-to-end.
 //
 // Add a new language to the matrix when its resolver lands.
 package integration

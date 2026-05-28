@@ -251,16 +251,16 @@ func absorbCall(caps map[string][]*sitter.Node, source []byte) *models.CallSite 
 // inspect its child — for v1 we accept that default adds 1 (matches
 // most popular linters' McCabe output).
 var tsBranchNodeTypes = map[string]struct{}{
-	"if_statement":         {},
-	"for_statement":        {},
-	"for_in_statement":     {},
-	"for_of_statement":     {},
-	"while_statement":      {},
-	"do_statement":         {},
-	"switch_case":          {},
-	"catch_clause":         {},
-	"ternary_expression":   {},
-	"else_clause":          {}, // counts else-if chains
+	"if_statement":       {},
+	"for_statement":      {},
+	"for_in_statement":   {},
+	"for_of_statement":   {},
+	"while_statement":    {},
+	"do_statement":       {},
+	"switch_case":        {},
+	"catch_clause":       {},
+	"ternary_expression": {},
+	"else_clause":        {}, // counts else-if chains
 }
 
 // ---- TypeScript-specific rules ---------------------------------------------

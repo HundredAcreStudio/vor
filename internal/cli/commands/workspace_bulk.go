@@ -113,8 +113,8 @@ func collectRepoStatusRow(ctx context.Context, e workspace.Entry) string {
 // least one update failed.
 func newWorkspaceUpdateCmd() *cobra.Command {
 	var (
-		root        string
-		gitMaxCmts  int
+		root       string
+		gitMaxCmts int
 	)
 	cmd := &cobra.Command{
 		Use:   "update",

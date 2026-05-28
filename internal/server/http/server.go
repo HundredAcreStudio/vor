@@ -147,9 +147,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 func healthHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]any{
-			"status":     "ok",
-			"version":    version.Current(),
-			"timestamp":  time.Now().UTC().Format(time.RFC3339),
+			"status":    "ok",
+			"version":   version.Current(),
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 		})
 	}
 }

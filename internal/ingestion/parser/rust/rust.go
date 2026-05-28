@@ -203,14 +203,14 @@ func absorbCall(caps map[string][]*sitter.Node, source []byte) *models.CallSite 
 // match_arm covers each arm of a match expression. if_let_expression /
 // while_let_expression are pattern-matching variants.
 var rustBranchNodeTypes = map[string]struct{}{
-	"if_expression":         {},
-	"if_let_expression":     {},
-	"while_expression":      {},
-	"while_let_expression":  {},
-	"for_expression":        {},
-	"loop_expression":       {},
-	"match_arm":             {},
-	"try_expression":        {}, // ?-operator counts as a branch
+	"if_expression":        {},
+	"if_let_expression":    {},
+	"while_expression":     {},
+	"while_let_expression": {},
+	"for_expression":       {},
+	"loop_expression":      {},
+	"match_arm":            {},
+	"try_expression":       {}, // ?-operator counts as a branch
 }
 
 func kindForNode(n *sitter.Node) models.SymbolKind {

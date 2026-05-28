@@ -6,22 +6,22 @@
 //
 // Layout:
 //
-//   $XDG_CONFIG_HOME/repowise/
-//     config.yaml          user-global defaults (provider, model,
-//                          db_url, log_level, ...) that override
-//                          built-in defaults but lose to repo-local
-//                          config and env vars.
+//	$XDG_CONFIG_HOME/repowise/
+//	  config.yaml          user-global defaults (provider, model,
+//	                       db_url, log_level, ...) that override
+//	                       built-in defaults but lose to repo-local
+//	                       config and env vars.
 //
-//   $XDG_STATE_HOME/repowise/
-//     daemon.json          last-started daemon (pid, addr, started_at,
-//                          workspace_root). Written by `repowise
-//                          serve` on startup, cleared on graceful
-//                          shutdown.
-//     workspaces.yaml      registry of known workspace roots so the
-//                          daemon / status command don't need --root
-//                          on every invocation.
-//     watched.json         per-repo last-watched / last-update
-//                          timestamps maintained by `repowise watch`.
+//	$XDG_STATE_HOME/repowise/
+//	  daemon.json          last-started daemon (pid, addr, started_at,
+//	                       workspace_root). Written by `repowise
+//	                       serve` on startup, cleared on graceful
+//	                       shutdown.
+//	  workspaces.yaml      registry of known workspace roots so the
+//	                       daemon / status command don't need --root
+//	                       on every invocation.
+//	  watched.json         per-repo last-watched / last-update
+//	                       timestamps maintained by `repowise watch`.
 package userconfig
 
 import (

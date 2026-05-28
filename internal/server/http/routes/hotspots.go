@@ -17,15 +17,15 @@ func MountHotspots(r chi.Router, deps Deps) {
 }
 
 type hotspotDTO struct {
-	Path             string   `json:"path"`
-	ChurnPercentile  float64  `json:"churnPercentile"`
-	CommitCountTotal int      `json:"commitCountTotal"`
-	CommitCount90d   int      `json:"commitCount90d"`
-	PrimaryOwner     string   `json:"primaryOwner,omitempty"`
-	BusFactor        int      `json:"busFactor"`
-	ContributorCount int      `json:"contributorCount"`
-	LinesAdded90d    int      `json:"linesAdded90d"`
-	LinesDeleted90d  int      `json:"linesDeleted90d"`
+	Path             string  `json:"path"`
+	ChurnPercentile  float64 `json:"churnPercentile"`
+	CommitCountTotal int     `json:"commitCountTotal"`
+	CommitCount90d   int     `json:"commitCount90d"`
+	PrimaryOwner     string  `json:"primaryOwner,omitempty"`
+	BusFactor        int     `json:"busFactor"`
+	ContributorCount int     `json:"contributorCount"`
+	LinesAdded90d    int     `json:"linesAdded90d"`
+	LinesDeleted90d  int     `json:"linesDeleted90d"`
 }
 
 func listHotspots(deps Deps) http.HandlerFunc {

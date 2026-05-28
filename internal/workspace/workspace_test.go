@@ -133,11 +133,11 @@ func TestSaveLoad_Roundtrip(t *testing.T) {
 
 func TestDefaultAliasFromPath(t *testing.T) {
 	cases := map[string]string{
-		"/repos/my-api":       "my-api",
-		"/repos/My API":       "my-api",
-		"/repos/foo_bar_baz":  "foo-bar-baz",
-		"/repos/v3.0.0/svc":   "svc",
-		"/repos/123-svc":      "123-svc",
+		"/repos/my-api":      "my-api",
+		"/repos/My API":      "my-api",
+		"/repos/foo_bar_baz": "foo-bar-baz",
+		"/repos/v3.0.0/svc":  "svc",
+		"/repos/123-svc":     "123-svc",
 	}
 	for in, want := range cases {
 		if got := workspace.DefaultAliasFromPath(in); got != want {

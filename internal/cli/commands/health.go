@@ -17,14 +17,15 @@ import (
 // tables and prints a focused report. Read-only — no re-ingest.
 //
 // Flag parity with the Python implementation (lightly adapted):
-//   --file        path filter (substring match)
-//   --module      module/dir prefix filter (e.g. "internal/foo")
-//   --refactoring-targets
-//                 alternative view ranking files by impact/effort
-//                 instead of raw worst score
-//   --trend       last 10 snapshots (snapshot table TODO; returns a
-//                 clear "not yet implemented" message)
-//   --coverage    .lcov ingest for untested-hotspot signal (TODO)
+//
+//	--file        path filter (substring match)
+//	--module      module/dir prefix filter (e.g. "internal/foo")
+//	--refactoring-targets
+//	              alternative view ranking files by impact/effort
+//	              instead of raw worst score
+//	--trend       last 10 snapshots (snapshot table TODO; returns a
+//	              clear "not yet implemented" message)
+//	--coverage    .lcov ingest for untested-hotspot signal (TODO)
 func newHealthCmd() *cobra.Command {
 	var (
 		repoPath           string

@@ -59,10 +59,10 @@ func (g *DirectoryOverviewGenerator) Generate(ctx context.Context, repoID string
 		Confidence:   0.9, // slightly lower than file_overview — directory inference is more synthesis
 		Freshness:    models.FreshnessFresh,
 		Metadata: map[string]string{
-			"stop_reason":    resp.StopReason,
-			"latency_ms":     fmt.Sprintf("%d", resp.Latency.Milliseconds()),
-			"child_count":    fmt.Sprintf("%d", len(bundle.Children)),
-			"subdir_count":   fmt.Sprintf("%d", len(bundle.Subdirectories)),
+			"stop_reason":  resp.StopReason,
+			"latency_ms":   fmt.Sprintf("%d", resp.Latency.Milliseconds()),
+			"child_count":  fmt.Sprintf("%d", len(bundle.Children)),
+			"subdir_count": fmt.Sprintf("%d", len(bundle.Subdirectories)),
 		},
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),

@@ -154,8 +154,8 @@ const baseColumns = `
 `
 
 var (
-	selectByID = "SELECT " + baseColumns + " FROM wiki_pages WHERE id = ?"
-	selectByRepo = "SELECT " + baseColumns + " FROM wiki_pages WHERE repository_id = ? ORDER BY target_path"
+	selectByID     = "SELECT " + baseColumns + " FROM wiki_pages WHERE id = ?"
+	selectByRepo   = "SELECT " + baseColumns + " FROM wiki_pages WHERE repository_id = ? ORDER BY target_path"
 	selectByTarget = "SELECT " + baseColumns + " FROM wiki_pages WHERE repository_id = ? AND page_type = ? AND target_path = ?"
 )
 

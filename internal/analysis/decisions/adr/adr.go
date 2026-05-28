@@ -1,9 +1,9 @@
 // Package adr mines Architectural Decision Records (ADRs) from markdown
 // files. Recognises both Nygard and MADR conventions:
 //
-//   docs/adr/0001-use-postgres.md
-//   docs/architecture/decisions/0042-event-sourcing.md
-//   doc/adr/...
+//	docs/adr/0001-use-postgres.md
+//	docs/architecture/decisions/0042-event-sourcing.md
+//	doc/adr/...
 //
 // Files matching the ADR-naming convention are parsed for their title
 // (first H1), status (from "## Status" section if present), context
@@ -193,10 +193,12 @@ func splitSections(src string) map[string]string {
 }
 
 // normaliseStatus maps ADR status text to the schema's enum:
-//   "accepted", "active"     → "active"
-//   "proposed"               → "proposed"
-//   "deprecated", "rejected" → "deprecated"
-//   "superseded"             → "superseded"
+//
+//	"accepted", "active"     → "active"
+//	"proposed"               → "proposed"
+//	"deprecated", "rejected" → "deprecated"
+//	"superseded"             → "superseded"
+//
 // Anything else falls through to DefaultStatus.
 func normaliseStatus(raw string) string {
 	s := strings.ToLower(strings.TrimSpace(raw))
@@ -250,4 +252,3 @@ func truncateLine(s string) string {
 	}
 	return s
 }
-

@@ -1,7 +1,7 @@
 // Package java is the Java import resolver. Maps dotted package paths
 // to .java files under configured source roots:
 //
-//   `com.example.foo.Bar` → <root>/com/example/foo/Bar.java
+//	`com.example.foo.Bar` → <root>/com/example/foo/Bar.java
 //
 // Source roots default to ["src/main/java", "src", ""] when
 // ctx.JavaSourceRoots is empty. First-match wins.
