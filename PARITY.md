@@ -72,6 +72,8 @@ yet the LLM-synthesis layer.
 | — | `repowise_pipeline_log` ➕ | ➕ observability |
 | — | `repowise_workspace_repos` ➕ | ➕ multi-repo discovery |
 | — | `repowise_security` ➕ | ➕ pattern-based security findings |
+| — | `repowise_reindex` ➕ | ➕ async re-index (returns run_id; poll pipeline_log) |
+| — | `repowise_security_scan` ➕ | ➕ run the security scan, replace findings |
 
 The LLM-synthesis tools (`get_answer`, `get_context`, `get_why`) and
 the graph-traversal tools (`get_community`, `get_dependency_path`,

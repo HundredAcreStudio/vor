@@ -143,6 +143,14 @@ decision-to-symbol links populate.
 
 ## Phase 17 — Server completeness & client UX
 
+- ✅ **MCP mutation tools** (single-user local): `repowise_reindex`
+  (async — returns a run_id, runs the pipeline in the background, guards
+  against double-firing an in-progress run; poll `repowise_pipeline_log`)
+  and `repowise_security_scan` (sync). Lets an attached agent refresh the
+  index itself instead of shelling out. Left ungated since the target is
+  a single-user local daemon; revisit `--allow-write` if it ever serves
+  multiple clients.
+- ✅ `repowise serve` prints MCP client-install instructions at startup.
 - GitHub + GitLab **webhooks**: auto re-index on push, signature
   verification, background job dispatch.
 - **Scheduler** (`robfig/cron`): periodic maintenance (re-index drift,

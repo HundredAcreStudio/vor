@@ -182,6 +182,19 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolPipelineLog))
 
 	s.srv.AddTool(mcp.NewTool(
+		"repowise_reindex",
+		mcp.WithDescription("Re-index a repo so the data reflects current source. ASYNCHRONOUS: returns a run_id immediately and runs in the background — poll repowise_pipeline_log for phase progress. Mode 'update' (default) is incremental (reuses the parse cache); 'init' forces a full pass. A run already in progress is returned rather than duplicated."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+		mcp.WithString("mode", mcp.DefaultString("update"), mcp.Description("'update' (incremental, default) or 'init' (full re-index).")),
+	), s.wrap(s.toolReindex))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_security_scan",
+		mcp.WithDescription("Run the pattern-based security scanner over the repo and replace stored findings. Synchronous (regex over source — no LLM). Returns a severity breakdown; read individual findings with repowise_security."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+	), s.wrap(s.toolSecurityScan))
+
+	s.srv.AddTool(mcp.NewTool(
 		"repowise_decisions",
 		mcp.WithDescription("Architectural decisions extracted from the codebase. Sources include inline-marker comments (DECISION:, WHY:, TRADEOFF:), ADR files under docs/adr, BREAKING entries in CHANGELOG.md, and Conventional Commits with ! markers or BREAKING CHANGE: footers. Each record carries source provenance (file + line or commit SHA) so the agent can verify quotes."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
