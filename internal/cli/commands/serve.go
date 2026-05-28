@@ -96,7 +96,14 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 			}
 
 			if mcpEnabled {
-				mcpOpts := mcp.Options{DB: conn, Logger: logger}
+				// Optionally wire an LLM provider so get_answer / get_why
+				// synthesise rather than returning raw context. Degrades
+				// to nil (raw context) when no key is configured.
+				provider, model := buildOptionalProvider(cfg)
+				mcpOpts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model}
+				if provider != nil {
+					logger.Info("serve: LLM synthesis enabled", "provider", cfg.Provider)
+				}
 				switch {
 				case autoMode:
 					// Span every workspace registered in the user-global

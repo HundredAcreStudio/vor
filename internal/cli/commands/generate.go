@@ -184,6 +184,24 @@ func parsePageKinds(csv string) ([]models.PageKind, error) {
 	return out, nil
 }
 
+// buildOptionalProvider builds the configured provider for read-side
+// daemons (mcp / serve) where LLM access is a bonus, not a
+// requirement. Returns (nil, nil) when the provider can't be built
+// (e.g. no API key) so the synthesis tools degrade gracefully rather
+// than refusing to start. The mock provider is never auto-wired here —
+// a deterministic stub would make get_answer return nonsense; better
+// to advertise "no synthesis" honestly.
+func buildOptionalProvider(cfg config.Config) (providers.Provider, string) {
+	if cfg.Provider == "" || cfg.Provider == "mock" {
+		return nil, ""
+	}
+	prov, err := buildProvider(cfg.Provider, cfg.Model, cfg)
+	if err != nil {
+		return nil, ""
+	}
+	return prov, cfg.Model
+}
+
 // buildProvider hydrates a Provider with config-derived options. For now
 // only api_key is plumbed through — base_url / version are advanced
 // knobs the YAML config doesn't expose yet.

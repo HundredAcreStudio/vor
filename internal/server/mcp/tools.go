@@ -37,6 +37,30 @@ func (s *Server) registerTools() {
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 	), s.wrap(s.toolStatus))
 
+	// --- task-oriented synthesis tools ---
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_get_context",
+		mcp.WithDescription("Triage card for one or more files/symbols — kind, name, language, generated summary, git hotspot bit, the decision_records that touch it, and child symbol_ids you can pipe into repowise_symbol. Pure indexed data, no LLM. The cheapest way to orient on a target before reading source."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+		mcp.WithArray("targets", mcp.Description("File paths or symbol_ids (e.g. 'internal/foo.go' or 'internal/foo.go::Bar'). Multiple allowed in one call."), mcp.Items(map[string]any{"type": "string"})),
+		mcp.WithString("target", mcp.Description("Single-target convenience alternative to `targets`.")),
+	), s.wrap(s.toolContext))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_get_why",
+		mcp.WithDescription("Architectural decision archaeology — WHY the code is shaped this way. Matches decision records (inline markers, ADRs, CHANGELOG, commit archaeology) by query and/or target file, then synthesises the rationale (when an LLM provider is configured) with the raw records attached for verification. Call before refactors or pattern divergences."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+		mcp.WithString("query", mcp.Description("Free-text question, e.g. 'why JWT instead of sessions'.")),
+		mcp.WithArray("targets", mcp.Description("File paths to scope the search to."), mcp.Items(map[string]any{"type": "string"})),
+	), s.wrap(s.toolWhy))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_get_answer",
+		mcp.WithDescription("Synthesised answer to a natural-language question about the codebase, grounded in generated documentation + symbol references, with the citations it used and a calibrated confidence (high/medium/low). When no LLM provider is configured it returns the retrieved candidates as best_guesses instead. First call for 'how does X work' / 'where is Y handled'."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+		mcp.WithString("question", mcp.Required(), mcp.Description("The natural-language question to answer.")),
+	), s.wrap(s.toolAnswer))
+
 	s.srv.AddTool(mcp.NewTool(
 		"repowise_hotspots",
 		mcp.WithDescription("Files with high git churn. Returns the top N files by churn percentile, with owner, contributor count, and bus factor. Use this to find where a refactoring effort will have outsized impact."),

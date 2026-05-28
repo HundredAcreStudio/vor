@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/repowise-dev/repowise-go/internal/config"
 	"github.com/repowise-dev/repowise-go/internal/logging"
 	"github.com/repowise-dev/repowise-go/internal/server/mcp"
 	"github.com/repowise-dev/repowise-go/internal/workspace"
@@ -57,7 +58,13 @@ Workspace mode — one daemon serving every member repo:
 				Out:    os.Stderr,
 			})
 
-			opts := mcp.Options{DB: conn, Logger: logger}
+			// Optionally wire an LLM provider so the synthesis tools
+			// (get_answer, get_why) work. Absent a key they degrade to
+			// returning raw retrieved material — the server still starts.
+			cfg, _ := config.Load(repoPath)
+			provider, model := buildOptionalProvider(cfg)
+
+			opts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model}
 
 			if workspaceMode {
 				wsRoot := workspaceRootIn

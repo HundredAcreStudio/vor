@@ -32,6 +32,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/repowise-dev/repowise-go/internal/providers"
 	"github.com/repowise-dev/repowise-go/internal/version"
 	"github.com/repowise-dev/repowise-go/internal/workspace"
 )
@@ -57,6 +58,16 @@ type Options struct {
 	// Alias resolution searches each root in order; the first match
 	// wins. repowise_workspace_repos unions members across all roots.
 	WorkspaceRoots []string
+
+	// Provider powers the LLM-synthesis tools (get_answer, get_why).
+	// Optional — when nil those tools degrade to returning the
+	// retrieved raw context with a "synthesis unavailable" note rather
+	// than erroring. get_context never needs it (pure data assembly).
+	Provider providers.Provider
+
+	// Model is passed through on synthesis requests. Empty lets the
+	// provider pick its default.
+	Model string
 
 	// Logger receives structured tool-call logs. Defaults to slog.Default().
 	Logger *slog.Logger
