@@ -103,7 +103,7 @@ For a feature-by-feature comparison against the Python implementation
 | Documentation generation — architecture page | ⏳ |
 | Decision intelligence — inline markers, ADR, CHANGELOG, commit archaeology | ✅ |
 | HTTP API (REST, `/api/repos/{id}/*` + `/api/workspace*`) | ✅ |
-| MCP server — stdio **and** Streamable HTTP, 18 tools (incl. LLM-synthesis get_answer/get_why/get_context), per-call repo routing | ✅ |
+| MCP server — stdio **and** Streamable HTTP, 22 tools (LLM-synthesis get_answer/get_why/get_context + graph-traversal community/dependency-path/flows/architecture), per-call repo routing | ✅ |
 | Workspace / multi-repo — bulk ops, cross-repo co-change, `serve --auto` | ✅ |
 | Pipeline orchestrator — phase tracking, run_id grouping, resume | ✅ |
 | Auto CLAUDE.md regeneration on init/update | ✅ |
