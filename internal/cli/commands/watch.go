@@ -19,6 +19,7 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/logging"
 	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 	"github.com/repowise-dev/repowise-go/internal/pipeline"
+	"github.com/repowise-dev/repowise-go/internal/workspace"
 )
 
 // newWatchCmd starts a file-watcher that runs `repowise update` after
@@ -31,8 +32,9 @@ import (
 // honoured).
 func newWatchCmd() *cobra.Command {
 	var (
-		repoPath   string
-		debounceMs int
+		repoPath      string
+		debounceMs    int
+		workspaceMode bool
 	)
 	cmd := &cobra.Command{
 		Use:   "watch [PATH]",
@@ -51,6 +53,17 @@ func newWatchCmd() *cobra.Command {
 			if debounceMs <= 0 {
 				debounceMs = 2000
 			}
+			logger := logging.New(logging.Options{
+				Format: logging.FormatAuto,
+				Level:  logging.ParseLevel("info"),
+				Out:    os.Stderr,
+			})
+
+			if workspaceMode {
+				return runWorkspaceWatch(ctx, absRoot,
+					time.Duration(debounceMs)*time.Millisecond,
+					logger, cmd.OutOrStdout())
+			}
 
 			conn, _, err := openDB(ctx, root)
 			if err != nil {
@@ -61,12 +74,6 @@ func newWatchCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("ensure repo: %w", err)
 			}
-
-			logger := logging.New(logging.Options{
-				Format: logging.FormatAuto,
-				Level:  logging.ParseLevel("info"),
-				Out:    os.Stderr,
-			})
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "watching %s (debounce %dms) — Ctrl-C to stop\n", absRoot, debounceMs)
@@ -82,7 +89,85 @@ func newWatchCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path (overridden by positional PATH)")
 	cmd.Flags().IntVar(&debounceMs, "debounce", 2000, "debounce delay in ms")
+	cmd.Flags().BoolVar(&workspaceMode, "workspace", false, "watch every repo registered in the workspace")
 	return cmd
+}
+
+// runWorkspaceWatch spins up one fs-watcher per registered repo. Each
+// watcher independently debounces and triggers `pipeline.Run` against
+// its own repo on change. A single Ctrl-C cancels all of them via the
+// shared context.
+//
+// Repos are watched in parallel because:
+//   - a debounce timer on repo A shouldn't block updates on repo B
+//   - fsnotify watches are non-recursive per watcher instance; one
+//     watcher per repo lets each maintain its own dynamic add-set
+//     for new subdirectories
+func runWorkspaceWatch(
+	ctx context.Context, wsRoot string, debounce time.Duration,
+	logger *slog.Logger, out io.Writer,
+) error {
+	state, err := workspace.Load(wsRoot)
+	if err != nil {
+		return fmt.Errorf("load workspace.json: %w", err)
+	}
+	if len(state.Repos) == 0 {
+		return fmt.Errorf("no repos registered at %s — `repowise workspace add PATH`", wsRoot)
+	}
+	fmt.Fprintf(out, "watching %d repo(s) under %s (debounce %s) — Ctrl-C to stop\n",
+		len(state.Repos), wsRoot, debounce)
+	for _, e := range state.Sorted() {
+		fmt.Fprintf(out, "  %s → %s\n", e.Alias, e.Path)
+	}
+
+	done := make(chan error, len(state.Repos))
+	for _, e := range state.Sorted() {
+		entry := e
+		go func() {
+			conn, _, err := openDB(ctx, entry.Path)
+			if err != nil {
+				done <- fmt.Errorf("%s: %w", entry.Alias, err)
+				return
+			}
+			defer conn.Close()
+			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, entry.Path, entry.Alias)
+			if err != nil {
+				done <- fmt.Errorf("%s: %w", entry.Alias, err)
+				return
+			}
+			err = runWatchLoop(ctx, watchOptions{
+				Root:         entry.Path,
+				DB:           conn,
+				RepositoryID: repoRow.ID,
+				Debounce:     debounce,
+				Logger:       logger.With("repo", entry.Alias),
+				ProgressOut:  &prefixedWriter{prefix: "[" + entry.Alias + "] ", w: out},
+			})
+			done <- err
+		}()
+	}
+
+	// Wait for context cancel; collect any per-repo errors.
+	<-ctx.Done()
+	for range state.Repos {
+		<-done
+	}
+	return nil
+}
+
+// prefixedWriter prefixes every write with a tag so concurrent
+// progress lines from multiple repos remain readable.
+type prefixedWriter struct {
+	prefix string
+	w      io.Writer
+}
+
+func (p *prefixedWriter) Write(b []byte) (int, error) {
+	_, err := p.w.Write([]byte(p.prefix))
+	if err != nil {
+		return 0, err
+	}
+	return p.w.Write(b)
 }
 
 // watchOptions is the runtime contract for runWatchLoop, split out so
