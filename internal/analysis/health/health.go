@@ -187,6 +187,11 @@ type Analyzer struct {
 	// more than this many locations (idiomatic/boilerplate blocks).
 	// Zero -> default (8).
 	DuplicationMaxCluster int
+
+	// Exclude suppresses biomarker findings for files matching a glob or
+	// path prefix, optionally limited to specific biomarkers. Sourced from
+	// the config health_rules. Empty = nothing suppressed.
+	Exclude []ExcludeRule
 }
 
 // Result is the bundle returned by Analyze.
@@ -206,6 +211,23 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 	var findings []Finding
 	metrics := make([]FileMetric, 0, len(files))
 
+	// retain drops findings suppressed by the configured exclude rules
+	// (config health_rules). Applied before fileMetric sums impact, so an
+	// excluded finding doesn't drag the file's score either.
+	excludes := compileExcludes(a.Exclude)
+	retain := func(fs []Finding) []Finding {
+		if len(excludes) == 0 {
+			return fs
+		}
+		kept := fs[:0:0]
+		for _, f := range fs {
+			if !excluded(excludes, f.FilePath, f.BiomarkerType) {
+				kept = append(kept, f)
+			}
+		}
+		return kept
+	}
+
 	// Pre-compute "files that have a paired test file" so untested_hotspot
 	// can skip well-covered hotspots.
 	testPairs := buildTestPairs(files)
@@ -213,20 +235,19 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 	// hidden_coupling: one finding per unique unordered (a, b) pair. Track
 	// emitted pairs so we don't double-flag from both sides.
 	emittedPairs := map[string]bool{}
-	hiddenCouplingFindings := a.computeHiddenCoupling(files, emittedPairs)
-	findings = append(findings, hiddenCouplingFindings...)
+	findings = append(findings, retain(a.computeHiddenCoupling(files, emittedPairs))...)
 
 	// duplication: cross-file Rabin-Karp on normalized line windows.
 	// Skipped silently when SourceLoader is nil.
-	findings = append(findings, a.computeDuplication(files)...)
+	findings = append(findings, retain(a.computeDuplication(files))...)
 
 	for _, pf := range files {
-		findings = append(findings, a.fileFindings(pf, testPairs, thresholds)...)
+		findings = append(findings, retain(a.fileFindings(pf, testPairs, thresholds))...)
 
 		methodsByParent := methodCounts(pf)
 		callsByCaller := groupCallsByCaller(pf)
 		for _, sym := range pf.Symbols {
-			findings = append(findings, a.symbolFindings(pf, sym, methodsByParent, callsByCaller, thresholds)...)
+			findings = append(findings, retain(a.symbolFindings(pf, sym, methodsByParent, callsByCaller, thresholds))...)
 		}
 
 		metrics = append(metrics, fileMetric(pf, testPairs[pf.FileInfo.Path], findings))

@@ -83,6 +83,13 @@ inspect the most recent runs.`,
 				return fmt.Errorf("ensure repo: %w", err)
 			}
 
+			// Scaffold a commented repo-local config on first init so the
+			// available knobs (incl. health_rules exclusions) are discoverable.
+			// Never clobbers an existing file.
+			if created, path := scaffoldRepoConfig(absRoot); created {
+				fmt.Fprintf(cmd.OutOrStdout(), "wrote starter config at %s\n", path)
+			}
+
 			logger := logging.New(logging.Options{
 				Format: logging.FormatAuto,
 				Level:  logging.ParseLevel("info"),
@@ -120,6 +127,50 @@ inspect the most recent runs.`,
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "(deprecated; pass PATH positionally instead)")
 	cmd.Flags().IntVar(&gitMaxCommits, "git-max-commits", 0, "cap commits walked by the git phase (0 = default 10000)")
 	return cmd
+}
+
+// repoConfigTemplate is the commented starter config written on first init.
+// Every key is commented out, so the file changes no behaviour until the
+// user edits it — it exists for discoverability.
+const repoConfigTemplate = `# repowise configuration (repo-local).
+# Merged on top of ~/.config/repowise/config.yaml, then REPOWISE_* env vars.
+# Everything here is optional — uncomment what you need.
+
+# provider: anthropic        # anthropic | openai | google | ollama | litellm | mock
+# model: claude-sonnet-4-6
+
+# Code-health rule overrides. Each rule matches files by 'pattern'
+# (gitignore-syntax glob) or 'path' (prefix), and sets per-biomarker
+# actions under 'overrides'. Use "disabled" to suppress a check; the "*"
+# key applies to every biomarker. Rules are additive with the global
+# config's rules.
+# health_rules:
+#   - pattern: "**/*_test.go"
+#     overrides:
+#       high_complexity: disabled
+#       long_function: disabled
+#   - path: "internal/generated/"
+#     overrides:
+#       "*": disabled
+`
+
+// scaffoldRepoConfig writes repoConfigTemplate to <root>/.repowise/config.yaml
+// when that file does not yet exist. Returns whether it created the file and
+// the path. All errors are swallowed — a missing starter config is harmless.
+func scaffoldRepoConfig(absRoot string) (bool, string) {
+	path := filepath.Join(absRoot, ".repowise", "config.yaml")
+	if _, err := os.Stat(path); err == nil {
+		return false, path // already exists — never clobber
+	} else if !os.IsNotExist(err) {
+		return false, path
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return false, path
+	}
+	if err := os.WriteFile(path, []byte(repoConfigTemplate), 0o644); err != nil {
+		return false, path
+	}
+	return true, path
 }
 
 func printRunSummary(cmd *cobra.Command, r *pipeline.Result, failed bool) {

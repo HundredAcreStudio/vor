@@ -211,9 +211,10 @@ func mergeFile(base, file Config) Config {
 	if len(file.Languages.Skip) > 0 {
 		base.Languages.Skip = file.Languages.Skip
 	}
-	if len(file.HealthRules) > 0 {
-		base.HealthRules = file.HealthRules
-	}
+	// Health rules are additive across layers: a global rule (e.g. ignore
+	// **/*_test.go) and a repo-local rule both apply, rather than the repo
+	// file replacing the global set.
+	base.HealthRules = append(base.HealthRules, file.HealthRules...)
 	if file.Workspace.Primary != "" {
 		base.Workspace.Primary = file.Workspace.Primary
 	}

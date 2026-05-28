@@ -27,6 +27,7 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
 	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
 	"github.com/repowise-dev/repowise-go/internal/analysis/health"
+	"github.com/repowise-dev/repowise-go/internal/config"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/external/cargo"
 	"github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
@@ -417,6 +418,7 @@ func phaseHealth(ctx context.Context, opts Options, res *Result) error {
 		SourceLoader: func(rel string) ([]byte, error) {
 			return readFile(filepath.Join(opts.RepoPath, rel))
 		},
+		Exclude: healthExcludesFor(opts.RepoPath),
 	}
 	if len(res.GitRecords) > 0 {
 		analyzer.HotspotPaths, analyzer.CoChangePairs = hotspotsAndCoChanges(res.GitRecords)
@@ -431,6 +433,41 @@ func phaseHealth(ctx context.Context, opts Options, res *Result) error {
 	}
 	res.HealthResult = analyzer.Analyze(res.Parsed)
 	return nil
+}
+
+// healthExcludesFor loads the repo's config and projects its health_rules
+// onto health.ExcludeRule, keeping only rules that actually disable a
+// biomarker. A missing/invalid config yields no exclusions (best-effort:
+// health analysis should never fail because of a config typo).
+func healthExcludesFor(repoPath string) []health.ExcludeRule {
+	cfg, err := config.Load(repoPath)
+	if err != nil {
+		return nil
+	}
+	var out []health.ExcludeRule
+	for _, r := range cfg.HealthRules {
+		var biomarkers []string
+		for name, action := range r.Overrides {
+			if isDisableAction(action) {
+				biomarkers = append(biomarkers, name)
+			}
+		}
+		if len(biomarkers) == 0 {
+			continue // no disabling override — nothing to suppress
+		}
+		out = append(out, health.ExcludeRule{Pattern: r.Pattern, Path: r.Path, Biomarkers: biomarkers})
+	}
+	return out
+}
+
+// isDisableAction reports whether a health_rules override value turns a
+// biomarker off. Other actions (e.g. a future "warn") are not yet wired.
+func isDisableAction(action string) bool {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "disabled", "disable", "off", "skip", "ignore", "exclude", "none":
+		return true
+	}
+	return false
 }
 
 // hotspotsAndCoChanges derives the hotspot set and the co-change adjacency

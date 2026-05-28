@@ -75,7 +75,8 @@ func TestReindex_AsyncRunCompletes(t *testing.T) {
 		t.Fatalf("expected started + run_id, got %s", text)
 	}
 
-	// Poll until the run finishes (it is tiny, so this is quick).
+	// Poll the run to completion, then confirm the runID matches. (Done via
+	// the store directly — the cheapest signal that the bg goroutine finished.)
 	store := pipelinestore.New(conn)
 	deadline := time.Now().Add(10 * time.Second)
 	var overall string
@@ -94,8 +95,17 @@ func TestReindex_AsyncRunCompletes(t *testing.T) {
 		t.Fatalf("run did not succeed in time (overall=%q)", overall)
 	}
 
-	// pipeline_log should now report the completed phases.
-	logText := callTool(t, srv, "repowise_pipeline_log", map[string]any{"limit": 20})
+	// pipeline_log should report the completed phases. Poll it the way a
+	// real client would: with SQLite's connection pool the phase rows can
+	// lag a beat behind the LatestRun snapshot read above.
+	var logText string
+	for time.Now().Before(deadline) {
+		logText = callTool(t, srv, "repowise_pipeline_log", map[string]any{"limit": 20})
+		if strings.Contains(logText, "completed") && strings.Contains(logText, "parse") {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 	if !strings.Contains(logText, "completed") || !strings.Contains(logText, "parse") {
 		t.Errorf("pipeline_log missing completed phases: %s", logText)
 	}
