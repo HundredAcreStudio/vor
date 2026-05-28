@@ -60,10 +60,10 @@ yet the LLM-synthesis layer.
 | `get_health` | `repowise_health` + `repowise_health_findings` | ✅ |
 | `search_codebase` | `repowise_search` | 🟡 LIKE vs embedding/BM25 |
 | `get_graph_metrics` | `repowise_status` (partial) | 🟡 |
-| `get_community` | — | ⏳ needs community-detection surfacing |
-| `get_dependency_path` | — | ⏳ |
-| `get_execution_flows` | — | ⏳ |
-| `get_architecture_diagram` | — | ⏳ (architecture page kind also pending) |
+| `get_community` | `repowise_get_community` | ✅ |
+| `get_dependency_path` | `repowise_get_dependency_path` | ✅ |
+| `get_execution_flows` | `repowise_get_execution_flows` | ✅ |
+| `get_architecture_diagram` | `repowise_get_architecture_diagram` | ✅ structured + optional mermaid |
 | `get_context` | `repowise_get_context` | ✅ triage card per file/symbol (pure data) |
 | `get_answer` | `repowise_get_answer` | ✅ FTS retrieval + grounded synthesis + citations |
 | `get_why` | `repowise_get_why` | ✅ decision archaeology + synthesised rationale |
@@ -72,16 +72,15 @@ yet the LLM-synthesis layer.
 | — | `repowise_pipeline_log` ➕ | ➕ observability |
 | — | `repowise_workspace_repos` ➕ | ➕ multi-repo discovery |
 
-The LLM-synthesis tools (`get_answer`, `get_context`, `get_why`) are
-now ported. They degrade gracefully without a provider —
-`get_answer` returns retrieved candidates as `best_guesses`,
-`get_why` returns the matched decisions raw — so a provider-less
-server stays useful. `get_context` never needs an LLM.
+The LLM-synthesis tools (`get_answer`, `get_context`, `get_why`) and
+the graph-traversal tools (`get_community`, `get_dependency_path`,
+`get_execution_flows`, `get_architecture_diagram`) are all ported.
+Synthesis tools degrade gracefully without a provider; graph tools
+are deterministic and need none.
 
-**Remaining MCP gaps:** the graph-traversal tools (`get_community`,
-`get_dependency_path`, `get_execution_flows`, `get_architecture_diagram`)
-and embedding-backed `search_codebase`. The data exists; these need
-graph-walk surfacing + a vector index.
+**Remaining MCP gaps:** embedding-backed semantic `search_codebase`
+(Go uses LIKE/FTS today — needs a vector index) and the richer
+`get_risk` PR-mode `directive` block. Everything else has parity.
 
 ---
 
