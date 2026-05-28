@@ -2,6 +2,7 @@ package autoindex
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -95,23 +96,49 @@ func TestRun_ReindexesOnChange(t *testing.T) {
 	// Wait for the startup run, then capture its id.
 	startupRun := waitForRun(t, w, repoID, 15*time.Second)
 
-	// Edit a source file; the watcher should fire a fresh reindex.
-	if err := os.WriteFile(filepath.Join(src, "main.go"),
-		[]byte("package main\nfunc main(){ added() }\nfunc added(){}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
+	// Edit the source file and poll for a fresh run. We re-touch on each
+	// iteration so the test doesn't depend on the watch goroutine having
+	// installed its fsnotify watch before our first write (a lost early
+	// event would otherwise never be retriggered).
 	store := pipelinestore.New(w.db)
 	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
+	for i := 0; time.Now().Before(deadline); i++ {
+		if err := os.WriteFile(filepath.Join(src, "main.go"),
+			[]byte(fmt.Sprintf("package main\nfunc main(){ added() }\nfunc added(){ _ = %d }\n", i)), 0o644); err != nil {
+			t.Fatal(err)
+		}
 		run, err := store.LatestRun(context.Background(), repoID)
 		if err == nil && run != nil && run.RunID != startupRun &&
 			run.Overall == pipelinestore.OutcomeSucceeded {
 			return // a new run completed — change was picked up
 		}
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
 	t.Fatal("file change did not trigger a new reindex run")
+}
+
+func TestRun_RepoOptsOutViaConfig(t *testing.T) {
+	// The repo's own .vor/config.yaml disables watching for itself, so the
+	// daemon must neither startup-reindex nor watch it.
+	w, repoID, _ := fixture(t, map[string]string{
+		"main.go":          "package main\nfunc main(){}\n",
+		"go.mod":           "module example.com/x\ngo 1.21\n",
+		".vor/config.yaml": "watch:\n  enabled: false\n",
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go w.Run(ctx)
+
+	// No run should ever be recorded for this repo.
+	store := pipelinestore.New(w.db)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if run, err := store.LatestRun(context.Background(), repoID); err == nil && run != nil {
+			t.Fatalf("opted-out repo was reindexed (run %s)", run.RunID)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 func TestSkipEvent(t *testing.T) {

@@ -23,6 +23,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 
+	"github.com/HundredAcreStudio/vor/internal/config"
 	"github.com/HundredAcreStudio/vor/internal/ingestion/traverser"
 	"github.com/HundredAcreStudio/vor/internal/persistence/pipelinestore"
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
@@ -41,8 +42,10 @@ type Options struct {
 	// Logger receives lifecycle + per-reindex events. Defaults to
 	// slog.Default() when nil.
 	Logger *slog.Logger
-	// Debounce is the quiet period after the last filesystem event before a
-	// reindex fires. Defaults to defaultDebounce when zero.
+	// Debounce is the daemon-level quiet period after the last filesystem
+	// event before a reindex fires. Defaults to defaultDebounce when zero.
+	// A repo's own .vor/config.yaml (watch.debounce) overrides this for
+	// that repo.
 	Debounce time.Duration
 }
 
@@ -85,10 +88,38 @@ func (w *Watcher) Run(ctx context.Context) error {
 				"repo", r.ID, "path", r.LocalPath)
 			continue
 		}
+
+		// Per-repo override: the daemon-level policy (CLI flag / global
+		// config, captured in w.debounce) is the base; a repo's own
+		// .vor/config.yaml can disable watching for itself or set its own
+		// debounce. We read only the repo-local file so the global layer
+		// isn't counted twice.
+		enabled, debounce := true, w.debounce
+		if rc, ok, err := config.LoadRepoFile(r.LocalPath); err != nil {
+			w.logger.Warn("auto-reindex: cannot read repo config", "repo", r.ID, "err", err)
+		} else if ok {
+			if rc.Watch.Enabled != nil {
+				enabled = *rc.Watch.Enabled
+			}
+			if rc.Watch.Debounce != "" {
+				if d, perr := time.ParseDuration(rc.Watch.Debounce); perr == nil {
+					debounce = d
+				} else {
+					w.logger.Warn("auto-reindex: invalid repo watch.debounce, using daemon default",
+						"repo", r.ID, "value", rc.Watch.Debounce, "err", perr)
+				}
+			}
+		}
+		if !enabled {
+			w.logger.Info("auto-reindex: repo opted out via config, not watching",
+				"repo", r.ID, "path", r.LocalPath)
+			continue
+		}
+
 		targets = append(targets, &repoWatcher{
 			db:       w.db,
 			logger:   w.logger,
-			debounce: w.debounce,
+			debounce: debounce,
 			repoID:   r.ID,
 			root:     r.LocalPath,
 		})

@@ -196,6 +196,24 @@ func userConfigDirHook() string {
 	return filepath.Join(home, ".config", "vor")
 }
 
+// LoadRepoFile reads only the repo-local <repoPath>/.vor/config.yaml,
+// without applying defaults, the user-global file, or env. ok is false
+// when the file is absent (not an error). Callers that already hold a
+// fully-merged daemon Config use this to layer a single repo's own
+// overrides on top — e.g. the serve watcher applying per-repo watch
+// settings without re-merging the global layer.
+func LoadRepoFile(repoPath string) (cfg Config, ok bool, err error) {
+	path := filepath.Join(repoPath, ".vor", "config.yaml")
+	c, err := loadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return Config{}, false, nil
+	}
+	if err != nil {
+		return Config{}, false, err
+	}
+	return c, true, nil
+}
+
 // loadFile reads and parses a YAML config file. Returns os.ErrNotExist
 // wrapped if the file is absent.
 func loadFile(path string) (Config, error) {

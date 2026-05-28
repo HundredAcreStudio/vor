@@ -167,6 +167,37 @@ func TestLoad_WatchConfig(t *testing.T) {
 	}
 }
 
+func TestLoadRepoFile(t *testing.T) {
+	// Missing file: ok=false, no error.
+	if _, ok, err := LoadRepoFile(t.TempDir()); err != nil || ok {
+		t.Fatalf("missing file: ok=%v err=%v, want ok=false err=nil", ok, err)
+	}
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".vor"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("watch:\n  enabled: false\n  debounce: 4s\n")
+	if err := os.WriteFile(filepath.Join(dir, ".vor", "config.yaml"), body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, ok, err := LoadRepoFile(dir)
+	if err != nil || !ok {
+		t.Fatalf("LoadRepoFile: ok=%v err=%v", ok, err)
+	}
+	if c.Watch.Enabled == nil || *c.Watch.Enabled {
+		t.Errorf("Watch.Enabled = %v, want false", c.Watch.Enabled)
+	}
+	if c.Watch.Debounce != "4s" {
+		t.Errorf("Watch.Debounce = %q, want %q", c.Watch.Debounce, "4s")
+	}
+	// Crucially, no defaults/global are applied — Provider stays zero so the
+	// caller can layer just these overrides onto its own merged config.
+	if c.Provider != "" {
+		t.Errorf("LoadRepoFile applied defaults (Provider=%q); want raw file only", c.Provider)
+	}
+}
+
 func equalSlice(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
