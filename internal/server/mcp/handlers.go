@@ -10,7 +10,43 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
+	"github.com/repowise-dev/repowise-go/internal/workspace"
 )
+
+// ---- tool: repowise_workspace_repos --------------------------------------
+
+type workspaceRepoEntry struct {
+	Alias        string `json:"alias"`
+	Path         string `json:"path"`
+	RepositoryID string `json:"repository_id"`
+	IsDefault    bool   `json:"is_default"`
+}
+
+func (s *Server) toolWorkspaceRepos(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if s.opts.WorkspaceRoot == "" {
+		return jsonResult(map[string]any{
+			"repos":   []workspaceRepoEntry{},
+			"message": "server is not running in workspace mode (no Options.WorkspaceRoot configured)",
+		})
+	}
+	state, err := workspace.Load(s.opts.WorkspaceRoot)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	out := make([]workspaceRepoEntry, 0, len(state.Repos))
+	for _, e := range state.Sorted() {
+		entry := workspaceRepoEntry{
+			Alias:     e.Alias,
+			Path:      e.Path,
+			IsDefault: e.Alias == state.DefaultAlias,
+		}
+		if id, err := s.repoIDForPath(ctx, e.Path); err == nil {
+			entry.RepositoryID = id
+		}
+		out = append(out, entry)
+	}
+	return jsonResult(map[string]any{"repos": out})
+}
 
 // ---- tool: repowise_status -----------------------------------------------
 
@@ -24,14 +60,18 @@ type statusPayload struct {
 	ExternalsByEco   map[string]int `json:"externalsByEcosystem"`
 }
 
-func (s *Server) toolStatus(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) toolStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	p := statusPayload{}
 
 	gs := graphstore.New(s.opts.DB)
-	if n, err := gs.CountNodes(ctx, s.opts.RepositoryID); err == nil {
+	if n, err := gs.CountNodes(ctx, rid); err == nil {
 		p.GraphNodes = n
 	}
-	if counts, err := gs.CountByEdgeType(ctx, s.opts.RepositoryID); err == nil {
+	if counts, err := gs.CountByEdgeType(ctx, rid); err == nil {
 		for _, c := range counts {
 			p.GraphEdges += c
 		}
@@ -39,21 +79,21 @@ func (s *Server) toolStatus(ctx context.Context, _ mcp.CallToolRequest) (*mcp.Ca
 
 	_ = s.opts.DB.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM git_metadata WHERE repository_id = ? AND is_hotspot = 1`,
-		s.opts.RepositoryID).Scan(&p.HotspotFiles)
+		rid).Scan(&p.HotspotFiles)
 	_ = s.opts.DB.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM dead_code_findings WHERE repository_id = ?`,
-		s.opts.RepositoryID).Scan(&p.DeadCodeFindings)
+		rid).Scan(&p.DeadCodeFindings)
 
 	hs := healthstore.New(s.opts.DB)
-	if v, err := hs.AverageScore(ctx, s.opts.RepositoryID); err == nil {
+	if v, err := hs.AverageScore(ctx, rid); err == nil {
 		p.AvgHealthScore = v
 	}
-	if v, err := hs.CountFindings(ctx, s.opts.RepositoryID); err == nil {
+	if v, err := hs.CountFindings(ctx, rid); err == nil {
 		p.HealthFindings = v
 	}
 
 	es := externalstore.New(s.opts.DB)
-	if v, err := es.CountByEcosystem(ctx, s.opts.RepositoryID); err == nil {
+	if v, err := es.CountByEcosystem(ctx, rid); err == nil {
 		p.ExternalsByEco = v
 	}
 
@@ -71,6 +111,10 @@ type hotspotPayload struct {
 }
 
 func (s *Server) toolHotspots(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	limit := clampInt(req.GetInt("limit", 20), 1, 100)
 	rows, err := s.opts.DB.QueryContext(ctx,
 		`SELECT file_path, churn_percentile, commit_count_total,
@@ -78,7 +122,7 @@ func (s *Server) toolHotspots(ctx context.Context, req mcp.CallToolRequest) (*mc
 		 FROM git_metadata
 		 WHERE repository_id = ? AND is_hotspot = 1
 		 ORDER BY churn_percentile DESC, file_path
-		 LIMIT ?`, s.opts.RepositoryID, limit)
+		 LIMIT ?`, rid, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -109,13 +153,17 @@ type deadPayload struct {
 }
 
 func (s *Server) toolDeadCode(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	limit := clampInt(req.GetInt("limit", 50), 1, 500)
 	safeOnly := req.GetBool("safe_only", false)
 
 	query := `SELECT kind, file_path, COALESCE(symbol_name,''), COALESCE(symbol_kind,''),
 	                 confidence, reason, safe_to_delete
 	          FROM dead_code_findings WHERE repository_id = ?`
-	args := []any{s.opts.RepositoryID}
+	args := []any{rid}
 	if safeOnly {
 		query += " AND safe_to_delete = 1"
 	}
@@ -158,17 +206,21 @@ type healthFileEntry struct {
 }
 
 func (s *Server) toolHealth(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	worstLimit := clampInt(req.GetInt("worst_limit", 10), 1, 50)
 	hs := healthstore.New(s.opts.DB)
 	p := healthSummaryPayload{}
-	p.AverageScore, _ = hs.AverageScore(ctx, s.opts.RepositoryID)
-	p.FindingCount, _ = hs.CountFindings(ctx, s.opts.RepositoryID)
-	p.FindingsByBiomarker, _ = hs.CountByBiomarker(ctx, s.opts.RepositoryID)
+	p.AverageScore, _ = hs.AverageScore(ctx, rid)
+	p.FindingCount, _ = hs.CountFindings(ctx, rid)
+	p.FindingsByBiomarker, _ = hs.CountByBiomarker(ctx, rid)
 
 	rows, err := s.opts.DB.QueryContext(ctx,
 		`SELECT file_path, score, max_ccn FROM health_file_metrics
 		 WHERE repository_id = ?
-		 ORDER BY score ASC LIMIT ?`, s.opts.RepositoryID, worstLimit)
+		 ORDER BY score ASC LIMIT ?`, rid, worstLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -205,13 +257,17 @@ type healthFindingPayload struct {
 }
 
 func (s *Server) toolHealthFindings(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	limit := clampInt(req.GetInt("limit", 50), 1, 500)
 	biomarker := req.GetString("biomarker", "")
 
 	query := `SELECT file_path, biomarker_type, severity, COALESCE(function_name,''),
 	                 COALESCE(line_start,0), COALESCE(line_end,0), health_impact, reason
 	          FROM health_findings WHERE repository_id = ?`
-	args := []any{s.opts.RepositoryID}
+	args := []any{rid}
 	if biomarker != "" {
 		query += " AND biomarker_type = ?"
 		args = append(args, biomarker)
@@ -259,6 +315,10 @@ type symbolPayload struct {
 }
 
 func (s *Server) toolSymbol(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	id, err := req.RequireString("symbol_id")
 	if err != nil {
 		return nil, err
@@ -270,7 +330,7 @@ func (s *Server) toolSymbol(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 		        COALESCE(visibility,''), COALESCE(signature,''),
 		        pagerank, language
 		 FROM graph_nodes WHERE repository_id = ? AND node_id = ?`,
-		s.opts.RepositoryID, id)
+		rid, id)
 	var p symbolPayload
 	if err := row.Scan(&p.NodeID, &p.NodeType, &p.Kind, &p.Name, &p.QualifiedName,
 		&p.FilePath, &p.StartLine, &p.EndLine, &p.Visibility, &p.Signature,
@@ -289,6 +349,10 @@ type callerEdgePayload struct {
 }
 
 func (s *Server) toolCallers(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	target, err := req.RequireString("symbol_id")
 	if err != nil {
 		return nil, err
@@ -300,7 +364,7 @@ func (s *Server) toolCallers(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		 WHERE repository_id = ? AND target_node_id = ?
 		   AND edge_type IN ('calls', 'has_method', 'method_overrides', 'method_implements')
 		 ORDER BY confidence DESC, source_node_id
-		 LIMIT ?`, s.opts.RepositoryID, target, limit)
+		 LIMIT ?`, rid, target, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -328,6 +392,10 @@ type dependentEdgePayload struct {
 }
 
 func (s *Server) toolDependents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	target, err := req.RequireString("file_path")
 	if err != nil {
 		return nil, err
@@ -338,7 +406,7 @@ func (s *Server) toolDependents(ctx context.Context, req mcp.CallToolRequest) (*
 		 FROM graph_edges
 		 WHERE repository_id = ? AND target_node_id = ? AND edge_type = 'imports'
 		 ORDER BY source_node_id LIMIT ?`,
-		s.opts.RepositoryID, target, limit)
+		rid, target, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -375,13 +443,17 @@ type externalPayload struct {
 }
 
 func (s *Server) toolExternals(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	limit := clampInt(req.GetInt("limit", 200), 1, 1000)
 	ecosystem := req.GetString("ecosystem", "")
 	devOnly := req.GetBool("dev_only", false)
 
 	query := `SELECT name, display_name, ecosystem, COALESCE(version,''), declared_in, is_dev_dep
 	          FROM external_systems WHERE repository_id = ?`
-	args := []any{s.opts.RepositoryID}
+	args := []any{rid}
 	if ecosystem != "" {
 		query += " AND ecosystem = ?"
 		args = append(args, ecosystem)
@@ -426,6 +498,10 @@ type searchResultPayload struct {
 }
 
 func (s *Server) toolSearch(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	q, err := req.RequireString("query")
 	if err != nil {
 		return nil, err
@@ -439,7 +515,7 @@ func (s *Server) toolSearch(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	         FROM graph_nodes
 	         WHERE repository_id = ?
 	           AND (name LIKE ? OR qualified_name LIKE ? OR node_id LIKE ?)`
-	args := []any{s.opts.RepositoryID, pattern, pattern, pattern}
+	args := []any{rid, pattern, pattern, pattern}
 	if nodeType != "" {
 		sqlQ += " AND node_type = ?"
 		args = append(args, nodeType)
@@ -479,12 +555,16 @@ type pipelineLogEntry struct {
 }
 
 func (s *Server) toolPipelineLog(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	limit := clampInt(req.GetInt("limit", 20), 1, 200)
 	rows, err := s.opts.DB.QueryContext(ctx,
 		`SELECT phase, state, started_at, updated_at, COALESCE(error,'')
 		 FROM pipeline_jobs WHERE repository_id = ?
 		 ORDER BY started_at DESC, id DESC LIMIT ?`,
-		s.opts.RepositoryID, limit)
+		rid, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -523,6 +603,10 @@ type decisionPayload struct {
 }
 
 func (s *Server) toolDecisions(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	limit := clampInt(req.GetInt("limit", 50), 1, 500)
 	source := req.GetString("source", "")
 
@@ -533,7 +617,7 @@ func (s *Server) toolDecisions(ctx context.Context, req mcp.CallToolRequest) (*m
 	                           WHERE de.decision_id = dr.id LIMIT 1), '')
 	          FROM decision_records dr
 	          WHERE dr.repository_id = ?`
-	args := []any{s.opts.RepositoryID}
+	args := []any{rid}
 	if source != "" {
 		query += " AND dr.source = ?"
 		args = append(args, source)
@@ -583,6 +667,10 @@ type pageContentPayload struct {
 }
 
 func (s *Server) toolPages(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	limit := clampInt(req.GetInt("limit", 100), 1, 500)
 	kind := req.GetString("kind", "")
 	staleOnly := req.GetBool("stale_only", false)
@@ -591,7 +679,7 @@ func (s *Server) toolPages(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 	                 version, freshness_status, model_name, provider_name,
 	                 input_tokens, output_tokens, cached_tokens
 	          FROM wiki_pages WHERE repository_id = ?`
-	args := []any{s.opts.RepositoryID}
+	args := []any{rid}
 	if kind != "" {
 		query += " AND page_type = ?"
 		args = append(args, kind)
@@ -621,6 +709,10 @@ func (s *Server) toolPages(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 }
 
 func (s *Server) toolPage(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	target := req.GetString("path", "")
 	if target == "" {
 		return mcp.NewToolResultError("missing required argument 'path'"), nil
@@ -628,14 +720,14 @@ func (s *Server) toolPage(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 	kind := req.GetString("kind", "file_overview")
 
 	var p pageContentPayload
-	err := s.opts.DB.QueryRowContext(ctx, `
+	err = s.opts.DB.QueryRowContext(ctx, `
 		SELECT id, page_type, target_path, title, summary,
 		       version, freshness_status, model_name, provider_name,
 		       input_tokens, output_tokens, cached_tokens,
 		       content, source_hash
 		FROM wiki_pages
 		WHERE repository_id = ? AND page_type = ? AND target_path = ?
-	`, s.opts.RepositoryID, kind, target).Scan(
+	`, rid, kind, target).Scan(
 		&p.ID, &p.PageType, &p.TargetPath, &p.Title, &p.Summary,
 		&p.Version, &p.Freshness, &p.ModelName, &p.ProviderName,
 		&p.InputTokens, &p.OutputTokens, &p.CachedTokens,
