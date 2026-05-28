@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/external"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/externalstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 )
 
 func freshDB(t *testing.T) *sql.DB {

@@ -8,15 +8,15 @@
 //
 // Construction is via providers.NewProvider("litellm", opts) with:
 //
-//	"base_url"      string  (required — the proxy URL, also REPOWISE_LITELLM_BASE_URL)
+//	"base_url"      string  (required — the proxy URL, also VOR_LITELLM_BASE_URL)
 //	"api_key"       string  (optional — LiteLLM virtual key)
 //	"default_model" string  (optional — proxy model alias)
 //	"http_client"   *http.Client (optional — tests)
 package litellm
 
 import (
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	"github.com/repowise-dev/repowise-go/internal/providers/openai"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers/openai"
 )
 
 const providerName = "litellm"

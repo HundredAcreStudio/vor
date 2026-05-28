@@ -7,10 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/config"
-	"github.com/repowise-dev/repowise-go/internal/logging"
-	"github.com/repowise-dev/repowise-go/internal/server/mcp"
-	"github.com/repowise-dev/repowise-go/internal/workspace"
+	"github.com/HundredAcreStudio/vor/internal/config"
+	"github.com/HundredAcreStudio/vor/internal/logging"
+	"github.com/HundredAcreStudio/vor/internal/server/mcp"
+	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 // newMCPCmd starts a Model Context Protocol server on stdio. Run from
@@ -21,11 +21,11 @@ import (
 //     every tool call queries that repo.
 //   - --workspace — the daemon serves N repos from one shared DB.
 //     Tool calls pass a `repo` argument (alias / id / path). A new
-//     `repowise_workspace_repos` tool lists the registered repos so
+//     `vor_workspace_repos` tool lists the registered repos so
 //     agents can discover them.
 //
 // In --workspace mode, --repo is treated as the workspace root
-// (where .repowise/workspace.json lives), not a single repo path.
+// (where .vor/workspace.json lives), not a single repo path.
 func newMCPCmd() *cobra.Command {
 	var (
 		repoPath        string
@@ -39,10 +39,10 @@ func newMCPCmd() *cobra.Command {
 stdin/stdout.
 
 Single-repo mode (default):
-  repowise mcp --repo /path/to/repo
+  vor mcp --repo /path/to/repo
 
 Workspace mode — one daemon serving every member repo:
-  repowise mcp --workspace [--workspace-root /path/to/workspace]
+  vor mcp --workspace [--workspace-root /path/to/workspace]
   # tool calls pass a 'repo' argument (alias from workspace.json)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -83,7 +83,7 @@ Workspace mode — one daemon serving every member repo:
 				}
 				if len(state.Repos) == 0 {
 					return fmt.Errorf(
-						"no repos registered at %s — add some with `repowise workspace add`", abs)
+						"no repos registered at %s — add some with `vor workspace add`", abs)
 				}
 				opts.WorkspaceRoot = abs
 				// Optional default: the workspace's default alias resolves

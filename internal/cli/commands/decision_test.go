@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
-	"github.com/repowise-dev/repowise-go/internal/persistence/decisionstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/analysis/decisions"
+	"github.com/HundredAcreStudio/vor/internal/persistence/decisionstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 )
 
 // seedDecision uses the store directly to put a record into the test
@@ -35,10 +35,10 @@ func seedDecision(t *testing.T, tmp string, title string) string {
 
 func TestDecision_AddAndList(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
-	stdout, _, err := runRepowiseCmd(t, nil, "decision", "add",
+	stdout, _, err := runVorCmd(t, nil, "decision", "add",
 		"--title", "Pin Go to 1.24",
 		"--decision", "Use Go 1.24 in CI",
 		"--rationale", "iter package needs 1.24",
@@ -51,7 +51,7 @@ func TestDecision_AddAndList(t *testing.T) {
 	if !strings.Contains(stdout, "added decision") {
 		t.Errorf("add output = %q", stdout)
 	}
-	listOut, _, err := runRepowiseCmd(t, nil, "decision", "list", "--repo", tmp)
+	listOut, _, err := runVorCmd(t, nil, "decision", "list", "--repo", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,15 +62,15 @@ func TestDecision_AddAndList(t *testing.T) {
 
 func TestDecisions_PluralAlias(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := runRepowiseCmd(t, nil, "decision", "add",
+	if _, _, err := runVorCmd(t, nil, "decision", "add",
 		"--title", "X", "--repo", tmp); err != nil {
 		t.Fatal(err)
 	}
 	// The plural `decisions` should still work as a group alias.
-	stdout, _, err := runRepowiseCmd(t, nil, "decisions", "list", "--repo", tmp)
+	stdout, _, err := runVorCmd(t, nil, "decisions", "list", "--repo", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,11 +81,11 @@ func TestDecisions_PluralAlias(t *testing.T) {
 
 func TestDecision_Show(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 	id := seedDecision(t, tmp, "Show me")
-	stdout, _, err := runRepowiseCmd(t, nil, "decision", "show", id[:8], "--repo", tmp)
+	stdout, _, err := runVorCmd(t, nil, "decision", "show", id[:8], "--repo", tmp)
 	if err != nil {
 		t.Fatalf("show: %v", err)
 	}
@@ -98,14 +98,14 @@ func TestDecision_Show(t *testing.T) {
 
 func TestDecision_Confirm(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 	id := seedDecision(t, tmp, "Confirm me")
-	if _, _, err := runRepowiseCmd(t, nil, "decision", "confirm", id[:8], "--repo", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "decision", "confirm", id[:8], "--repo", tmp); err != nil {
 		t.Fatal(err)
 	}
-	out, _, _ := runRepowiseCmd(t, nil, "decision", "show", id, "--repo", tmp)
+	out, _, _ := runVorCmd(t, nil, "decision", "show", id, "--repo", tmp)
 	if !strings.Contains(out, "1.00 (exact)") {
 		t.Errorf("confirm did not bump confidence/verification: %s", out)
 	}
@@ -116,14 +116,14 @@ func TestDecision_Confirm(t *testing.T) {
 
 func TestDecision_Dismiss(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 	id := seedDecision(t, tmp, "Dismiss me")
-	if _, _, err := runRepowiseCmd(t, nil, "decision", "dismiss", id[:8], "--repo", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "decision", "dismiss", id[:8], "--repo", tmp); err != nil {
 		t.Fatal(err)
 	}
-	out, _, _ := runRepowiseCmd(t, nil, "decision", "show", id, "--repo", tmp)
+	out, _, _ := runVorCmd(t, nil, "decision", "show", id, "--repo", tmp)
 	if !strings.Contains(out, "status:       deprecated") {
 		t.Errorf("dismiss did not flip status: %s", out)
 	}
@@ -134,14 +134,14 @@ func TestDecision_Dismiss(t *testing.T) {
 
 func TestDecision_Deprecate(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 	id := seedDecision(t, tmp, "Deprecate me")
-	if _, _, err := runRepowiseCmd(t, nil, "decision", "deprecate", id[:8], "--repo", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "decision", "deprecate", id[:8], "--repo", tmp); err != nil {
 		t.Fatal(err)
 	}
-	out, _, _ := runRepowiseCmd(t, nil, "decision", "show", id, "--repo", tmp)
+	out, _, _ := runVorCmd(t, nil, "decision", "show", id, "--repo", tmp)
 	if !strings.Contains(out, "status:       deprecated") {
 		t.Errorf("deprecate did not flip status: %s", out)
 	}
@@ -154,16 +154,16 @@ func TestDecision_Deprecate(t *testing.T) {
 
 func TestDecision_HealthSummary(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 	for _, title := range []string{"low-conf-1", "low-conf-2", "high-conf"} {
-		if _, _, err := runRepowiseCmd(t, nil, "decision", "add",
+		if _, _, err := runVorCmd(t, nil, "decision", "add",
 			"--title", title, "--confidence", "0.4", "--repo", tmp); err != nil {
 			t.Fatal(err)
 		}
 	}
-	out, _, err := runRepowiseCmd(t, nil, "decision", "health", "--repo", tmp)
+	out, _, err := runVorCmd(t, nil, "decision", "health", "--repo", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestDecision_HealthSummary(t *testing.T) {
 
 func TestDecision_AmbiguousPrefix(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 	repoRow, _ := repos.New(conn).EnsureByLocalPath(context.Background(), tmp, "")
@@ -205,7 +205,7 @@ func TestDecision_AmbiguousPrefix(t *testing.T) {
 	if sharedPrefix == 0 {
 		t.Skip("no UUID collisions in 32 inserts — try again or assume the prefix-resolver works")
 	}
-	_, _, err := runRepowiseCmd(t, nil, "decision", "confirm",
+	_, _, err := runVorCmd(t, nil, "decision", "confirm",
 		string([]byte{sharedPrefix}), "--repo", tmp)
 	if err == nil {
 		t.Fatal("expected error for ambiguous prefix")

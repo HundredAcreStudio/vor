@@ -1,4 +1,4 @@
-// Package repos manages rows in the `repositories` table — repowise's
+// Package repos manages rows in the `repositories` table — vor's
 // top-level container for a single indexed repository. Other persistence
 // packages (graphstore, etc.) join via repository_id.
 package repos

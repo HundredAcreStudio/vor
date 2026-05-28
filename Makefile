@@ -2,7 +2,7 @@
 
 GO            ?= go
 BIN_DIR       ?= bin
-PKG           := github.com/repowise-dev/repowise-go
+PKG           := github.com/HundredAcreStudio/vor
 VERSION       ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT        := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_DATE    := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -15,12 +15,12 @@ help: ## Show this help
 
 build: ## Build all binaries into ./bin
 	@mkdir -p $(BIN_DIR)
-	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/repowise ./cmd/repowise
-	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/repowise-augment ./cmd/repowise-augment
+	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/vor ./cmd/vor
+	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/vor-augment ./cmd/vor-augment
 
 install: ## Install binaries to $GOBIN
-	$(GO) install -ldflags "$(LDFLAGS)" ./cmd/repowise
-	$(GO) install -ldflags "$(LDFLAGS)" ./cmd/repowise-augment
+	$(GO) install -ldflags "$(LDFLAGS)" ./cmd/vor
+	$(GO) install -ldflags "$(LDFLAGS)" ./cmd/vor-augment
 
 test: ## Run tests
 	$(GO) test ./...
@@ -40,8 +40,8 @@ fmt: ## Format code
 tidy: ## Tidy module deps
 	$(GO) mod tidy
 
-run: build ## Build and run repowise
-	./$(BIN_DIR)/repowise
+run: build ## Build and run vor
+	./$(BIN_DIR)/vor
 
 version-info: ## Print version metadata that would be embedded
 	@echo "Version:    $(VERSION)"

@@ -1,8 +1,8 @@
 // Package workspace manages a small JSON-backed registry of repos
 // that should be treated as one logical multi-repo. Stored at
-// <ws-root>/.repowise/workspace.json. Each entry pairs a repo path
+// <ws-root>/.vor/workspace.json. Each entry pairs a repo path
 // with an alias (free-form short name the user types) and tracks the
-// default — the repo `repowise` operates on when called from the
+// default — the repo `vor` operates on when called from the
 // workspace root without specifying one.
 //
 // This is a lighter implementation than the Python `workspaces` system
@@ -33,12 +33,12 @@ type State struct {
 	DefaultAlias string  `json:"default_alias,omitempty"`
 }
 
-// statePath returns <root>/.repowise/workspace.json.
+// statePath returns <root>/.vor/workspace.json.
 func statePath(root string) string {
-	return filepath.Join(root, ".repowise", "workspace.json")
+	return filepath.Join(root, ".vor", "workspace.json")
 }
 
-// FindRoot walks up from start looking for a .repowise/workspace.json.
+// FindRoot walks up from start looking for a .vor/workspace.json.
 // Returns "" + nil error when none is found — the caller decides how
 // to handle absence.
 func FindRoot(start string) (string, error) {
@@ -47,7 +47,7 @@ func FindRoot(start string) (string, error) {
 		return "", err
 	}
 	for {
-		if _, err := os.Stat(filepath.Join(cur, ".repowise", "workspace.json")); err == nil {
+		if _, err := os.Stat(filepath.Join(cur, ".vor", "workspace.json")); err == nil {
 			return cur, nil
 		}
 		parent := filepath.Dir(cur)
@@ -58,7 +58,7 @@ func FindRoot(start string) (string, error) {
 	}
 }
 
-// Load reads the workspace state from <root>/.repowise/workspace.json.
+// Load reads the workspace state from <root>/.vor/workspace.json.
 // Returns a zero State (no error) when no file exists yet.
 func Load(root string) (*State, error) {
 	body, err := os.ReadFile(statePath(root))
@@ -75,10 +75,10 @@ func Load(root string) (*State, error) {
 	return &s, nil
 }
 
-// Save writes the workspace state back to disk, creating .repowise/
+// Save writes the workspace state back to disk, creating .vor/
 // if needed.
 func (s *State) Save(root string) error {
-	if err := os.MkdirAll(filepath.Join(root, ".repowise"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".vor"), 0o755); err != nil {
 		return err
 	}
 	body, err := json.MarshalIndent(s, "", "  ")

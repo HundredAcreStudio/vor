@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	gctx "github.com/repowise-dev/repowise-go/internal/generation/context"
-	"github.com/repowise-dev/repowise-go/internal/generation/models"
-	"github.com/repowise-dev/repowise-go/internal/generation/templates"
-	"github.com/repowise-dev/repowise-go/internal/persistence/wikistore"
-	"github.com/repowise-dev/repowise-go/internal/providers"
+	gctx "github.com/HundredAcreStudio/vor/internal/generation/context"
+	"github.com/HundredAcreStudio/vor/internal/generation/models"
+	"github.com/HundredAcreStudio/vor/internal/generation/templates"
+	"github.com/HundredAcreStudio/vor/internal/persistence/wikistore"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 // FileOverviewGenerator produces PageKindFileOverview pages.

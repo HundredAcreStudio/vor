@@ -1,7 +1,7 @@
 ; =============================================================================
-; repowise — Go symbol and import queries
+; vor — Go symbol and import queries
 ; tree-sitter-go >= 0.23
-; Ported from Python repowise; capture names must remain stable across the port.
+; Ported from Python vor; capture names must remain stable across the port.
 ; =============================================================================
 
 ; ---------------------------------------------------------------------------

@@ -13,7 +13,7 @@ import (
 
 	"github.com/pressly/goose/v3"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
 )
 
 //go:embed sqlite/*.sql postgres/*.sql

@@ -12,12 +12,12 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/golang"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/gomod"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/golang"
 )
 
 // internalTestRepo sets up a tmp dir + DB without env-var indirection
@@ -131,7 +131,7 @@ func TestWatch_isIgnoredDir(t *testing.T) {
 		"node_modules":  true,
 		"vendor":        true,
 		"build":         true,
-		".repowise":     true,
+		".vor":          true,
 		".pytest_cache": true,
 		"foo":           false,
 	}

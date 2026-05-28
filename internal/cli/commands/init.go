@@ -10,34 +10,34 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/logging"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/logging"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/pipeline"
 
 	// Side-effect imports: ingest's registry hooks need to fire here too.
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/cargo"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/graphql"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/npm"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/nuget"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/openapi"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/protobuf"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/pypi"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/cpp"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/csharp"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/golang"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/java"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/javascript"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/kotlin"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/luau"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/php"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/python"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/ruby"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/rust"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/scala"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/swift"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/typescript"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/cargo"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/gomod"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/graphql"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/npm"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/nuget"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/openapi"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/protobuf"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/pypi"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/cpp"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/csharp"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/golang"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/java"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/javascript"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/kotlin"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/luau"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/php"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/python"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/ruby"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/rust"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/scala"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/swift"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/typescript"
 )
 
 // newInitCmd runs the full ingest pipeline through the tracked
@@ -55,8 +55,8 @@ func newInitCmd() *cobra.Command {
 git → graph → deadcode → health → externals → persist — recording
 each in pipeline_jobs.
 
-Equivalent to 'repowise ingest --persist' but with phase tracking
-for observability. Use 'repowise pipeline log' (forthcoming) to
+Equivalent to 'vor ingest --persist' but with phase tracking
+for observability. Use 'vor pipeline log' (forthcoming) to
 inspect the most recent runs.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -113,7 +113,7 @@ inspect the most recent runs.`,
 			// Auto-regenerate CLAUDE.md from the freshly-indexed state.
 			// Mirrors the Python flow: every init/update produces a
 			// fresh managed block in <repo>/CLAUDE.md without touching
-			// content above the REPOWISE:START marker. No LLM calls —
+			// content above the VOR:START marker. No LLM calls —
 			// just structured SQL queries.
 			if mdErr := regenerateClaudeMd(ctx, conn, repoRow.ID, absRoot); mdErr != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: CLAUDE.md auto-regen skipped: %v\n", mdErr)
@@ -132,8 +132,8 @@ inspect the most recent runs.`,
 // repoConfigTemplate is the commented starter config written on first init.
 // Every key is commented out, so the file changes no behaviour until the
 // user edits it — it exists for discoverability.
-const repoConfigTemplate = `# repowise configuration (repo-local).
-# Merged on top of ~/.config/repowise/config.yaml, then REPOWISE_* env vars.
+const repoConfigTemplate = `# vor configuration (repo-local).
+# Merged on top of ~/.config/vor/config.yaml, then VOR_* env vars.
 # Everything here is optional — uncomment what you need.
 
 # provider: anthropic        # anthropic | openai | google | ollama | litellm | mock
@@ -154,11 +154,11 @@ const repoConfigTemplate = `# repowise configuration (repo-local).
 #       "*": disabled
 `
 
-// scaffoldRepoConfig writes repoConfigTemplate to <root>/.repowise/config.yaml
+// scaffoldRepoConfig writes repoConfigTemplate to <root>/.vor/config.yaml
 // when that file does not yet exist. Returns whether it created the file and
 // the path. All errors are swallowed — a missing starter config is harmless.
 func scaffoldRepoConfig(absRoot string) (bool, string) {
-	path := filepath.Join(absRoot, ".repowise", "config.yaml")
+	path := filepath.Join(absRoot, ".vor", "config.yaml")
 	if _, err := os.Stat(path); err == nil {
 		return false, path // already exists — never clobber
 	} else if !os.IsNotExist(err) {

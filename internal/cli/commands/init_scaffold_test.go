@@ -11,9 +11,9 @@ import (
 // clobber an existing one.
 func TestInit_ScaffoldsRepoConfig(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	cfgPath := filepath.Join(tmp, ".repowise", "config.yaml")
+	cfgPath := filepath.Join(tmp, ".vor", "config.yaml")
 
-	if _, _, err := runRepowiseCmd(t, nil, "init", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 	body, err := os.ReadFile(cfgPath)
@@ -29,7 +29,7 @@ func TestInit_ScaffoldsRepoConfig(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte(custom), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := runRepowiseCmd(t, nil, "init", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatalf("init #2: %v", err)
 	}
 	body, _ = os.ReadFile(cfgPath)

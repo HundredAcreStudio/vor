@@ -1,4 +1,4 @@
-// Package http hosts repowise's HTTP API. The Server type wires the chi
+// Package http hosts vor's HTTP API. The Server type wires the chi
 // router, middleware, and route packages into one net/http handler.
 // CLI / tests construct one via New and either ListenAndServe it directly
 // or use it as an http.Handler (for httptest).
@@ -14,9 +14,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/repowise-dev/repowise-go/internal/server/http/httpx"
-	"github.com/repowise-dev/repowise-go/internal/server/http/routes"
-	"github.com/repowise-dev/repowise-go/internal/version"
+	"github.com/HundredAcreStudio/vor/internal/server/http/httpx"
+	"github.com/HundredAcreStudio/vor/internal/server/http/routes"
+	"github.com/HundredAcreStudio/vor/internal/version"
 )
 
 // Options configures Server.
@@ -44,7 +44,7 @@ type Options struct {
 	MCPHandler http.Handler
 }
 
-// Server is the HTTP API for repowise. Implements http.Handler so it can
+// Server is the HTTP API for vor. Implements http.Handler so it can
 // be used directly with httptest.NewServer.
 type Server struct {
 	opts    Options
@@ -94,7 +94,7 @@ func New(opts Options) (*Server, error) {
 	})
 
 	// MCP over Streamable HTTP. Mounted at /mcp so editor clients
-	// connecting to the long-running daemon get the full repowise
+	// connecting to the long-running daemon get the full vor
 	// tool surface without each spawning a stdio child process.
 	// The mcp-go handler manages session state, SSE upgrades, and
 	// JSON-RPC parsing itself — we just hand off the chi prefix.

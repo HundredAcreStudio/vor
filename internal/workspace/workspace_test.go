@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/workspace"
+	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 func TestLoad_EmptyWhenMissing(t *testing.T) {
@@ -116,7 +116,7 @@ func TestSaveLoad_Roundtrip(t *testing.T) {
 	if err := original.Save(tmp); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(tmp, ".repowise", "workspace.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(tmp, ".vor", "workspace.json")); err != nil {
 		t.Fatalf("workspace.json not created: %v", err)
 	}
 	loaded, err := workspace.Load(tmp)

@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/logging"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/logging"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/pipeline"
 )
 
 // newReindexCmd is the "scorched earth" rebuild: drop the repository row
@@ -18,7 +18,7 @@ import (
 // idempotent re-indexing won't fix (e.g. schema migration, corruption).
 //
 // For the lighter version that just re-runs the pipeline without wiping
-// first, use ` + "`repowise update`" + `.
+// first, use ` + "`vor update`" + `.
 func newReindexCmd() *cobra.Command {
 	var (
 		repoPath      string

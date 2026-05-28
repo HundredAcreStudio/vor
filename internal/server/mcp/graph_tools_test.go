@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	mcpserver "github.com/repowise-dev/repowise-go/internal/server/mcp"
+	mcpserver "github.com/HundredAcreStudio/vor/internal/server/mcp"
 )
 
 // rawToolCall invokes a tool via HandleMessage and returns the raw
@@ -30,7 +30,7 @@ func rawToolCall(t *testing.T, s *mcpserver.Server, name string, args map[string
 
 func TestGetCommunity_Survey(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_get_community", nil)
+	text := callTool(t, srv, "vor_get_community", nil)
 	var out struct {
 		Communities []struct {
 			CommunityID int `json:"community_id"`
@@ -54,7 +54,7 @@ func TestGetCommunity_Survey(t *testing.T) {
 
 func TestGetCommunity_Targeted(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_get_community", map[string]any{"target": "main.go"})
+	text := callTool(t, srv, "vor_get_community", map[string]any{"target": "main.go"})
 	if !strings.Contains(text, `"members"`) {
 		t.Errorf("targeted community should return members: %s", text)
 	}
@@ -66,7 +66,7 @@ func TestGetCommunity_Targeted(t *testing.T) {
 func TestGetCommunity_TargetNotFound(t *testing.T) {
 	srv, _ := fixtureServer(t)
 	// Tool error path — use HandleMessage directly.
-	resp := rawToolCall(t, srv, "repowise_get_community", map[string]any{"target": "nope.go"})
+	resp := rawToolCall(t, srv, "vor_get_community", map[string]any{"target": "nope.go"})
 	if !strings.Contains(resp, "isError") {
 		t.Errorf("expected tool error for unknown target: %s", resp)
 	}
@@ -74,7 +74,7 @@ func TestGetCommunity_TargetNotFound(t *testing.T) {
 
 func TestGetDependencyPath_Found(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_get_dependency_path", map[string]any{
+	text := callTool(t, srv, "vor_get_dependency_path", map[string]any{
 		"from": "main.go", "to": "lib.go",
 	})
 	var out struct {
@@ -99,7 +99,7 @@ func TestGetDependencyPath_Found(t *testing.T) {
 func TestGetDependencyPath_TransitiveToSymbol(t *testing.T) {
 	srv, _ := fixtureServer(t)
 	// main.go --imports--> lib.go --defines--> lib.go::Helper
-	text := callTool(t, srv, "repowise_get_dependency_path", map[string]any{
+	text := callTool(t, srv, "vor_get_dependency_path", map[string]any{
 		"from": "main.go", "to": "lib.go::Helper",
 	})
 	var out struct {
@@ -115,7 +115,7 @@ func TestGetDependencyPath_TransitiveToSymbol(t *testing.T) {
 func TestGetDependencyPath_NoPath(t *testing.T) {
 	srv, _ := fixtureServer(t)
 	// Reverse direction: lib.go does not reach main.go.
-	text := callTool(t, srv, "repowise_get_dependency_path", map[string]any{
+	text := callTool(t, srv, "vor_get_dependency_path", map[string]any{
 		"from": "lib.go", "to": "main.go",
 	})
 	if !strings.Contains(text, `"found": false`) {
@@ -125,7 +125,7 @@ func TestGetDependencyPath_NoPath(t *testing.T) {
 
 func TestGetExecutionFlows_FromEntryPoints(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_get_execution_flows", nil)
+	text := callTool(t, srv, "vor_get_execution_flows", nil)
 	var out struct {
 		Flows []struct {
 			NodeID   string `json:"node_id"`
@@ -157,7 +157,7 @@ func TestGetExecutionFlows_FromEntryPoints(t *testing.T) {
 
 func TestGetExecutionFlows_ExplicitEntry(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_get_execution_flows", map[string]any{
+	text := callTool(t, srv, "vor_get_execution_flows", map[string]any{
 		"entry": "lib.go", "max_depth": 2,
 	})
 	if !strings.Contains(text, "lib.go") {
@@ -167,7 +167,7 @@ func TestGetExecutionFlows_ExplicitEntry(t *testing.T) {
 
 func TestGetArchitectureDiagram_Structured(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_get_architecture_diagram", nil)
+	text := callTool(t, srv, "vor_get_architecture_diagram", nil)
 	var out struct {
 		Communities []map[string]any `json:"communities"`
 		EntryPoints []string         `json:"entry_points"`
@@ -185,7 +185,7 @@ func TestGetArchitectureDiagram_Structured(t *testing.T) {
 
 func TestGetArchitectureDiagram_Mermaid(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_get_architecture_diagram", map[string]any{
+	text := callTool(t, srv, "vor_get_architecture_diagram", map[string]any{
 		"format": "mermaid",
 	})
 	if !strings.Contains(text, "flowchart LR") {

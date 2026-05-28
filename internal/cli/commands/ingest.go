@@ -11,66 +11,66 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
-	"github.com/repowise-dev/repowise-go/internal/analysis/health"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/external/cargo"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/parser"
+	"github.com/HundredAcreStudio/vor/internal/analysis/deadcode"
+	"github.com/HundredAcreStudio/vor/internal/analysis/health"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/external"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/external/cargo"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/external/gomod"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/git"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/graph"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/graph/resolver"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/parser"
 
 	// Side-effect imports: each per-language parser package registers itself
 	// with the parser registry in its init(). Add languages here as they
 	// land.
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/cpp"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/csharp"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/golang"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/java"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/javascript"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/kotlin"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/luau"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/php"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/python"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/ruby"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/rust"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/scala"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/swift"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/typescript"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/cpp"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/csharp"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/golang"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/java"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/javascript"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/kotlin"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/luau"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/php"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/python"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/ruby"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/rust"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/scala"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/swift"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/typescript"
 
 	// Side-effect imports: each manifest extractor registers itself.
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/cargo"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/graphql"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/npm"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/nuget"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/openapi"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/protobuf"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/pypi"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/cargo"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/gomod"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/graphql"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/npm"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/nuget"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/openapi"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/protobuf"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/pypi"
 
 	// Side-effect imports: each per-language import resolver registers
 	// itself with the resolver registry.
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/cpp"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/csharp"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/golang"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/java"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/python"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/rust"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/typescript"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/graph/resolver/cpp"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/graph/resolver/csharp"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/graph/resolver/golang"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/graph/resolver/java"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/graph/resolver/python"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/graph/resolver/rust"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/graph/resolver/typescript"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/traverser"
-	"github.com/repowise-dev/repowise-go/internal/persistence/deadstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/gitstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/traverser"
+	"github.com/HundredAcreStudio/vor/internal/persistence/deadstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/externalstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/gitstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/graphstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/healthstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 )
 
-// newIngestCmd registers `repowise ingest`. The pipeline grows in
+// newIngestCmd registers `vor ingest`. The pipeline grows in
 // concentric layers:
 //
 //   - default:   walk + per-skip-reason stats
@@ -317,7 +317,7 @@ func printStats(w io.Writer, s models.TraversalStats) {
 	fmt.Fprintf(tw, "included\t%d\n", s.Included)
 	fmt.Fprintf(tw, "total-walked\t%d\n", s.TotalPathsWalked)
 	fmt.Fprintf(tw, "skipped (gitignore)\t%d\n", s.SkippedGitignore)
-	fmt.Fprintf(tw, "skipped (repowiseIgnore)\t%d\n", s.SkippedExtraIgnore)
+	fmt.Fprintf(tw, "skipped (vorIgnore)\t%d\n", s.SkippedExtraIgnore)
 	fmt.Fprintf(tw, "skipped (oversized)\t%d\n", s.SkippedOversized)
 	fmt.Fprintf(tw, "skipped (binary)\t%d\n", s.SkippedBinary)
 	fmt.Fprintf(tw, "skipped (generated)\t%d\n", s.SkippedGenerated)
@@ -559,9 +559,9 @@ func printGitSummary(w io.Writer, records []git.PerFile) {
 }
 
 func databaseTarget(repoArg string) string {
-	abs, err := filepath.Abs(filepath.Join(repoArg, ".repowise", "wiki.db"))
+	abs, err := filepath.Abs(filepath.Join(repoArg, ".vor", "wiki.db"))
 	if err != nil {
-		return repoArg + "/.repowise/wiki.db"
+		return repoArg + "/.vor/wiki.db"
 	}
 	return abs
 }

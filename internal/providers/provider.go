@@ -1,6 +1,6 @@
 // Package providers is the LLM abstraction layer. Each upstream vendor
 // (Anthropic, OpenAI, Gemini, Ollama, ...) ships as a sub-package that
-// registers a Provider implementation. The rest of repowise depends only
+// registers a Provider implementation. The rest of vor depends only
 // on this package's interfaces — never directly on a vendor SDK — so
 // swapping or adding providers is local work.
 package providers

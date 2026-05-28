@@ -3,7 +3,7 @@ package userconfig_test
 import (
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/userconfig"
+	"github.com/HundredAcreStudio/vor/internal/userconfig"
 )
 
 func TestWorkspaceRegistry_AddListRemove(t *testing.T) {

@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	mcpserver "github.com/repowise-dev/repowise-go/internal/server/mcp"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	mcpserver "github.com/HundredAcreStudio/vor/internal/server/mcp"
 )
 
 // singleRepoFixture sets up a one-repo DB and returns an MCP server
@@ -134,7 +134,7 @@ func TestHTTPMCP_StatusToolCall(t *testing.T) {
 	resp, _ := postJSONRPC(t, srv.URL, session, map[string]any{
 		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
 		"params": map[string]any{
-			"name":      "repowise_status",
+			"name":      "vor_status",
 			"arguments": map[string]any{},
 		},
 	})

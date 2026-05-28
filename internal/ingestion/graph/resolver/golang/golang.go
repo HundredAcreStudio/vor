@@ -15,9 +15,9 @@ package golang
 import (
 	"strings"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/graph/resolver/common"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/graph/resolver"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/graph/resolver/common"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 const lang models.LanguageTag = "go"

@@ -2,10 +2,10 @@
 /bin/
 /dist/
 # Anchored — gitignore bare patterns match anywhere in the tree, which
-# would also exclude the cmd/repowise/ and cmd/repowise-augment/ source
+# would also exclude the cmd/vor/ and cmd/vor-augment/ source
 # directories. The leading slash limits the match to the repo root.
-/repowise
-/repowise-augment
+/vor
+/vor-augment
 
 # Test + coverage
 *.test
@@ -24,14 +24,14 @@ go.work.sum
 *~
 
 # Local data
-.repowise/
+.vor/
 *.db
 *.db-journal
 *.db-shm
 *.db-wal
 
 # Note: <repo>/CLAUDE.md is intentionally NOT ignored — it carries the
-# repowise-managed block plus the team's own instructions above the
+# vor-managed block plus the team's own instructions above the
 # REPOWISE markers, and regeneration is idempotent (no timestamp churn),
 # so it's meant to be committed.
 

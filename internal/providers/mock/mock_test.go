@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	_ "github.com/repowise-dev/repowise-go/internal/providers/mock"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/mock"
 )
 
 func newMockProvider(t *testing.T) providers.Provider {

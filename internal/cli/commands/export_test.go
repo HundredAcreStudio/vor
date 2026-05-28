@@ -8,17 +8,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/generation/models"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/persistence/wikistore"
+	"github.com/HundredAcreStudio/vor/internal/generation/models"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/wikistore"
 )
 
 func TestExport_NoPagesYet(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
-	stdout, _, err := runRepowiseCmd(t, nil, "export", tmp)
+	stdout, _, err := runVorCmd(t, nil, "export", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestExport_NoPagesYet(t *testing.T) {
 func exportFixture(t *testing.T) (string, string) {
 	t.Helper()
 	tmp, _, conn := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 	repoRow, _ := repos.New(conn).EnsureByLocalPath(context.Background(), tmp, "")
@@ -63,10 +63,10 @@ func exportFixture(t *testing.T) (string, string) {
 
 func TestExport_MarkdownDefault(t *testing.T) {
 	tmp, _ := exportFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "export", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "export", tmp); err != nil {
 		t.Fatal(err)
 	}
-	out := filepath.Join(tmp, ".repowise", "export")
+	out := filepath.Join(tmp, ".vor", "export")
 	files, err := os.ReadDir(out)
 	if err != nil {
 		t.Fatal(err)
@@ -83,10 +83,10 @@ func TestExport_MarkdownDefault(t *testing.T) {
 
 func TestExport_FilenameSanitisation(t *testing.T) {
 	tmp, _ := exportFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "export", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "export", tmp); err != nil {
 		t.Fatal(err)
 	}
-	out := filepath.Join(tmp, ".repowise", "export")
+	out := filepath.Join(tmp, ".vor", "export")
 	// main.go::Sym should be sanitised to main.go__Sym.md (:: → __)
 	if _, err := os.Stat(filepath.Join(out, "main.go__Sym.md")); err != nil {
 		t.Errorf("expected main.go__Sym.md to exist (filename sanitisation): %v", err)
@@ -95,10 +95,10 @@ func TestExport_FilenameSanitisation(t *testing.T) {
 
 func TestExport_HTML(t *testing.T) {
 	tmp, _ := exportFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "export", "--format", "html", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "export", "--format", "html", tmp); err != nil {
 		t.Fatal(err)
 	}
-	out := filepath.Join(tmp, ".repowise", "export")
+	out := filepath.Join(tmp, ".vor", "export")
 	files, _ := os.ReadDir(out)
 	for _, f := range files {
 		if !strings.HasSuffix(f.Name(), ".html") {
@@ -122,10 +122,10 @@ func TestExport_HTML(t *testing.T) {
 
 func TestExport_JSON(t *testing.T) {
 	tmp, _ := exportFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "export", "--format", "json", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "export", "--format", "json", tmp); err != nil {
 		t.Fatal(err)
 	}
-	body, err := os.ReadFile(filepath.Join(tmp, ".repowise", "export", "wiki_pages.json"))
+	body, err := os.ReadFile(filepath.Join(tmp, ".vor", "export", "wiki_pages.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,10 +142,10 @@ func TestExport_JSON(t *testing.T) {
 
 func TestExport_FullJSON(t *testing.T) {
 	tmp, _ := exportFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "export", "--format", "json", "--full", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "export", "--format", "json", "--full", tmp); err != nil {
 		t.Fatal(err)
 	}
-	body, _ := os.ReadFile(filepath.Join(tmp, ".repowise", "export", "wiki_pages.json"))
+	body, _ := os.ReadFile(filepath.Join(tmp, ".vor", "export", "wiki_pages.json"))
 	var env map[string]any
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -169,7 +169,7 @@ func TestExport_FullJSON(t *testing.T) {
 func TestExport_CustomOutputDir(t *testing.T) {
 	tmp, _ := exportFixture(t)
 	customOut := filepath.Join(tmp, "custom-export")
-	if _, _, err := runRepowiseCmd(t, nil, "export", "-o", customOut, tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "export", "-o", customOut, tmp); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(customOut); err != nil {
@@ -183,7 +183,7 @@ func TestExport_CustomOutputDir(t *testing.T) {
 
 func TestExport_UnknownFormatErrors(t *testing.T) {
 	tmp, _ := exportFixture(t)
-	_, _, err := runRepowiseCmd(t, nil, "export", "--format", "wat", tmp)
+	_, _, err := runVorCmd(t, nil, "export", "--format", "wat", tmp)
 	if err == nil {
 		t.Error("expected error for unknown format")
 	}

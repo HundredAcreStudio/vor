@@ -27,27 +27,27 @@ func (s *Server) registerTools() {
 	// Discovery tool — only meaningful in workspace mode but cheap
 	// enough to always expose.
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_workspace_repos",
+		"vor_workspace_repos",
 		mcp.WithDescription("List repos registered in the workspace, with aliases and full repository ids. Agents in workspace mode should call this first to discover which `repo` values are valid for other tools. Returns the empty list when the server isn't running in workspace mode."),
 	), s.wrap(s.toolWorkspaceRepos))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_status",
+		"vor_status",
 		mcp.WithDescription("Repository-wide summary: graph size, hotspot count, dead-code count, average health score, external dependency totals. Use this as the first tool call to understand what's been indexed."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 	), s.wrap(s.toolStatus))
 
 	// --- task-oriented synthesis tools ---
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_get_context",
-		mcp.WithDescription("Triage card for one or more files/symbols — kind, name, language, generated summary, git hotspot bit, the decision_records that touch it, and child symbol_ids you can pipe into repowise_symbol. Pure indexed data, no LLM. The cheapest way to orient on a target before reading source."),
+		"vor_get_context",
+		mcp.WithDescription("Triage card for one or more files/symbols — kind, name, language, generated summary, git hotspot bit, the decision_records that touch it, and child symbol_ids you can pipe into vor_symbol. Pure indexed data, no LLM. The cheapest way to orient on a target before reading source."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithArray("targets", mcp.Description("File paths or symbol_ids (e.g. 'internal/foo.go' or 'internal/foo.go::Bar'). Multiple allowed in one call."), mcp.Items(map[string]any{"type": "string"})),
 		mcp.WithString("target", mcp.Description("Single-target convenience alternative to `targets`.")),
 	), s.wrap(s.toolContext))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_get_why",
+		"vor_get_why",
 		mcp.WithDescription("Architectural decision archaeology — WHY the code is shaped this way. Matches decision records (inline markers, ADRs, CHANGELOG, commit archaeology) by query and/or target file, then synthesises the rationale (when an LLM provider is configured) with the raw records attached for verification. Call before refactors or pattern divergences."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("query", mcp.Description("Free-text question, e.g. 'why JWT instead of sessions'.")),
@@ -55,7 +55,7 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolWhy))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_get_answer",
+		"vor_get_answer",
 		mcp.WithDescription("Synthesised answer to a natural-language question about the codebase, grounded in generated documentation + symbol references, with the citations it used and a calibrated confidence (high/medium/low). When no LLM provider is configured it returns the retrieved candidates as best_guesses instead. First call for 'how does X work' / 'where is Y handled'."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("question", mcp.Required(), mcp.Description("The natural-language question to answer.")),
@@ -63,7 +63,7 @@ func (s *Server) registerTools() {
 
 	// --- graph-traversal tools (deterministic, no LLM) ---
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_get_community",
+		"vor_get_community",
 		mcp.WithDescription("Graph communities — clusters of files that are tightly interconnected (Louvain-style community_id from the graph build). With no args, returns the largest communities and their top files by PageRank. With `target`, returns every member of that file's community. Use to discover the natural module boundaries the import graph reveals."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("target", mcp.Description("A file path or node_id; returns the members of its community.")),
@@ -71,7 +71,7 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolCommunity))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_get_dependency_path",
+		"vor_get_dependency_path",
 		mcp.WithDescription("Shortest dependency path between two nodes over imports/calls/defines edges. Answers 'how does A reach B?' — returns the node sequence and hop count, or found=false when no path exists. Both endpoints accept a file path or a node_id."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("from", mcp.Required(), mcp.Description("Source file path or node_id.")),
@@ -79,7 +79,7 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolDependencyPath))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_get_execution_flows",
+		"vor_get_execution_flows",
 		mcp.WithDescription("Outbound flow trees rooted at the repo's entry points (or an explicit `entry`), walking imports/calls to a bounded depth. Use to understand 'what runs when this entry point fires?'. Cycle-guarded; children capped for legibility."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("entry", mcp.Description("Explicit root file path or node_id; defaults to indexed entry points.")),
@@ -88,21 +88,21 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolExecutionFlows))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_get_architecture_diagram",
+		"vor_get_architecture_diagram",
 		mcp.WithDescription("Repo-level architecture map: the largest communities (with a representative file each), the weighted import dependencies between them, and the entry points. Pass format=mermaid for a renderable flowchart string alongside the structured data. The fastest way to orient on an unfamiliar repo's shape."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("format", mcp.Description("Set to 'mermaid' to also receive a mermaid flowchart string.")),
 	), s.wrap(s.toolArchitectureDiagram))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_hotspots",
+		"vor_hotspots",
 		mcp.WithDescription("Files with high git churn. Returns the top N files by churn percentile, with owner, contributor count, and bus factor. Use this to find where a refactoring effort will have outsized impact."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithNumber("limit", mcp.DefaultNumber(20), mcp.Description("Maximum files to return (1–100, default 20).")),
 	), s.wrap(s.toolHotspots))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_dead_code",
+		"vor_dead_code",
 		mcp.WithDescription("Unreachable files and symbols sorted by confidence. Optional safe_only filter returns only the high-confidence (≥0.9) findings flagged safe to delete."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithBoolean("safe_only", mcp.DefaultBool(false), mcp.Description("If true, only return findings flagged SafeToDelete.")),
@@ -110,14 +110,14 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolDeadCode))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_health",
+		"vor_health",
 		mcp.WithDescription("Code health summary: average score (1–10), finding counts per biomarker, and the worst-scoring files."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithNumber("worst_limit", mcp.DefaultNumber(10), mcp.Description("Number of worst-scoring files to include (1–50, default 10).")),
 	), s.wrap(s.toolHealth))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_health_findings",
+		"vor_health_findings",
 		mcp.WithDescription("Paginated code-health findings, ordered by severity then impact."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("biomarker", mcp.Description("Filter to one biomarker type (e.g. 'high_complexity').")),
@@ -125,22 +125,22 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolHealthFindings))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_security",
-		mcp.WithDescription("Security scan findings (hardcoded secrets, weak crypto, likely injection sinks), ordered by severity. Populated by `repowise security scan`. Secret values are redacted."),
+		"vor_security",
+		mcp.WithDescription("Security scan findings (hardcoded secrets, weak crypto, likely injection sinks), ordered by severity. Populated by `vor security scan`. Secret values are redacted."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("severity", mcp.Description("Filter to a severity: critical|high|medium|low.")),
 		mcp.WithNumber("limit", mcp.DefaultNumber(100), mcp.Description("Maximum findings to return (1–500, default 100).")),
 	), s.wrap(s.toolSecurity))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_symbol",
+		"vor_symbol",
 		mcp.WithDescription("Detail for one symbol: kind, file path, line range, visibility, complexity, PageRank. Look up by the canonical symbol_id (e.g. 'src/foo.go::User::Save')."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("symbol_id", mcp.Required(), mcp.Description("Canonical symbol ID, formatted '<file>::<symbol>' or '<file>::<parent>::<symbol>'.")),
 	), s.wrap(s.toolSymbol))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_callers",
+		"vor_callers",
 		mcp.WithDescription("Who calls this symbol? Returns the incoming 'calls' / 'has_method' edges from the dependency graph, with caller symbol ID and confidence."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("symbol_id", mcp.Required(), mcp.Description("Canonical symbol ID to find callers of.")),
@@ -148,7 +148,7 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolCallers))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_dependents",
+		"vor_dependents",
 		mcp.WithDescription("Which files import the given file? Returns incoming 'imports' edges. Use to assess the blast radius of changing a file."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("file_path", mcp.Required(), mcp.Description("Repo-relative file path (e.g. 'pkg/foo/bar.go').")),
@@ -156,7 +156,7 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolDependents))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_externals",
+		"vor_externals",
 		mcp.WithDescription("Third-party dependencies declared in manifest files (package.json, pyproject.toml, Cargo.toml, go.mod, *.csproj). Optional ecosystem + dev filters."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("ecosystem", mcp.Description("Filter to one ecosystem: 'npm', 'pypi', 'cargo', 'go', or 'nuget'.")),
@@ -165,8 +165,8 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolExternals))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_search",
-		mcp.WithDescription("Search the codebase. Default is a substring match over graph nodes (files + symbols) ranked by PageRank. Set semantic=true to rank wiki pages by embedding similarity instead (requires `repowise embed` to have run; falls back to substring match otherwise)."),
+		"vor_search",
+		mcp.WithDescription("Search the codebase. Default is a substring match over graph nodes (files + symbols) ranked by PageRank. Set semantic=true to rank wiki pages by embedding similarity instead (requires `vor embed` to have run; falls back to substring match otherwise)."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("query", mcp.Required(), mcp.Description("Substring to match against name / qualified_name / node_id, or a natural-language query when semantic=true.")),
 		mcp.WithString("node_type", mcp.Description("Filter to 'file' or 'symbol' (lexical mode only).")),
@@ -175,27 +175,27 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolSearch))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_pipeline_log",
+		"vor_pipeline_log",
 		mcp.WithDescription("Recent pipeline phase executions for this repository, newest first. Each entry is one row of pipeline_jobs (phase, state, started_at, error if failed). Useful for diagnosing 'why is my data out of date?'"),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithNumber("limit", mcp.DefaultNumber(20), mcp.Description("Maximum rows to return (1–200, default 20).")),
 	), s.wrap(s.toolPipelineLog))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_reindex",
-		mcp.WithDescription("Re-index a repo so the data reflects current source. ASYNCHRONOUS: returns a run_id immediately and runs in the background — poll repowise_pipeline_log for phase progress. Mode 'update' (default) is incremental (reuses the parse cache); 'init' forces a full pass. A run already in progress is returned rather than duplicated."),
+		"vor_reindex",
+		mcp.WithDescription("Re-index a repo so the data reflects current source. ASYNCHRONOUS: returns a run_id immediately and runs in the background — poll vor_pipeline_log for phase progress. Mode 'update' (default) is incremental (reuses the parse cache); 'init' forces a full pass. A run already in progress is returned rather than duplicated."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("mode", mcp.DefaultString("update"), mcp.Description("'update' (incremental, default) or 'init' (full re-index).")),
 	), s.wrap(s.toolReindex))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_security_scan",
-		mcp.WithDescription("Run the pattern-based security scanner over the repo and replace stored findings. Synchronous (regex over source — no LLM). Returns a severity breakdown; read individual findings with repowise_security."),
+		"vor_security_scan",
+		mcp.WithDescription("Run the pattern-based security scanner over the repo and replace stored findings. Synchronous (regex over source — no LLM). Returns a severity breakdown; read individual findings with vor_security."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 	), s.wrap(s.toolSecurityScan))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_decisions",
+		"vor_decisions",
 		mcp.WithDescription("Architectural decisions extracted from the codebase. Sources include inline-marker comments (DECISION:, WHY:, TRADEOFF:), ADR files under docs/adr, BREAKING entries in CHANGELOG.md, and Conventional Commits with ! markers or BREAKING CHANGE: footers. Each record carries source provenance (file + line or commit SHA) so the agent can verify quotes."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("source", mcp.Description("Filter by source: inline_marker | adr | changelog | git_archaeology.")),
@@ -203,8 +203,8 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolDecisions))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_pages",
-		mcp.WithDescription("Generated wiki page summaries (title, target file, version, freshness, token usage). Use this to discover what documentation has been produced; follow up with repowise_page to read one. Pages are produced by 'repowise generate' against the indexed graph."),
+		"vor_pages",
+		mcp.WithDescription("Generated wiki page summaries (title, target file, version, freshness, token usage). Use this to discover what documentation has been produced; follow up with vor_page to read one. Pages are produced by 'vor generate' against the indexed graph."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("kind", mcp.Description("Filter by page_type: file_overview | directory_overview | symbol_detail | architecture.")),
 		mcp.WithBoolean("stale_only", mcp.DefaultBool(false), mcp.Description("If true, only return pages whose freshness_status is not 'fresh' (source has drifted).")),
@@ -212,7 +212,7 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolPages))
 
 	s.srv.AddTool(mcp.NewTool(
-		"repowise_page",
+		"vor_page",
 		mcp.WithDescription("Read one wiki page's full markdown content by target path. Returns the rendered body the LLM produced plus all the per-page metadata (model, version, freshness, source_hash) the agent needs to decide whether to trust it."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 		mcp.WithString("path", mcp.Required(), mcp.Description("Repo-relative target path (e.g. 'internal/foo/bar.go').")),

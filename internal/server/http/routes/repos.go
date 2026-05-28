@@ -5,8 +5,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/server/http/httpx"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/server/http/httpx"
 )
 
 // MountRepos wires the /api/repos endpoints (collection level) onto r.

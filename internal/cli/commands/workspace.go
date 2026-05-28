@@ -12,11 +12,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/workspace"
+	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 // newWorkspaceCmd is the multi-repo subcommand group. Workspace state
-// lives in <root>/.repowise/workspace.json — registry of (alias, path)
+// lives in <root>/.vor/workspace.json — registry of (alias, path)
 // pairs plus a default alias. This is a lighter implementation than
 // the Python `workspaces` system: no cross-repo contracts, no shared
 // DB, no auto-sync hooks. Enough to land the CLI surface the README
@@ -44,7 +44,7 @@ func newWorkspaceCmd() *cobra.Command {
 
 // resolveWorkspaceRoot picks the workspace root. We use the cwd by
 // default, but defer to --root when supplied. The workspace.json
-// file is stored at <root>/.repowise/workspace.json.
+// file is stored at <root>/.vor/workspace.json.
 func resolveWorkspaceRoot(flag string) (string, error) {
 	if flag == "" {
 		flag = "."
@@ -73,7 +73,7 @@ func newWorkspaceListCmd() *cobra.Command {
 			out := cmd.OutOrStdout()
 			if len(s.Repos) == 0 {
 				fmt.Fprintf(out, "no repos registered in %s\n", ws)
-				fmt.Fprintln(out, "add one with `repowise workspace add <PATH>`")
+				fmt.Fprintln(out, "add one with `vor workspace add <PATH>`")
 				return nil
 			}
 			tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
@@ -89,7 +89,7 @@ func newWorkspaceListCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&root, "root", ".", "workspace root (where .repowise/workspace.json lives)")
+	cmd.Flags().StringVar(&root, "root", ".", "workspace root (where .vor/workspace.json lives)")
 	return cmd
 }
 

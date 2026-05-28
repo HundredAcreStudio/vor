@@ -15,9 +15,9 @@ import (
 	"github.com/smacker/go-tree-sitter/typescript/tsx"
 	"github.com/smacker/go-tree-sitter/typescript/typescript"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/parser"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/parser/common"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/parser"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/parser/common"
 )
 
 const langTag models.LanguageTag = "typescript"

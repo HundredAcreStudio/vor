@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/gitstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/git"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/gitstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 )
 
 func freshDB(t *testing.T) *sql.DB {

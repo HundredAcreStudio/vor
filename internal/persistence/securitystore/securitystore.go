@@ -9,7 +9,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/security"
+	"github.com/HundredAcreStudio/vor/internal/analysis/security"
 )
 
 // Store persists security findings.

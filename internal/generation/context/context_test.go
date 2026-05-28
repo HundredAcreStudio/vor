@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	gctx "github.com/repowise-dev/repowise-go/internal/generation/context"
+	gctx "github.com/HundredAcreStudio/vor/internal/generation/context"
 )
 
 func TestLoadFile_PopulatesBundle(t *testing.T) {

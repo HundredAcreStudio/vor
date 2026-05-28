@@ -8,11 +8,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/userconfig"
+	"github.com/HundredAcreStudio/vor/internal/userconfig"
 )
 
 // newWatchedCmd dumps the user-global watched.json registry — every
-// repo `repowise watch` has been run against, with the last-seen and
+// repo `vor watch` has been run against, with the last-seen and
 // last-update timestamps. Useful for "what am I keeping fresh on this
 // box?" without grepping individual repo paths.
 //
@@ -44,7 +44,7 @@ func newWatchedListCmd() *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if len(reg.Repos) == 0 {
-				fmt.Fprintln(out, "no watched repos yet — `repowise watch [PATH]` records activity here")
+				fmt.Fprintln(out, "no watched repos yet — `vor watch [PATH]` records activity here")
 				return nil
 			}
 

@@ -68,8 +68,8 @@ func TestTraverse_FiltersAreApplied(t *testing.T) {
 		"build/built.js",           // .gitignore'd
 		"bundle.min.js",            // blocked filename pattern
 		"package-lock.json",        // blocked filename pattern
-		"secret.txt",               // .repowiseIgnore
-		"ignored_by_repowise.py",   // .repowiseIgnore
+		"secret.txt",               // .vorIgnore
+		"ignored_by_vor.py",        // .vorIgnore
 		"ignored_by_gitignore.py",  // .gitignore
 		"pkg/generated.go",         // generated header marker
 		"pkg/binary.go",            // null byte → binary
@@ -98,7 +98,7 @@ func TestTraverse_StatsCounters(t *testing.T) {
 	if stats.SkippedGitignore == 0 {
 		t.Errorf("SkippedGitignore = 0; expected > 0")
 	}
-	// At least one .repowiseIgnore skip
+	// At least one .vorIgnore skip
 	if stats.SkippedExtraIgnore == 0 {
 		t.Errorf("SkippedExtraIgnore = 0; expected > 0")
 	}

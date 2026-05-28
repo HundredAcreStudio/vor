@@ -1,5 +1,5 @@
 ; =============================================================================
-; repowise — Scala symbol, import, and call queries (tree-sitter-scala)
+; vor — Scala symbol, import, and call queries (tree-sitter-scala)
 ; =============================================================================
 
 ; ---- Imports (whole declaration; the leading "import " keyword is stripped

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 )
 
 // readRepoOptions captures the flags every read command uses to pick
@@ -39,7 +39,7 @@ func resolveReadRepo(ctx context.Context, conn *sql.DB, opts readRepoOptions) (*
 		r, err := store.Get(ctx, opts.ID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, fmt.Errorf("no repository with id %s (try `repowise repos list`)", opts.ID)
+				return nil, fmt.Errorf("no repository with id %s (try `vor repos list`)", opts.ID)
 			}
 			return nil, err
 		}

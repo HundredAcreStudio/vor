@@ -8,23 +8,23 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/config"
-	"github.com/repowise-dev/repowise-go/internal/generation/models"
-	"github.com/repowise-dev/repowise-go/internal/generation/runner"
-	"github.com/repowise-dev/repowise-go/internal/persistence/coststore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	"github.com/repowise-dev/repowise-go/internal/providers/middleware"
-	"github.com/repowise-dev/repowise-go/internal/providers/ratelimit"
+	"github.com/HundredAcreStudio/vor/internal/config"
+	"github.com/HundredAcreStudio/vor/internal/generation/models"
+	"github.com/HundredAcreStudio/vor/internal/generation/runner"
+	"github.com/HundredAcreStudio/vor/internal/persistence/coststore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers/middleware"
+	"github.com/HundredAcreStudio/vor/internal/providers/ratelimit"
 
 	// Side-effect imports — register every provider + embedder so
 	// --provider / config.embedder can pick any of them at runtime.
-	_ "github.com/repowise-dev/repowise-go/internal/providers/anthropic"
-	_ "github.com/repowise-dev/repowise-go/internal/providers/google"
-	_ "github.com/repowise-dev/repowise-go/internal/providers/litellm"
-	_ "github.com/repowise-dev/repowise-go/internal/providers/mock"
-	_ "github.com/repowise-dev/repowise-go/internal/providers/ollama"
-	_ "github.com/repowise-dev/repowise-go/internal/providers/openai"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/anthropic"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/google"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/litellm"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/mock"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/ollama"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/openai"
 )
 
 // newGenerateCmd produces wiki pages from the persisted ingest state.
@@ -48,7 +48,7 @@ file using the configured LLM provider. Pages with matching source_hash
 are skipped unless --force is set. Use --dry-run to preview without
 spending tokens.
 
-Provider defaults come from .repowise/config.yaml or environment
+Provider defaults come from .vor/config.yaml or environment
 variables; override per-invocation with --provider and --model.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -140,7 +140,7 @@ variables; override per-invocation with --provider and --model.`,
 				fmt.Fprintf(out, "[dry run] %d files would be generated\n", summary.DryRunCount)
 			}
 			if len(summary.Files) == 0 {
-				fmt.Fprintln(out, "no indexed files found (run `repowise init` first)")
+				fmt.Fprintln(out, "no indexed files found (run `vor init` first)")
 			}
 			return nil
 		},
@@ -229,7 +229,7 @@ func buildProvider(name, model string, cfg config.Config) (providers.Provider, e
 			return nil, fmt.Errorf("OPENAI_API_KEY is required for the openai provider")
 		}
 		opts["api_key"] = key
-		if b := os.Getenv("REPOWISE_OPENAI_BASE_URL"); b != "" {
+		if b := os.Getenv("VOR_OPENAI_BASE_URL"); b != "" {
 			opts["base_url"] = b
 		}
 		if model != "" {
@@ -246,16 +246,16 @@ func buildProvider(name, model string, cfg config.Config) (providers.Provider, e
 		}
 	case "ollama":
 		// Local server — no key. Base URL overridable for remote hosts.
-		if b := os.Getenv("REPOWISE_OLLAMA_BASE_URL"); b != "" {
+		if b := os.Getenv("VOR_OLLAMA_BASE_URL"); b != "" {
 			opts["base_url"] = b
 		}
 		if model != "" {
 			opts["default_model"] = model
 		}
 	case "litellm":
-		base := os.Getenv("REPOWISE_LITELLM_BASE_URL")
+		base := os.Getenv("VOR_LITELLM_BASE_URL")
 		if base == "" {
-			return nil, fmt.Errorf("REPOWISE_LITELLM_BASE_URL is required for the litellm provider")
+			return nil, fmt.Errorf("VOR_LITELLM_BASE_URL is required for the litellm provider")
 		}
 		opts["base_url"] = base
 		if key := firstSet(cfg.ProviderKeys.OpenRouter, os.Getenv("LITELLM_API_KEY")); key != "" {

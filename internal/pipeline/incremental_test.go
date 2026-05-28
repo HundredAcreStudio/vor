@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/pipeline"
 )
 
 // TestIncrementalParse_ReusesUnchangedFiles is the core Phase 15a

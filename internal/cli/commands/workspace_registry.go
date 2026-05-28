@@ -8,13 +8,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/userconfig"
-	"github.com/repowise-dev/repowise-go/internal/workspace"
+	"github.com/HundredAcreStudio/vor/internal/userconfig"
+	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 // newWorkspaceRegisterCmd adds a workspace root to the user-global
-// registry at $XDG_STATE_HOME/repowise/workspaces.yaml. Different
-// from `repowise workspace add` (which adds a REPO to the current
+// registry at $XDG_STATE_HOME/vor/workspaces.yaml. Different
+// from `vor workspace add` (which adds a REPO to the current
 // workspace.json): this one is the box-level inventory of workspaces.
 func newWorkspaceRegisterCmd() *cobra.Command {
 	var label string
@@ -31,8 +31,8 @@ func newWorkspaceRegisterCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if _, err := os.Stat(filepath.Join(abs, ".repowise", "workspace.json")); err != nil {
-				return fmt.Errorf("%s is not a workspace root (no .repowise/workspace.json) — run `repowise workspace add` first to seed it", abs)
+			if _, err := os.Stat(filepath.Join(abs, ".vor", "workspace.json")); err != nil {
+				return fmt.Errorf("%s is not a workspace root (no .vor/workspace.json) — run `vor workspace add` first to seed it", abs)
 			}
 			reg, err := userconfig.LoadWorkspaces()
 			if err != nil {
@@ -94,7 +94,7 @@ func newWorkspaceRegisteredCmd() *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if len(reg.Workspaces) == 0 {
-				fmt.Fprintln(out, "no workspaces registered — `repowise workspace register PATH`")
+				fmt.Fprintln(out, "no workspaces registered — `vor workspace register PATH`")
 				return nil
 			}
 			tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)

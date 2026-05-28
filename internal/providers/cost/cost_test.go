@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	"github.com/repowise-dev/repowise-go/internal/providers/cost"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers/cost"
 )
 
 func TestCatalog_PrefixMatch(t *testing.T) {

@@ -1,4 +1,4 @@
-// Package config loads repowise configuration from .repowise/config.yaml and
+// Package config loads vor configuration from .vor/config.yaml and
 // the environment.
 //
 // Precedence: defaults < repo config file < environment variables.
@@ -109,9 +109,9 @@ func Defaults() Config {
 // Load resolves the configuration for the given repo path. The merge
 // chain is, in increasing precedence:
 //
-//	defaults  →  ~/.config/repowise/config.yaml  →
-//	<repo>/.repowise/config.yaml                 →
-//	REPOWISE_* env vars
+//	defaults  →  ~/.config/vor/config.yaml  →
+//	<repo>/.vor/config.yaml                 →
+//	VOR_* env vars
 //
 // A missing config file at any layer is not an error — that layer is
 // just skipped.
@@ -119,7 +119,7 @@ func Load(repoPath string) (Config, error) {
 	cfg := Defaults()
 
 	// User-global config: same shape as the per-repo file, but lives
-	// in $XDG_CONFIG_HOME/repowise/config.yaml. Loaded via the
+	// in $XDG_CONFIG_HOME/vor/config.yaml. Loaded via the
 	// userconfig package so XDG resolution is shared with the rest
 	// of the daemon-state plumbing.
 	if userCfg, err := loadUserGlobal(); err == nil && userCfg != nil {
@@ -127,7 +127,7 @@ func Load(repoPath string) (Config, error) {
 	}
 
 	if repoPath != "" {
-		configPath := filepath.Join(repoPath, ".repowise", "config.yaml")
+		configPath := filepath.Join(repoPath, ".vor", "config.yaml")
 		fileCfg, err := loadFile(configPath)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return Config{}, fmt.Errorf("read %s: %w", configPath, err)
@@ -141,7 +141,7 @@ func Load(repoPath string) (Config, error) {
 	return cfg, nil
 }
 
-// loadUserGlobal reads the user-global ~/.config/repowise/config.yaml
+// loadUserGlobal reads the user-global ~/.config/vor/config.yaml
 // and projects it onto the Config shape. Returns (nil, nil) when no
 // file exists — that just means "no user-global overrides". Live in
 // this file rather than the userconfig package to avoid a cycle when
@@ -168,18 +168,18 @@ func loadUserGlobal() (*Config, error) {
 	return &c, nil
 }
 
-// userConfigDirHook resolves $XDG_CONFIG_HOME/repowise without
+// userConfigDirHook resolves $XDG_CONFIG_HOME/vor without
 // importing userconfig (which would cycle on the test side). Mirrors
 // userconfig.ConfigDir's logic minus the mkdir.
 func userConfigDirHook() string {
 	if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {
-		return filepath.Join(v, "repowise")
+		return filepath.Join(v, "vor")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".config", "repowise")
+	return filepath.Join(home, ".config", "vor")
 }
 
 // loadFile reads and parses a YAML config file. Returns os.ErrNotExist
@@ -225,42 +225,42 @@ func mergeFile(base, file Config) Config {
 	return base
 }
 
-// applyEnv overlays REPOWISE_* environment variables onto cfg. Provider API
+// applyEnv overlays VOR_* environment variables onto cfg. Provider API
 // keys are also pulled here.
 func applyEnv(cfg *Config) {
-	if v := os.Getenv("REPOWISE_DB_URL"); v != "" {
+	if v := os.Getenv("VOR_DB_URL"); v != "" {
 		cfg.DatabaseURL = v
-	} else if v := os.Getenv("REPOWISE_DATABASE_URL"); v != "" {
+	} else if v := os.Getenv("VOR_DATABASE_URL"); v != "" {
 		cfg.DatabaseURL = v
 	}
 
-	if v := os.Getenv("REPOWISE_EMBEDDER"); v != "" {
+	if v := os.Getenv("VOR_EMBEDDER"); v != "" {
 		cfg.Embedder = v
 	}
-	if v := os.Getenv("REPOWISE_EMBEDDING_MODEL"); v != "" {
+	if v := os.Getenv("VOR_EMBEDDING_MODEL"); v != "" {
 		cfg.EmbeddingModel = v
 	}
-	if v, ok := envInt("REPOWISE_EMBEDDING_DIMS"); ok {
+	if v, ok := envInt("VOR_EMBEDDING_DIMS"); ok {
 		cfg.EmbeddingDims = v
 	}
 
-	if v := os.Getenv("REPOWISE_HOST"); v != "" {
+	if v := os.Getenv("VOR_HOST"); v != "" {
 		cfg.Host = v
 	}
-	if v, ok := envInt("REPOWISE_PORT"); ok {
+	if v, ok := envInt("VOR_PORT"); ok {
 		cfg.Port = v
 	}
-	if v := os.Getenv("REPOWISE_LOG_LEVEL"); v != "" {
+	if v := os.Getenv("VOR_LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
 	}
-	if v, ok := envInt("REPOWISE_RPM"); ok {
+	if v, ok := envInt("VOR_RPM"); ok {
 		cfg.RPM = v
 	}
-	if v, ok := envInt("REPOWISE_TPM"); ok {
+	if v, ok := envInt("VOR_TPM"); ok {
 		cfg.TPM = v
 	}
 
-	if v := os.Getenv("REPOWISE_SKIP_LANGUAGES"); v != "" {
+	if v := os.Getenv("VOR_SKIP_LANGUAGES"); v != "" {
 		cfg.Languages.Skip = splitCSV(v)
 	}
 

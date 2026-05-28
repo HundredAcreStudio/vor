@@ -9,13 +9,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/config"
-	"github.com/repowise-dev/repowise-go/internal/persistence/vector"
+	"github.com/HundredAcreStudio/vor/internal/config"
+	"github.com/HundredAcreStudio/vor/internal/persistence/vector"
 )
 
 // newSearchCmd searches the persisted graph_nodes by name (substring
 // match). With --semantic it instead ranks wiki pages by embedding
-// similarity (requires `repowise embed`).
+// similarity (requires `vor embed`).
 func newSearchCmd() *cobra.Command {
 	var (
 		repoPath string
@@ -103,13 +103,13 @@ func newSearchCmd() *cobra.Command {
 	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	cmd.Flags().IntVar(&limit, "limit", 25, "max matches to show")
 	cmd.Flags().StringVar(&nodeType, "type", "", "filter by node type (file|symbol)")
-	cmd.Flags().BoolVar(&semantic, "semantic", false, "rank wiki pages by embedding similarity (requires `repowise embed`)")
+	cmd.Flags().BoolVar(&semantic, "semantic", false, "rank wiki pages by embedding similarity (requires `vor embed`)")
 	return cmd
 }
 
 // runSemanticSearch embeds the query and ranks wiki pages by cosine
 // similarity. Errors clearly when no embeddings exist so the user knows
-// to run `repowise embed` first.
+// to run `vor embed` first.
 func runSemanticSearch(ctx context.Context, cmd *cobra.Command, conn *sql.DB, repoPath, repoID, query string, limit int) error {
 	cfg, err := config.Load(repoPath)
 	if err != nil {
@@ -125,7 +125,7 @@ func runSemanticSearch(ctx context.Context, cmd *cobra.Command, conn *sql.DB, re
 		return err
 	}
 	if n == 0 {
-		return fmt.Errorf("no embeddings for this repo — run `repowise embed` first")
+		return fmt.Errorf("no embeddings for this repo — run `vor embed` first")
 	}
 	vecs, err := embedder.Embed(ctx, []string{query})
 	if err != nil {

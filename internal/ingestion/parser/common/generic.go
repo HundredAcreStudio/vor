@@ -8,7 +8,7 @@ import (
 
 	sitter "github.com/smacker/go-tree-sitter"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // GenericConfig drives GenericExtract for languages whose extraction

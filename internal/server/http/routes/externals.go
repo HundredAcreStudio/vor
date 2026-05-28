@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/repowise-dev/repowise-go/internal/server/http/httpx"
+	"github.com/HundredAcreStudio/vor/internal/server/http/httpx"
 )
 
 // MountExternals registers /externals under /api/repos/{repoID}.

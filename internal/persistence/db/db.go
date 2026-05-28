@@ -1,4 +1,4 @@
-// Package db opens database/sql connections from a repowise database URL,
+// Package db opens database/sql connections from a vor database URL,
 // picking the right driver for SQLite or PostgreSQL.
 //
 // URL forms supported:
@@ -89,7 +89,7 @@ func Open(ctx context.Context, opts OpenOptions) (*sql.DB, Dialect, error) {
 	return conn, dialect, nil
 }
 
-// resolveDriverDSN normalises a repowise URL into (driver, DSN, dialect).
+// resolveDriverDSN normalises a vor URL into (driver, DSN, dialect).
 func resolveDriverDSN(rawURL string) (driver, dsn string, dialect Dialect, err error) {
 	if rawURL == "" {
 		return "", "", "", fmt.Errorf("empty database URL")

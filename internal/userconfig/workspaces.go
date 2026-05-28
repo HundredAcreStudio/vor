@@ -11,8 +11,8 @@ import (
 )
 
 // WorkspaceRegistry is the user-global list of known workspace roots.
-// Lives at $XDG_STATE_HOME/repowise/workspaces.yaml. Distinct from a
-// workspace's own .repowise/workspace.json — that file lists the
+// Lives at $XDG_STATE_HOME/vor/workspaces.yaml. Distinct from a
+// workspace's own .vor/workspace.json — that file lists the
 // member repos of one workspace; this one lists the workspace roots
 // themselves so the daemon / status command don't need --root.
 type WorkspaceRegistry struct {

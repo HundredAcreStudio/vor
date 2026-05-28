@@ -71,7 +71,7 @@ func newExternalsCmd() *cobra.Command {
 				count++
 			}
 			if count == 0 {
-				fmt.Fprintln(out, "no external_systems rows (run `repowise ingest --persist`)")
+				fmt.Fprintln(out, "no external_systems rows (run `vor ingest --persist`)")
 			}
 			return rows.Err()
 		},

@@ -8,10 +8,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/security"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/traverser"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/persistence/securitystore"
+	"github.com/HundredAcreStudio/vor/internal/analysis/security"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/traverser"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/securitystore"
 )
 
 // newSecurityCmd groups the pattern-based security scanner.
@@ -110,7 +110,7 @@ func newSecurityListCmd() *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if len(findings) == 0 {
-				fmt.Fprintln(out, "no security findings — run `repowise security scan`")
+				fmt.Fprintln(out, "no security findings — run `vor security scan`")
 				return nil
 			}
 			tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)

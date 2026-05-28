@@ -14,8 +14,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/graph"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // Store writes Graphs to the database.
@@ -147,7 +147,7 @@ func insertEdges(ctx context.Context, tx *sql.Tx, repoID string, edges []*graph.
 }
 
 // CountByEdgeType returns the per-type edge counts for a repository.
-// Useful for `repowise status` style summaries.
+// Useful for `vor status` style summaries.
 func (s *Store) CountByEdgeType(ctx context.Context, repoID string) (map[models.EdgeType]int, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT edge_type, COUNT(*) FROM graph_edges WHERE repository_id = ? GROUP BY edge_type`,

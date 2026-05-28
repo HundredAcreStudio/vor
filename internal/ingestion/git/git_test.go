@@ -11,7 +11,7 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/git"
 )
 
 // makeTempRepo creates a real git repository in t.TempDir() and returns its

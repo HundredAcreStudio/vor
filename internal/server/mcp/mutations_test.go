@@ -10,15 +10,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/pipelinestore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	mcpserver "github.com/repowise-dev/repowise-go/internal/server/mcp"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/pipelinestore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	mcpserver "github.com/HundredAcreStudio/vor/internal/server/mcp"
 
 	// Register the Go parser so a reindex does real work in this test
 	// binary (resolvers + decision sources come in via the pipeline import).
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/golang"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/golang"
 )
 
 // mutationFixture builds a server over a real on-disk repo dir so the
@@ -63,7 +63,7 @@ func TestReindex_AsyncRunCompletes(t *testing.T) {
 		"go.mod":  "module example.com/x\ngo 1.21\n",
 	})
 
-	text := callTool(t, srv, "repowise_reindex", map[string]any{"mode": "update"})
+	text := callTool(t, srv, "vor_reindex", map[string]any{"mode": "update"})
 	var out struct {
 		Status string `json:"status"`
 		RunID  string `json:"runId"`
@@ -100,7 +100,7 @@ func TestReindex_AsyncRunCompletes(t *testing.T) {
 	// lag a beat behind the LatestRun snapshot read above.
 	var logText string
 	for time.Now().Before(deadline) {
-		logText = callTool(t, srv, "repowise_pipeline_log", map[string]any{"limit": 20})
+		logText = callTool(t, srv, "vor_pipeline_log", map[string]any{"limit": 20})
 		if strings.Contains(logText, "completed") && strings.Contains(logText, "parse") {
 			break
 		}
@@ -125,7 +125,7 @@ func TestReindex_DoesNotDoubleFire(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	text := callTool(t, srv, "repowise_reindex", nil)
+	text := callTool(t, srv, "vor_reindex", nil)
 	var out struct {
 		Status string `json:"status"`
 		RunID  string `json:"runId"`
@@ -145,7 +145,7 @@ func TestSecurityScan_StoresAndReadsBack(t *testing.T) {
 		"go.mod": "module x\ngo 1.21\n",
 	})
 
-	text := callTool(t, srv, "repowise_security_scan", nil)
+	text := callTool(t, srv, "vor_security_scan", nil)
 	var scan struct {
 		Findings   int            `json:"findings"`
 		BySeverity map[string]int `json:"bySeverity"`
@@ -157,8 +157,8 @@ func TestSecurityScan_StoresAndReadsBack(t *testing.T) {
 		t.Fatalf("expected >=2 findings (secret + weak hash), got %d: %s", scan.Findings, text)
 	}
 
-	// repowise_security should read the stored findings back.
-	readBack := callTool(t, srv, "repowise_security", map[string]any{"limit": 50})
+	// vor_security should read the stored findings back.
+	readBack := callTool(t, srv, "vor_security", map[string]any{"limit": 50})
 	if !strings.Contains(readBack, "hardcoded_secret") {
 		t.Errorf("read-back missing hardcoded_secret: %s", readBack)
 	}

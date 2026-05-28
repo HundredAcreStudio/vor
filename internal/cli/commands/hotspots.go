@@ -73,7 +73,7 @@ func newHotspotsCmd() *cobra.Command {
 			}
 			if count == 0 {
 				if all {
-					fmt.Fprintln(out, "no git_metadata rows (run `repowise ingest --persist` to populate)")
+					fmt.Fprintln(out, "no git_metadata rows (run `vor ingest --persist` to populate)")
 				} else {
 					fmt.Fprintln(out, "no hotspot files (try --all to see every tracked file)")
 				}

@@ -9,14 +9,14 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/generation/models"
-	"github.com/repowise-dev/repowise-go/internal/generation/runner"
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/persistence/wikistore"
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	_ "github.com/repowise-dev/repowise-go/internal/providers/mock"
+	"github.com/HundredAcreStudio/vor/internal/generation/models"
+	"github.com/HundredAcreStudio/vor/internal/generation/runner"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/wikistore"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/mock"
 )
 
 // dirFixture sets up a repo with files in two distinct directories and

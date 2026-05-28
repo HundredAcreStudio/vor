@@ -18,11 +18,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/logging"
-	"github.com/repowise-dev/repowise-go/internal/persistence/pipelinestore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/pipeline"
-	"github.com/repowise-dev/repowise-go/internal/workspace"
+	"github.com/HundredAcreStudio/vor/internal/logging"
+	"github.com/HundredAcreStudio/vor/internal/persistence/pipelinestore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 // newWorkspaceStatusCmd reads every member repo's latest pipeline run
@@ -106,8 +106,8 @@ func collectRepoStatusRow(ctx context.Context, e workspace.Entry) string {
 		e.Alias, indexed, latestRun, healthStr, files, decisions, pages)
 }
 
-// newWorkspaceUpdateCmd runs `repowise update` on every member repo.
-// Mirrors the Python `repowise update --workspace` flow. Failures on
+// newWorkspaceUpdateCmd runs `vor update` on every member repo.
+// Mirrors the Python `vor update --workspace` flow. Failures on
 // one repo don't abort the others — each repo's success/error is
 // reported, and the command returns a non-zero error only when at
 // least one update failed.
@@ -311,7 +311,7 @@ func workspaceDoctorChecks(ctx context.Context, e workspace.Entry) []string {
 	}
 	latest, _ := pipelinestore.New(conn).LatestRun(ctx, repoRow.ID)
 	if latest == nil {
-		issues = append(issues, "never indexed (run `repowise update`)")
+		issues = append(issues, "never indexed (run `vor update`)")
 	} else if latest.Overall == pipelinestore.OutcomeFailed {
 		issues = append(issues, fmt.Sprintf("latest pipeline run failed (%s)",
 			latest.UpdatedAt.Format("2006-01-02")))

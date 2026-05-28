@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
+	"github.com/HundredAcreStudio/vor/internal/analysis/decisions"
 )
 
 // Store persists decision records.
@@ -141,7 +141,7 @@ func (s *Store) ReplaceAll(ctx context.Context, repoID string, records []decisio
 }
 
 // Insert appends a single decision_records row plus a matching
-// decision_evidence row. Used by `repowise decision add` where the
+// decision_evidence row. Used by `vor decision add` where the
 // user creates a record by hand instead of mining one. Returns the
 // generated id.
 func (s *Store) Insert(ctx context.Context, repoID string, r decisions.Record) (string, error) {

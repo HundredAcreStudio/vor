@@ -3,7 +3,7 @@ package graph
 import (
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 func TestAddNode_Dedupes(t *testing.T) {

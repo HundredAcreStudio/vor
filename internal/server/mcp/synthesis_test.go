@@ -8,21 +8,21 @@ import (
 	"testing"
 
 	"database/sql"
-	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
-	pageModels "github.com/repowise-dev/repowise-go/internal/generation/models"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/decisionstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/gitstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/persistence/wikistore"
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	_ "github.com/repowise-dev/repowise-go/internal/providers/mock"
-	mcpserver "github.com/repowise-dev/repowise-go/internal/server/mcp"
+	"github.com/HundredAcreStudio/vor/internal/analysis/decisions"
+	pageModels "github.com/HundredAcreStudio/vor/internal/generation/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/git"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/graph"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/decisionstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/gitstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/graphstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/wikistore"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/mock"
+	mcpserver "github.com/HundredAcreStudio/vor/internal/server/mcp"
 )
 
 // synthFixture seeds a DB with a graph (file + symbol), a hotspot, a
@@ -103,7 +103,7 @@ func synthServer(t *testing.T, conn *sql.DB, repoID string, withProvider bool) *
 func TestGetContext_AssemblesCard(t *testing.T) {
 	conn, rid := synthFixture(t)
 	srv := synthServer(t, conn, rid, false) // no LLM needed for get_context
-	text := callTool(t, srv, "repowise_get_context", map[string]any{"target": "auth.go"})
+	text := callTool(t, srv, "vor_get_context", map[string]any{"target": "auth.go"})
 
 	var out struct {
 		Cards []map[string]any `json:"cards"`
@@ -138,7 +138,7 @@ func TestGetContext_MissingTargets(t *testing.T) {
 	// callTool fails on tool error; use HandleMessage directly.
 	msg := map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-		"params": map[string]any{"name": "repowise_get_context", "arguments": map[string]any{}},
+		"params": map[string]any{"name": "vor_get_context", "arguments": map[string]any{}},
 	}
 	raw, _ := json.Marshal(msg)
 	resp := srv.MCPServer().HandleMessage(context.Background(), raw)
@@ -151,7 +151,7 @@ func TestGetContext_MissingTargets(t *testing.T) {
 func TestGetAnswer_NoProviderReturnsBestGuesses(t *testing.T) {
 	conn, rid := synthFixture(t)
 	srv := synthServer(t, conn, rid, false)
-	text := callTool(t, srv, "repowise_get_answer", map[string]any{
+	text := callTool(t, srv, "vor_get_answer", map[string]any{
 		"question": "how does Login validate tokens",
 	})
 	if !strings.Contains(text, `"confidence": "none"`) {
@@ -172,7 +172,7 @@ func TestGetAnswer_NoProviderReturnsBestGuesses(t *testing.T) {
 func TestGetAnswer_WithProviderSynthesises(t *testing.T) {
 	conn, rid := synthFixture(t)
 	srv := synthServer(t, conn, rid, true)
-	text := callTool(t, srv, "repowise_get_answer", map[string]any{
+	text := callTool(t, srv, "vor_get_answer", map[string]any{
 		"question": "how does Login validate tokens",
 	})
 	var out struct {
@@ -197,7 +197,7 @@ func TestGetAnswer_WithProviderSynthesises(t *testing.T) {
 func TestGetWhy_NoProviderReturnsDecisions(t *testing.T) {
 	conn, rid := synthFixture(t)
 	srv := synthServer(t, conn, rid, false)
-	text := callTool(t, srv, "repowise_get_why", map[string]any{"query": "JWT"})
+	text := callTool(t, srv, "vor_get_why", map[string]any{"query": "JWT"})
 	if !strings.Contains(text, "no LLM provider") {
 		t.Errorf("expected no-provider note: %s", text)
 	}
@@ -212,7 +212,7 @@ func TestGetWhy_NoProviderReturnsDecisions(t *testing.T) {
 func TestGetWhy_ByTarget(t *testing.T) {
 	conn, rid := synthFixture(t)
 	srv := synthServer(t, conn, rid, false)
-	text := callTool(t, srv, "repowise_get_why", map[string]any{
+	text := callTool(t, srv, "vor_get_why", map[string]any{
 		"targets": []any{"auth.go"},
 	})
 	if !strings.Contains(text, "JWT over sessions for auth") {
@@ -223,7 +223,7 @@ func TestGetWhy_ByTarget(t *testing.T) {
 func TestGetWhy_WithProviderSynthesises(t *testing.T) {
 	conn, rid := synthFixture(t)
 	srv := synthServer(t, conn, rid, true)
-	text := callTool(t, srv, "repowise_get_why", map[string]any{"query": "JWT"})
+	text := callTool(t, srv, "vor_get_why", map[string]any{"query": "JWT"})
 	var out struct {
 		Rationale string `json:"rationale"`
 		Decisions []any  `json:"decisions"`
@@ -242,7 +242,7 @@ func TestGetWhy_WithProviderSynthesises(t *testing.T) {
 func TestGetWhy_NoMatchHasHint(t *testing.T) {
 	conn, rid := synthFixture(t)
 	srv := synthServer(t, conn, rid, false)
-	text := callTool(t, srv, "repowise_get_why", map[string]any{"query": "zzznomatch"})
+	text := callTool(t, srv, "vor_get_why", map[string]any{"query": "zzznomatch"})
 	if !strings.Contains(text, "no architectural decisions matched") {
 		t.Errorf("expected no-match hint: %s", text)
 	}

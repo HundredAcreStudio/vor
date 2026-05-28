@@ -21,14 +21,14 @@ func newCompletionCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "completion [bash|zsh|fish|powershell]",
 		Short: "Generate (and optionally install) shell completion scripts",
-		Long: `Generate a shell completion script for repowise.
+		Long: `Generate a shell completion script for vor.
 
 By default the script is printed to stdout so you can source or redirect it
 yourself, e.g.:
 
-    source <(repowise completion zsh)
+    source <(vor completion zsh)
 
-Pass --install to write the script to a file under ~/.config/repowise and add a
+Pass --install to write the script to a file under ~/.config/vor and add a
 line to your shell rc (~/.bashrc, ~/.zshrc) that sources it. Fish scripts are
 written to fish's autoloaded completions directory and need no rc change.
 
@@ -86,7 +86,7 @@ func writeCompletion(root *cobra.Command, shell string, w io.Writer) error {
 // ensures the user's rc file sources it.
 func installCompletion(cmd *cobra.Command, shell string, force bool) error {
 	if shell == "powershell" {
-		return fmt.Errorf("--install is not supported for powershell; add the output of `repowise completion powershell` to your $PROFILE")
+		return fmt.Errorf("--install is not supported for powershell; add the output of `vor completion powershell` to your $PROFILE")
 	}
 
 	home, err := os.UserHomeDir()
@@ -103,7 +103,7 @@ func installCompletion(cmd *cobra.Command, shell string, force bool) error {
 
 	// Fish autoloads from its completions dir, so no rc edit is needed.
 	if shell == "fish" {
-		dst := filepath.Join(home, ".config", "fish", "completions", "repowise.fish")
+		dst := filepath.Join(home, ".config", "fish", "completions", "vor.fish")
 		if err := writeFile(dst, buf.Bytes()); err != nil {
 			return err
 		}
@@ -111,7 +111,7 @@ func installCompletion(cmd *cobra.Command, shell string, force bool) error {
 		return nil
 	}
 
-	scriptPath := filepath.Join(home, ".config", "repowise", "completion."+shell)
+	scriptPath := filepath.Join(home, ".config", "vor", "completion."+shell)
 	if err := writeFile(scriptPath, buf.Bytes()); err != nil {
 		return err
 	}
@@ -132,8 +132,8 @@ func installCompletion(cmd *cobra.Command, shell string, force bool) error {
 }
 
 const (
-	rcMarkerStart = "# >>> repowise completion >>>"
-	rcMarkerEnd   = "# <<< repowise completion <<<"
+	rcMarkerStart = "# >>> vor completion >>>"
+	rcMarkerEnd   = "# <<< vor completion <<<"
 )
 
 // ensureRCSource appends a guarded block to rcPath that sources scriptPath.

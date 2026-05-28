@@ -9,13 +9,13 @@ import (
 	"time"
 )
 
-// WatchedRegistry tracks every repo `repowise watch` has been invoked
+// WatchedRegistry tracks every repo `vor watch` has been invoked
 // against. Updated on each watch start + on every successful auto-
 // update fired inside the watcher. Lives at
-// $XDG_STATE_HOME/repowise/watched.json.
+// $XDG_STATE_HOME/vor/watched.json.
 //
 // Useful for telemetry ("which repos am I actually keeping fresh?")
-// and for the upcoming `repowise status --watched` summary that
+// and for the upcoming `vor status --watched` summary that
 // reports the last-update time per repo without round-tripping every
 // DB.
 type WatchedRegistry struct {
@@ -76,7 +76,7 @@ func SaveWatched(r *WatchedRegistry) error {
 // RecordWatch updates (or inserts) the entry for path. WorkspaceRoot
 // and Alias are optional — they're recorded the first time we see the
 // path and not overwritten afterwards (so workspace-aware tagging
-// doesn't get lost across an explicit `repowise watch PATH` run).
+// doesn't get lost across an explicit `vor watch PATH` run).
 func (r *WatchedRegistry) RecordWatch(path, alias, workspaceRoot string) {
 	now := time.Now().UTC()
 	for i := range r.Repos {

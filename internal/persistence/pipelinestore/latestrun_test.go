@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/pipelinestore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/pipelinestore"
 )
 
 func TestLatestRun_NoRuns(t *testing.T) {

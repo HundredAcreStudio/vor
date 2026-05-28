@@ -77,7 +77,7 @@ to findings the analyzer flagged SafeToDelete (confidence ≥ 0.9).`,
 				count++
 			}
 			if count == 0 {
-				fmt.Fprintln(out, "no dead-code findings (run `repowise ingest --persist` to populate)")
+				fmt.Fprintln(out, "no dead-code findings (run `vor ingest --persist` to populate)")
 			}
 			return rows.Err()
 		},

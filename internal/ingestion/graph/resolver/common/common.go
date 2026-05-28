@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/languages"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/languages"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // RelativeCandidates expands "./foo" / "../bar" into candidate file

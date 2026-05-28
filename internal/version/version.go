@@ -24,5 +24,5 @@ func Current() Info {
 
 // String returns a one-line human-readable summary.
 func (i Info) String() string {
-	return fmt.Sprintf("repowise %s (commit %s, built %s)", i.Version, i.Commit, i.BuildDate)
+	return fmt.Sprintf("vor %s (commit %s, built %s)", i.Version, i.Commit, i.BuildDate)
 }

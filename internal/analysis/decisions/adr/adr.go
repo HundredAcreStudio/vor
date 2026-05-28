@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
+	"github.com/HundredAcreStudio/vor/internal/analysis/decisions"
 )
 
 // Extractor is the ADR scanner.

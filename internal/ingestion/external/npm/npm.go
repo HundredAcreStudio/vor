@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/external"
 )
 
 const ecosystem = "npm"

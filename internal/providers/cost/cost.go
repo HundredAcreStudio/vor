@@ -7,7 +7,7 @@ package cost
 import (
 	"strings"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 // Pricing is per-million-token USD prices for one model.

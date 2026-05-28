@@ -9,8 +9,8 @@ import (
 
 	sitter "github.com/smacker/go-tree-sitter"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/queries"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/queries"
 )
 
 // LoadQueryOnce lazily compiles the named .scm query against lang and caches

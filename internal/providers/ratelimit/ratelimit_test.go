@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/providers/ratelimit"
+	"github.com/HundredAcreStudio/vor/internal/providers/ratelimit"
 )
 
 func TestLimiter_RpmGate(t *testing.T) {

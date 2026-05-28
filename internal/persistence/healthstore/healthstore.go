@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/health"
+	"github.com/HundredAcreStudio/vor/internal/analysis/health"
 )
 
 // Store persists health analyzer output.

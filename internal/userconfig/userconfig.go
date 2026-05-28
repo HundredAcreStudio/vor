@@ -1,27 +1,27 @@
 // Package userconfig manages the user-global state directory at
-// $XDG_CONFIG_HOME/repowise (config) and $XDG_STATE_HOME/repowise
+// $XDG_CONFIG_HOME/vor (config) and $XDG_STATE_HOME/vor
 // (runtime state). On macOS / BSD without XDG vars set, this resolves
-// to ~/.config/repowise and ~/.local/state/repowise respectively —
+// to ~/.config/vor and ~/.local/state/vor respectively —
 // the same locations the dot-config conventions expect.
 //
 // Layout:
 //
-//	$XDG_CONFIG_HOME/repowise/
+//	$XDG_CONFIG_HOME/vor/
 //	  config.yaml          user-global defaults (provider, model,
 //	                       db_url, log_level, ...) that override
 //	                       built-in defaults but lose to repo-local
 //	                       config and env vars.
 //
-//	$XDG_STATE_HOME/repowise/
+//	$XDG_STATE_HOME/vor/
 //	  daemon.json          last-started daemon (pid, addr, started_at,
-//	                       workspace_root). Written by `repowise
+//	                       workspace_root). Written by `vor
 //	                       serve` on startup, cleared on graceful
 //	                       shutdown.
 //	  workspaces.yaml      registry of known workspace roots so the
 //	                       daemon / status command don't need --root
 //	                       on every invocation.
 //	  watched.json         per-repo last-watched / last-update
-//	                       timestamps maintained by `repowise watch`.
+//	                       timestamps maintained by `vor watch`.
 package userconfig
 
 import (
@@ -36,26 +36,26 @@ import (
 // creating it if it doesn't exist yet. Respects $XDG_CONFIG_HOME on
 // Linux/BSD, falls back to os.UserConfigDir() everywhere else (which
 // gives ~/Library/Application Support on macOS — but we deliberately
-// prefer XDG's ~/.config layout since that's where repowise users
+// prefer XDG's ~/.config layout since that's where vor users
 // have been keeping the per-repo config file).
 func ConfigDir() (string, error) {
 	if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {
-		return ensureDir(filepath.Join(v, "repowise"))
+		return ensureDir(filepath.Join(v, "vor"))
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 	// We override macOS default — see the package comment.
-	return ensureDir(filepath.Join(home, ".config", "repowise"))
+	return ensureDir(filepath.Join(home, ".config", "vor"))
 }
 
 // StateDir is the runtime-state companion to ConfigDir. Honours
-// $XDG_STATE_HOME; otherwise ~/.local/state/repowise on POSIX or
-// %LOCALAPPDATA%\repowise on Windows.
+// $XDG_STATE_HOME; otherwise ~/.local/state/vor on POSIX or
+// %LOCALAPPDATA%\vor on Windows.
 func StateDir() (string, error) {
 	if v := os.Getenv("XDG_STATE_HOME"); v != "" {
-		return ensureDir(filepath.Join(v, "repowise"))
+		return ensureDir(filepath.Join(v, "vor"))
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -63,10 +63,10 @@ func StateDir() (string, error) {
 	}
 	if runtime.GOOS == "windows" {
 		if v := os.Getenv("LOCALAPPDATA"); v != "" {
-			return ensureDir(filepath.Join(v, "repowise"))
+			return ensureDir(filepath.Join(v, "vor"))
 		}
 	}
-	return ensureDir(filepath.Join(home, ".local", "state", "repowise"))
+	return ensureDir(filepath.Join(home, ".local", "state", "vor"))
 }
 
 // ConfigPath returns the canonical path to config.yaml. The file may

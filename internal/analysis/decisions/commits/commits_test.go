@@ -9,8 +9,8 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
-	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/commits"
+	"github.com/HundredAcreStudio/vor/internal/analysis/decisions"
+	_ "github.com/HundredAcreStudio/vor/internal/analysis/decisions/commits"
 )
 
 // makeRepo creates a real on-disk git repo with the given commits (in

@@ -11,13 +11,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/config"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/parser"
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/config"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/parser"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
 )
 
 // newDoctorCmd runs a series of environment + configuration checks and
-// reports each as ok / warn / fail. Mirrors the Python `repowise doctor`
+// reports each as ok / warn / fail. Mirrors the Python `vor doctor`
 // command. Read-only; safe to run anywhere.
 func newDoctorCmd() *cobra.Command {
 	var repoPath string
@@ -35,7 +35,7 @@ func newDoctorCmd() *cobra.Command {
 				checkProviderKeys(repoPath),
 				checkDatabaseURL(cmd.Context(), repoPath),
 				checkRegisteredParsers(),
-				checkRepowiseDir(repoPath),
+				checkVorDir(repoPath),
 			}
 
 			fail := 0
@@ -90,7 +90,7 @@ func checkRepoPath(repoPath string) doctorCheck {
 }
 
 func checkConfigFile(repoPath string) doctorCheck {
-	configPath := filepath.Join(repoPath, ".repowise", "config.yaml")
+	configPath := filepath.Join(repoPath, ".vor", "config.yaml")
 	_, err := os.Stat(configPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return doctorCheck{
@@ -139,7 +139,7 @@ func checkDatabaseURL(ctx context.Context, repoPath string) doctorCheck {
 	cfg, _ := config.Load(repoPath)
 	url := cfg.DatabaseURL
 	if url == "" {
-		abs, _ := filepath.Abs(filepath.Join(repoPath, ".repowise", "wiki.db"))
+		abs, _ := filepath.Abs(filepath.Join(repoPath, ".vor", "wiki.db"))
 		url = "sqlite:" + abs
 	}
 
@@ -157,7 +157,7 @@ func checkDatabaseURL(ctx context.Context, repoPath string) doctorCheck {
 			return doctorCheck{
 				name:   "database",
 				status: statusWarn,
-				detail: fmt.Sprintf("%s reachable but schema is empty (run `repowise db migrate`)", dialect),
+				detail: fmt.Sprintf("%s reachable but schema is empty (run `vor db migrate`)", dialect),
 			}
 		}
 		return doctorCheck{name: "database", status: statusFail, detail: err.Error()}
@@ -210,21 +210,21 @@ func checkRegisteredParsers() doctorCheck {
 	}
 }
 
-func checkRepowiseDir(repoPath string) doctorCheck {
-	d := filepath.Join(repoPath, ".repowise")
+func checkVorDir(repoPath string) doctorCheck {
+	d := filepath.Join(repoPath, ".vor")
 	info, err := os.Stat(d)
 	if errors.Is(err, os.ErrNotExist) {
 		return doctorCheck{
-			name:   ".repowise dir",
+			name:   ".vor dir",
 			status: statusWarn,
 			detail: d + " missing (will be created on first ingest)",
 		}
 	}
 	if err != nil {
-		return doctorCheck{name: ".repowise dir", status: statusFail, detail: err.Error()}
+		return doctorCheck{name: ".vor dir", status: statusFail, detail: err.Error()}
 	}
 	if !info.IsDir() {
-		return doctorCheck{name: ".repowise dir", status: statusFail, detail: d + " exists but is not a directory"}
+		return doctorCheck{name: ".vor dir", status: statusFail, detail: d + " exists but is not a directory"}
 	}
-	return doctorCheck{name: ".repowise dir", status: statusOK, detail: d}
+	return doctorCheck{name: ".vor dir", status: statusOK, detail: d}
 }

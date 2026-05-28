@@ -4,16 +4,16 @@ import (
 	"context"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/parser"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/parser"
 
 	// Side-effect imports register the Phase 13 parsers.
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/kotlin"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/luau"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/php"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/ruby"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/scala"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/swift"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/kotlin"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/luau"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/php"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/ruby"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/scala"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/swift"
 )
 
 func hasSymbol(syms []models.Symbol, name string) *models.Symbol {

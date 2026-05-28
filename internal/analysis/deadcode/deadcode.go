@@ -23,8 +23,8 @@
 package deadcode
 
 import (
-	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/graph"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // Kind classifies a finding.

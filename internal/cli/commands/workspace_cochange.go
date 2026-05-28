@@ -13,12 +13,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/workspace"
+	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 // newWorkspaceCoChangesCmd computes (or reads cached) cross-repo
 // co-change pairs and prints them as a table. `--refresh` recomputes;
-// otherwise we use the cached report at .repowise/co_changes.json
+// otherwise we use the cached report at .vor/co_changes.json
 // when available.
 func newWorkspaceCoChangesCmd() *cobra.Command {
 	var (
@@ -37,7 +37,7 @@ func newWorkspaceCoChangesCmd() *cobra.Command {
 within a configurable time window, and surfaces pairs of files in
 different repos that consistently co-change.
 
-Reads a cached report from <root>/.repowise/co_changes.json when
+Reads a cached report from <root>/.vor/co_changes.json when
 present. Pass --refresh to recompute. The cache is written on
 every refresh so subsequent invocations are instant.`,
 		RunE: func(cmd *cobra.Command, args []string) error {

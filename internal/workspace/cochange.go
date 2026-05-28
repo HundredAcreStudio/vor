@@ -243,22 +243,22 @@ func harvestTouches(m Entry, maxCommits int, byAuthor map[string][]touch) error 
 	return nil
 }
 
-// SaveReport persists the report to <root>/.repowise/co_changes.json.
+// SaveReport persists the report to <root>/.vor/co_changes.json.
 func SaveReport(root string, report *CoChangeReport) error {
-	if err := os.MkdirAll(filepath.Join(root, ".repowise"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".vor"), 0o755); err != nil {
 		return err
 	}
 	body, err := jsonMarshalIndent(report)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(root, ".repowise", "co_changes.json"), body, 0o644)
+	return os.WriteFile(filepath.Join(root, ".vor", "co_changes.json"), body, 0o644)
 }
 
 // LoadReport reads a cached report. Returns (nil, nil) when no cache
 // exists yet.
 func LoadReport(root string) (*CoChangeReport, error) {
-	body, err := os.ReadFile(filepath.Join(root, ".repowise", "co_changes.json"))
+	body, err := os.ReadFile(filepath.Join(root, ".vor", "co_changes.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}

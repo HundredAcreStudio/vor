@@ -9,19 +9,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/security"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/traverser"
-	"github.com/repowise-dev/repowise-go/internal/persistence/pipelinestore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/securitystore"
-	"github.com/repowise-dev/repowise-go/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/analysis/security"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/traverser"
+	"github.com/HundredAcreStudio/vor/internal/persistence/pipelinestore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/securitystore"
+	"github.com/HundredAcreStudio/vor/internal/pipeline"
 )
 
-// ---- tool: repowise_reindex ----------------------------------------------
+// ---- tool: vor_reindex ----------------------------------------------
 //
 // Mutating tool: kicks off a pipeline run for a repo so the index reflects
 // the current source. Asynchronous — re-indexing can take seconds to
 // minutes and would blow the request/response budget, so this returns a
-// run_id immediately and the caller polls repowise_pipeline_log for phase
+// run_id immediately and the caller polls vor_pipeline_log for phase
 // progress. Mode "update" (default) is incremental (reuses the parse
 // cache); "init" forces a fresh pass.
 
@@ -48,7 +48,7 @@ func (s *Server) toolReindex(ctx context.Context, req mcp.CallToolRequest) (*mcp
 			"status": "already_running",
 			"runId":  latest.RunID,
 			"repo":   rid,
-			"note":   "a run is already in progress; poll repowise_pipeline_log",
+			"note":   "a run is already in progress; poll vor_pipeline_log",
 		})
 	}
 
@@ -76,16 +76,16 @@ func (s *Server) toolReindex(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		"runId":  runID,
 		"repo":   rid,
 		"mode":   string(mode),
-		"note":   "poll repowise_pipeline_log for phase progress",
+		"note":   "poll vor_pipeline_log for phase progress",
 	})
 }
 
-// ---- tool: repowise_security_scan ----------------------------------------
+// ---- tool: vor_security_scan ----------------------------------------
 //
 // Mutating tool: runs the pattern-based security scanner over the repo and
 // replaces the stored findings. Synchronous — the scan is regex over source
 // (no cgo, no LLM), fast enough to return results inline. Read them back
-// with repowise_security.
+// with vor_security.
 
 func (s *Server) toolSecurityScan(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	rid, err := s.resolveRepoID(ctx, req)
@@ -127,7 +127,7 @@ func (s *Server) toolSecurityScan(ctx context.Context, req mcp.CallToolRequest) 
 		"scannedFiles": len(files),
 		"findings":     len(findings),
 		"bySeverity":   bySeverity,
-		"note":         "read findings with repowise_security",
+		"note":         "read findings with vor_security",
 	})
 }
 

@@ -1,4 +1,4 @@
-// Package decisions is repowise's decision-intelligence engine. It mines
+// Package decisions is vor's decision-intelligence engine. It mines
 // architectural decisions from multiple sources (inline markers in code,
 // ADR files, CHANGELOG entries, git commit archaeology, ...) and emits
 // records that map to the decision_records + decision_evidence tables.

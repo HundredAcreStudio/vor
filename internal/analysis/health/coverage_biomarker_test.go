@@ -3,8 +3,8 @@ package health_test
 import (
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/health"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/analysis/health"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 func untestedFindings(res health.Result) []health.Finding {

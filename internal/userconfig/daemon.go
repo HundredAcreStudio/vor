@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// DaemonInfo records a running `repowise serve` instance. Written
+// DaemonInfo records a running `vor serve` instance. Written
 // on startup, removed on graceful shutdown. A missing file means
 // "no daemon was started here, or the last one crashed".
 type DaemonInfo struct {
@@ -71,7 +71,7 @@ func ClearDaemon() error {
 }
 
 // Alive returns true when the PID in DaemonInfo is still running.
-// Used by `repowise status` to distinguish a current daemon record
+// Used by `vor status` to distinguish a current daemon record
 // from a stale one (last daemon SIGKILLed before ClearDaemon ran).
 //
 // POSIX kill(pid, 0) is the canonical liveness probe — it errors with

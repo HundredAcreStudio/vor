@@ -23,11 +23,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/coststore"
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	"github.com/repowise-dev/repowise-go/internal/providers/cost"
-	"github.com/repowise-dev/repowise-go/internal/providers/ratelimit"
-	"github.com/repowise-dev/repowise-go/internal/providers/retry"
+	"github.com/HundredAcreStudio/vor/internal/persistence/coststore"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers/cost"
+	"github.com/HundredAcreStudio/vor/internal/providers/ratelimit"
+	"github.com/HundredAcreStudio/vor/internal/providers/retry"
 )
 
 // Options configures the wrapper.

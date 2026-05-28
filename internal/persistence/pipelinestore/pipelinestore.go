@@ -138,7 +138,7 @@ func (s *Store) LatestByRepo(ctx context.Context, repoID string, limit int) ([]J
 
 // RunSummary aggregates every phase belonging to one pipeline run
 // (identified by run_id in pipeline_jobs.metadata_json). Used by
-// `repowise pipeline status` + resume detection.
+// `vor pipeline status` + resume detection.
 type RunSummary struct {
 	RunID     string
 	Phases    []Job // ordered by started_at

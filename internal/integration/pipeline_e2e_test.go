@@ -6,25 +6,25 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/pipelinestore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/pipelinestore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/pipeline"
 
 	// Decision extractors — the e2e run exercises the decisions phase
 	// too, so register them alongside the parser/resolver imports the
 	// package already pulls in (resolver_integration_test.go).
-	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/adr"
-	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/changelog"
-	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/commits"
-	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/inline"
+	_ "github.com/HundredAcreStudio/vor/internal/analysis/decisions/adr"
+	_ "github.com/HundredAcreStudio/vor/internal/analysis/decisions/changelog"
+	_ "github.com/HundredAcreStudio/vor/internal/analysis/decisions/commits"
+	_ "github.com/HundredAcreStudio/vor/internal/analysis/decisions/inline"
 )
 
 // TestSampleRepo_FullPipeline is the end-to-end regression lock for the
 // whole pipeline. It runs every phase against testdata/sample-repo — a
 // deliberately multi-language fixture (Go + Python + TypeScript, with
-// npm / pypi / go.mod manifests plus .gitignore + .repowiseIgnore
+// npm / pypi / go.mod manifests plus .gitignore + .vorIgnore
 // exclusion cases) — and asserts the persisted state has the expected
 // shape. Concrete counts that depend on parser internals are checked as
 // ">0" lower bounds; the structural invariants (which phases run, which
@@ -96,11 +96,11 @@ func TestSampleRepo_FullPipeline(t *testing.T) {
 			t.Errorf("expected %s files parsed, got languages %v", want, keys(langs))
 		}
 	}
-	// Exclusions: .gitignore, .repowiseIgnore, node_modules, build/,
+	// Exclusions: .gitignore, .vorIgnore, node_modules, build/,
 	// and binary/minified files must NOT appear among parsed files.
 	for _, excluded := range []string{
 		"ignored_by_gitignore.py",
-		"ignored_by_repowise.py",
+		"ignored_by_vor.py",
 		"node_modules/lib/junk.js",
 		"build/built.js",
 		"bundle.min.js",

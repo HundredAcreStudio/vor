@@ -7,7 +7,7 @@ Use this to walk through 29 commits of work without missing anything important. 
 ```bash
 go version          # 1.24+
 which sqlite3       # for one DB inspection step (optional)
-make build          # produces bin/repowise + bin/repowise-augment
+make build          # produces bin/vor + bin/vor-augment
 ```
 
 If `make build` fails, stop here — most things won't work without cgo + tree-sitter compiling correctly. Expected: ~30s first build.
@@ -54,7 +54,7 @@ git log --oneline initial..HEAD
 4. `feat(providers): Phase 4 Pass A — LLM provider abstraction` (interface design)
 5. `feat(server): Phase 8 Pass A — HTTP API over the analysis output` (route shape)
 6. `feat(mcp): Phase 8 Pass B — MCP server with 5 tools over stdio` (MCP design)
-7. `feat(pipeline): Phase 7 Pass A — tracked orchestrator + 'repowise init'` (state machine)
+7. `feat(pipeline): Phase 7 Pass A — tracked orchestrator + 'vor init'` (state machine)
 
 If any commit's stated intent doesn't match the diff, please flag it — that's the most likely place I made a wrong call.
 
@@ -66,23 +66,23 @@ Use any real-world repo you have handy. Examples below use `~/projects/some-repo
 
 ```bash
 # 1. Doctor — confirm environment is OK before doing real work.
-./bin/repowise doctor --repo ~/projects/some-repo
+./bin/vor doctor --repo ~/projects/some-repo
 
 # 2. Init — full tracked pipeline run.
-./bin/repowise init ~/projects/some-repo
+./bin/vor init ~/projects/some-repo
 
 # 3. Status — one-screen summary of what landed.
-./bin/repowise status --repo ~/projects/some-repo
+./bin/vor status --repo ~/projects/some-repo
 
 # 4. Each read-only view.
-./bin/repowise health    --repo ~/projects/some-repo --limit 10
-./bin/repowise dead-code --repo ~/projects/some-repo --safe-only
-./bin/repowise hotspots  --repo ~/projects/some-repo --limit 10
-./bin/repowise search    SomeSymbol --repo ~/projects/some-repo
-./bin/repowise externals --repo ~/projects/some-repo
-./bin/repowise costs     --repo ~/projects/some-repo
-./bin/repowise pipeline log --repo ~/projects/some-repo
-./bin/repowise pipeline summary --repo ~/projects/some-repo
+./bin/vor health    --repo ~/projects/some-repo --limit 10
+./bin/vor dead-code --repo ~/projects/some-repo --safe-only
+./bin/vor hotspots  --repo ~/projects/some-repo --limit 10
+./bin/vor search    SomeSymbol --repo ~/projects/some-repo
+./bin/vor externals --repo ~/projects/some-repo
+./bin/vor costs     --repo ~/projects/some-repo
+./bin/vor pipeline log --repo ~/projects/some-repo
+./bin/vor pipeline summary --repo ~/projects/some-repo
 ```
 
 **What to check**:
@@ -95,9 +95,9 @@ Use any real-world repo you have handy. Examples below use `~/projects/some-repo
 
 Try **negative cases** too:
 ```bash
-./bin/repowise init /nonexistent      # should fail clean
-./bin/repowise search ZzZNeverFinds   # should print "no matches"
-./bin/repowise dead-code --repo /tmp  # empty DB should print "run init first"
+./bin/vor init /nonexistent      # should fail clean
+./bin/vor search ZzZNeverFinds   # should print "no matches"
+./bin/vor dead-code --repo /tmp  # empty DB should print "run init first"
 ```
 
 ---
@@ -105,7 +105,7 @@ Try **negative cases** too:
 ## 5. HTTP server surface (10 minutes)
 
 ```bash
-./bin/repowise serve --repo ~/projects/some-repo --addr 127.0.0.1:7337 &
+./bin/vor serve --repo ~/projects/some-repo --addr 127.0.0.1:7337 &
 SERVER_PID=$!
 sleep 1
 
@@ -156,8 +156,8 @@ The cleanest way to verify MCP is to wire it into Claude Code.
 # Add to ~/.claude/.mcp.json or your project's .mcp.json:
 {
   "servers": {
-    "repowise": {
-      "command": "/abs/path/to/bin/repowise",
+    "vor": {
+      "command": "/abs/path/to/bin/vor",
       "args": ["mcp", "--repo", "/abs/path/to/some-repo"]
     }
   }
@@ -165,8 +165,8 @@ The cleanest way to verify MCP is to wire it into Claude Code.
 ```
 
 Then in Claude Code, ask:
-- "List all tools the repowise MCP server provides" — should show 11
-- "Use repowise_status to summarize this repo"
+- "List all tools the vor MCP server provides" — should show 11
+- "Use vor_status to summarize this repo"
 - "What are the top 5 hotspots?"
 - "Find any dead code that's safe to delete"
 - "Search for SomeFunctionName"
@@ -203,7 +203,7 @@ tree -L 3 internal/ -I 'queries|testdata'
 | `internal/cli/commands/*.go` | CLI surface — flag naming consistency |
 
 Things I'd specifically like a second opinion on:
-- **Schema choices**: 28 tables felt right, but I collapsed all 24 alembic migrations into one consolidated `0001_init.sql`. If you ever want to ingest a Python `.repowise/wiki.db`, this is incompatible by design.
+- **Schema choices**: 28 tables felt right, but I collapsed all 24 alembic migrations into one consolidated `0001_init.sql`. If you ever want to ingest a Python `.vor/wiki.db`, this is incompatible by design.
 - **Multi-edge graph**: I store typed edges in our own slice/map instead of `gonum.multi.DirectedGraph`. Read `internal/ingestion/graph/graph.go` and decide if this is the right call.
 - **Health analyzer growing fields**: `Analyzer.HotspotPaths`, `CoChangePairs`, `GraphEdges` got added one at a time. At some point this should become a single `Inputs` struct. Flag if you'd prefer to refactor now.
 - **Pipeline phase order**: `traverse → parse → git → graph → deadcode → health → externals → persist`. Git runs before graph so its hotspots can flow into health. Persist is last so a failure mid-run doesn't leave partial state.
@@ -232,7 +232,7 @@ I deliberately added tests for things the Python source doesn't test (the README
 If you only have an hour to review, do this:
 
 1. `go test ./...` — confirms nothing is broken (2 min)
-2. `./bin/repowise init <your big repo>` — end-to-end smoke (5 min)
+2. `./bin/vor init <your big repo>` — end-to-end smoke (5 min)
 3. Read commit messages for Pass D / Pass A / MCP Pass B / Pipeline Pass A — the four most consequential design choices (10 min)
 4. Read `internal/persistence/migrations/sqlite/0001_init.sql` — every other layer depends on this (10 min)
 5. Read `internal/ingestion/graph/graph.go` + `builder.go` — the core value proposition (15 min)
@@ -262,7 +262,7 @@ For "what's done": **commit messages**. They're the audit trail. The task list w
 
 For "what's left": **PORTING_PLAN.md §5 (Phased Roadmap)** plus my own memory of which Passes I labeled DONE / DEFERRED in commit bodies. I summarized the remaining work in the "checkpoint" messages I wrote between batches.
 
-For "is this in a coherent state": **the test suite**. If `go test ./...` passes and `./bin/repowise init <repo>` runs through, the system has internal consistency even if I can't recite the inventory.
+For "is this in a coherent state": **the test suite**. If `go test ./...` passes and `./bin/vor init <repo>` runs through, the system has internal consistency even if I can't recite the inventory.
 
 ## What I'd do differently
 

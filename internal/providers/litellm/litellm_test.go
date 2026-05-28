@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	_ "github.com/repowise-dev/repowise-go/internal/providers/litellm"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/litellm"
 )
 
 func TestRegistered(t *testing.T) {

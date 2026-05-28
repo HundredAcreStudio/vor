@@ -1,8 +1,8 @@
-# repowise-go — Porting Plan
+# vor-go — Porting Plan
 
-This document captures the design decisions and phased roadmap for porting [repowise](https://github.com/repowise-dev/repowise) from Python to Go. The Go port targets **full feature parity** with the Python implementation across `packages/core`, `packages/server`, and `packages/cli`. The Next.js dashboard is out of scope for this repository — it will live in a separate `repowise-dashboard` repo and communicate with this backend over HTTP.
+This document captures the design decisions and phased roadmap for porting [vor](https://github.com/HundredAcreStudio/vor) from Python to Go. The Go port targets **full feature parity** with the Python implementation across `packages/core`, `packages/server`, and `packages/cli`. The Next.js dashboard is out of scope for this repository — it will live in a separate `vor-dashboard` repo and communicate with this backend over HTTP.
 
-Source reference: `~/projects/repowise` (Python 3.11+, v0.12.0).
+Source reference: `~/projects/vor` (Python 3.11+, v0.12.0).
 
 > **Status (2026-05-28): Phases 0–11 complete.** The port reaches
 > functional parity with the Python core, server, and CLI. Post-parity
@@ -19,18 +19,18 @@ Source reference: `~/projects/repowise` (Python 3.11+, v0.12.0).
 |---|---|---|
 | `packages/core` | `internal/ingestion`, `internal/analysis`, `internal/generation`, `internal/persistence`, `internal/providers`, `internal/pipeline`, `internal/workspace` | In scope |
 | `packages/server` | `internal/server` (`http/`, `mcp/`, `services/`, `schemas/`) | In scope |
-| `packages/cli` | `internal/cli`, `cmd/repowise`, `cmd/repowise-augment` | In scope |
+| `packages/cli` | `internal/cli`, `cmd/vor`, `cmd/vor-augment` | In scope |
 | `packages/types` | N/A — Go has its own types in `internal/...` | Out of scope |
-| `packages/ui` + `packages/web` | Separate `repowise-dashboard` repo (Next.js) | Out of scope |
+| `packages/ui` + `packages/web` | Separate `vor-dashboard` repo (Next.js) | Out of scope |
 
 ### Two runtime components
 
 The port ships as two cooperating binaries-of-one-binary that share a database:
 
-- **CLI** (`repowise <subcommand>`) — indexing + inspection, run interactively / from scripts / git hooks. Cheap deterministic work (parse → graph → git → health → decisions) plus on-demand LLM generation.
-- **Server** (`repowise serve`) — a long-running daemon exposing the indexed data over HTTP (`/api/repos/{id}/*`, `/api/workspace*`) and MCP (`/mcp`, Streamable HTTP). Editor clients and dashboards attach to it.
+- **CLI** (`vor <subcommand>`) — indexing + inspection, run interactively / from scripts / git hooks. Cheap deterministic work (parse → graph → git → health → decisions) plus on-demand LLM generation.
+- **Server** (`vor serve`) — a long-running daemon exposing the indexed data over HTTP (`/api/repos/{id}/*`, `/api/workspace*`) and MCP (`/mcp`, Streamable HTTP). Editor clients and dashboards attach to it.
 
-They share state through one DB selected by `REPOWISE_DB_URL` / `~/.config/repowise/config.yaml` / per-repo `.repowise/config.yaml`. Every table is keyed by `repository_id`, so one SQLite file (workstation) or Postgres instance (central host) holds N repos and a single daemon serves them all. `serve --auto` reads the user-global workspace registry and serves every registered workspace. See the README "Two components" section for deployment shapes.
+They share state through one DB selected by `VOR_DB_URL` / `~/.config/vor/config.yaml` / per-repo `.vor/config.yaml`. Every table is keyed by `repository_id`, so one SQLite file (workstation) or Postgres instance (central host) holds N repos and a single daemon serves them all. `serve --auto` reads the user-global workspace registry and serves every registered workspace. See the README "Two components" section for deployment shapes.
 
 ---
 
@@ -49,17 +49,17 @@ They share state through one DB selected by `REPOWISE_DB_URL` / `~/.config/repow
 > the authoritative current package list.
 
 ```
-repowise-port/
+vor/
 ├── go.mod
 ├── go.sum
 ├── Makefile
 ├── README.md
 ├── PORTING_PLAN.md
 ├── cmd/
-│   ├── repowise/                 # main CLI binary
-│   └── repowise-augment/         # Claude Code Grep/Glob enrichment hook
+│   ├── vor/                 # main CLI binary
+│   └── vor-augment/         # Claude Code Grep/Glob enrichment hook
 ├── internal/
-│   ├── config/                   # .repowise/config.yaml + env loading
+│   ├── config/                   # .vor/config.yaml + env loading
 │   ├── logging/                  # slog setup + helpers
 │   ├── version/                  # ldflags-injected version info
 │   │
@@ -147,11 +147,11 @@ repowise-port/
 └── testdata/                     # fixture repos for parity tests
 ```
 
-**Module path:** `github.com/repowise-dev/repowise-go` (placeholder — will adjust if upstream wants a different name).
+**Module path:** `github.com/HundredAcreStudio/vor` (placeholder — will adjust if upstream wants a different name).
 
 **Go version:** 1.24+ (matches `go version` on dev machine).
 
-**Visibility:** Everything under `internal/`. We do not commit to a public Go API surface yet — the CLI and HTTP/MCP servers are the only consumers. If a plugin surface is needed later, promote types to `pkg/repowise/`.
+**Visibility:** Everything under `internal/`. We do not commit to a public Go API surface yet — the CLI and HTTP/MCP servers are the only consumers. If a plugin surface is needed later, promote types to `pkg/vor/`.
 
 ---
 
@@ -197,7 +197,7 @@ Decisions here are deliberate and load-bearing — changing them later costs a l
 
 The Python project has 24 Alembic migrations evolving the schema over time. For the Go port we **do not replay migration history**. We collapse the end state into a single consolidated `0001_init.sql` migration. Rationale:
 
-- Go and Python wiki.db files are not interchangeable anyway (different JSON encoding choices, different vector-store layout, no plan to support reading an existing Python `.repowise/wiki.db`).
+- Go and Python wiki.db files are not interchangeable anyway (different JSON encoding choices, different vector-store layout, no plan to support reading an existing Python `.vor/wiki.db`).
 - Replaying 24 migrations on first install wastes time and ties us to Python's incremental story.
 - Future Go-side schema changes are added as `0002_*.sql`, `0003_*.sql`, etc., with goose.
 
@@ -216,48 +216,48 @@ Phases are sized for small, testable increments. Each phase ends with a working 
 **All phases below (0–11) are ✅ complete.** Post-parity phases 12–17 live in [ROADMAP.md](ROADMAP.md). Where a phase shipped less than its original aspiration (e.g. 8 of 14 languages, 8 of ~17 biomarkers), the shortfall is carried forward as a ROADMAP phase and noted inline.
 
 ### ✅ Phase 0 — Foundation
-Module init, layout, Makefile, `.gitignore`. Config loading (`.repowise/config.yaml` + env vars). Structured logging via `log/slog` with a development-friendly handler. Version package. Error types. Test scaffolding.
-**Deliverable:** `go build ./...` succeeds; `repowise version` prints version info.
+Module init, layout, Makefile, `.gitignore`. Config loading (`.vor/config.yaml` + env vars). Structured logging via `log/slog` with a development-friendly handler. Version package. Error types. Test scaffolding.
+**Deliverable:** `go build ./...` succeeds; `vor version` prints version info.
 
 ### ✅ Phase 1 — Persistence
 Consolidated `0001_init.sql` schema. Goose migration runner. sqlc query generation for both dialects. CRUD covering every table. FTS5 + tsvector search wrappers. `VectorStore` interface with `Mock` and `SQLiteBruteForce` backends; LanceDB/pgvector adapters stubbed and marked TODO.
-**Deliverable:** `repowise db migrate` creates schema; round-trip tests pass for every table.
+**Deliverable:** `vor db migrate` creates schema; round-trip tests pass for every table.
 
 ### ✅ Phase 2 — Ingestion
-`FileTraverser` with gitignore + `.repowiseIgnore`. `ASTParser` over `smacker/go-tree-sitter` for the 14 languages. Tree-sitter query files embedded via `go:embed`. `GraphBuilder` produces file + symbol nodes and four edge types over gonum. Three-tier call resolver. Heritage extractor. External-systems extractors (npm/pip/cargo/go.mod/nuget). Special handlers (OpenAPI/proto/GraphQL/Dockerfile/CI). Graph metrics (PageRank, SCC, betweenness).
-**Deliverable:** `repowise ingest <path>` writes graph_nodes/edges/metrics to DB; benchmarks comparable to Python.
+`FileTraverser` with gitignore + `.vorIgnore`. `ASTParser` over `smacker/go-tree-sitter` for the 14 languages. Tree-sitter query files embedded via `go:embed`. `GraphBuilder` produces file + symbol nodes and four edge types over gonum. Three-tier call resolver. Heritage extractor. External-systems extractors (npm/pip/cargo/go.mod/nuget). Special handlers (OpenAPI/proto/GraphQL/Dockerfile/CI). Graph metrics (PageRank, SCC, betweenness).
+**Deliverable:** `vor ingest <path>` writes graph_nodes/edges/metrics to DB; benchmarks comparable to Python.
 
 ### ✅ Phase 3 — Git intelligence
 `go-git` integration. `GitIndexer` produces hotspots, ownership %, co-change pairs, bus factor, contributor profiles. Rename + merge handling. `ChangeDetector` for incremental update path.
-**Deliverable:** `repowise git-index <path>` populates `git_metadata`; co-change pairs match Python within tolerance.
+**Deliverable:** `vor git-index <path>` populates `git_metadata`; co-change pairs match Python within tolerance.
 
 ### ✅ Phase 4 — LLM providers
 `Provider` interface with `Generate`, `GenerateStream`, `BatchGenerate`. Registry. Retry + rate limit. Implementations: Anthropic (with prompt caching + batch API), OpenAI, Gemini, Ollama, Mock. `Embedder` interface + Mock/Gemini/OpenAI/OpenRouter. LiteLLM as an HTTP proxy target. LLM cost tracking persistence hook.
-**Deliverable:** `repowise smoke-llm --provider=anthropic` round-trips a generation; cost is persisted to `llm_costs`.
+**Deliverable:** `vor smoke-llm --provider=anthropic` round-trips a generation; cost is persisted to `llm_costs`.
 
 ### ✅ Phase 5 — Generation
 `ContextAssembler` for RAG context (wiki + graph + git + source snippets + decisions). `HierarchicalPageGenerator` with checkpoint/resume across the 1–5 levels. Prompt templates via `text/template` + `go:embed`. `JobSystem` state machine. `EditorFileGenerator` with marker-merge for CLAUDE.md / cursor.md.
-**Deliverable:** `repowise generate --target file:foo.go` produces a wiki page; resume works after kill.
+**Deliverable:** `vor generate --target file:foo.go` produces a wiki page; resume works after kill.
 
 ### ✅ Phase 6 — Analysis subsystems
 Code health: 15 biomarkers (McCabe, deep nesting, brain methods, Rabin-Karp duplication, untested hotspots, primitive obsession, congestion, knowledge loss, blame-based function hotspots, code-age volatility, plus the five not yet enumerated) + scoring + suggestions + trends + governance flags. Dead code with confidence tiers. Decision extractor (8 sources) + evolution + evidence + graph edges. Louvain community detection (Leiden a stretch). Security scan. Execution flows. PR blast radius.
-**Deliverable:** `repowise health`, `repowise dead-code`, `repowise decision list` all work; output schema matches Python.
+**Deliverable:** `vor health`, `vor dead-code`, `vor decision list` all work; output schema matches Python.
 
 ### ✅ Phase 7 — Pipeline
 `run_pipeline` orchestrator with `INIT` and `UPDATE` modes. Phase timing. Checkpoint persistence. `pipeline_jobs` state machine. `persist_pipeline_result` fans out to SQL + vector store.
-**Deliverable:** `repowise init <path>` and `repowise update <path>` complete end-to-end; checkpoints survive kill.
+**Deliverable:** `vor init <path>` and `vor update <path>` complete end-to-end; checkpoints survive kill.
 
 ### ✅ Phase 8 — Server (HTTP + MCP)
 chi-based HTTP server. 20+ route packages mirroring FastAPI surface. `mark3labs/mcp-go` server with all 17 tools. Service layer (C4 builder, owner profile, reviewer suggestions, knowledge map, module health, symbol ranking). GitHub + GitLab webhooks. cron-based scheduler. Background job executor.
-**Deliverable:** `repowise serve` exposes `/api/*` and MCP on stdio; OpenAPI parity with Python (manual diff).
+**Deliverable:** `vor serve` exposes `/api/*` and MCP on stdio; OpenAPI parity with Python (manual diff).
 
 ### ✅ Phase 9 — CLI
 Cobra CLI with 14 commands (`init`, `update`, `watch`, `serve`, `search`, `export`, `status`, `doctor`, `delete`, `health`, `dead-code`, `decision`, `costs`, `augment`, `claude-md`, `reindex`, `hook`, `mcp`, `workspace`). charmbracelet TUI. Editor integrations (Claude Code / Cursor MCP registration). Cost estimator. Git hooks installer.
-**Deliverable:** `repowise --help` matches Python output (or improves on it); each subcommand has at least a smoke test.
+**Deliverable:** `vor --help` matches Python output (or improves on it); each subcommand has at least a smoke test.
 
 ### ✅ Phase 10 — Workspace (multi-repo)
 Multi-repo workspace analysis. Cross-repo co-change. API contract extraction (HTTP route, gRPC, message topics). Federated MCP queries.
-**Deliverable:** `repowise workspace init` + `repowise workspace status` work over a two-repo fixture.
+**Deliverable:** `vor workspace init` + `vor workspace status` work over a two-repo fixture.
 
 ### ✅ Phase 11 — Parity testing & polish
 Integration tests on real fixture repos (`testdata/`). Parity tests comparing Go output vs Python for graph, health, decisions, dead-code. Performance benchmarks (target: ≥ Python speed; we expect substantial improvement on cold cache thanks to goroutine fan-out). Docs (README, USER_GUIDE, CLI_REFERENCE).
@@ -287,20 +287,20 @@ Integration tests on real fixture repos (`testdata/`). Parity tests comparing Go
 ## 7. Non-Goals (v1)
 
 - Plugin loading at runtime (Python's `register_command` will become compile-time interface registration).
-- Reading existing Python `.repowise/wiki.db` files (incompatible by design — users must re-index).
-- Windows support beyond "best-effort" (Python repowise targets Linux/macOS; Go port follows suit).
-- Web dashboard in this repo (handled by `repowise-dashboard`).
+- Reading existing Python `.vor/wiki.db` files (incompatible by design — users must re-index).
+- Windows support beyond "best-effort" (Python vor targets Linux/macOS; Go port follows suit).
+- Web dashboard in this repo (handled by `vor-dashboard`).
 
 ---
 
 ## 8. Out-of-Band Decisions Locked
 
-- Module path: `github.com/repowise-dev/repowise-go` (may change to vanity import later — internal imports go through Go module path either way).
+- Module path: `github.com/HundredAcreStudio/vor` (may change to vanity import later — internal imports go through Go module path either way).
 - Go version: 1.24+.
 - License: AGPL-3.0-only, matching upstream.
 - No `pkg/` exports until a plugin surface is needed.
 - Migrations: single consolidated `0001_init.sql` reflecting Python's end state, no replay.
-- CLI: single binary `repowise` + auxiliary `repowise-augment` for the Claude Code hook.
+- CLI: single binary `vor` + auxiliary `vor-augment` for the Claude Code hook.
 
 ---
 

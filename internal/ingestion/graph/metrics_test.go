@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // Build a tiny diamond graph by hand: a -> b, a -> c, b -> d, c -> d.

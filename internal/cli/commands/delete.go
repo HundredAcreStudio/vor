@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 )
 
 // newDeleteCmd removes a repository's row and (via ON DELETE CASCADE)
@@ -14,7 +14,7 @@ import (
 // not touched.
 //
 // The on-disk source tree, git history, and config file
-// (.repowise/config.yaml) survive — only the DB-side index is dropped.
+// (.vor/config.yaml) survive — only the DB-side index is dropped.
 func newDeleteCmd() *cobra.Command {
 	var (
 		repoPath string

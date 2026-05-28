@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
-	"github.com/repowise-dev/repowise-go/internal/persistence/decisionstore"
+	"github.com/HundredAcreStudio/vor/internal/analysis/decisions"
+	"github.com/HundredAcreStudio/vor/internal/persistence/decisionstore"
 )
 
 // newDecisionCmd is the decision subcommand group. The existing
@@ -101,7 +101,7 @@ func newDecisionListCmd() *cobra.Command {
 				count++
 			}
 			if count == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "no decisions found (run `repowise init` first)")
+				fmt.Fprintln(cmd.OutOrStdout(), "no decisions found (run `vor init` first)")
 			}
 			return rows.Err()
 		},

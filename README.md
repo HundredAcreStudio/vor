@@ -1,34 +1,34 @@
-# repowise-go
+# vor-go
 
-Go port of [repowise](https://github.com/repowise-dev/repowise) — the codebase intelligence layer for your AI coding agent. Indexes a codebase into a typed dependency graph, mines git history for hotspots and ownership, runs deterministic code-health biomarkers, extracts architectural decisions, generates wiki documentation, and exposes everything over HTTP and MCP.
+Go port of [vor](https://github.com/HundredAcreStudio/vor) — the codebase intelligence layer for your AI coding agent. Indexes a codebase into a typed dependency graph, mines git history for hotspots and ownership, runs deterministic code-health biomarkers, extracts architectural decisions, generates wiki documentation, and exposes everything over HTTP and MCP.
 
 > Work in progress. See [PORTING_PLAN.md](./PORTING_PLAN.md) for the phased roadmap, library choices, and risk register.
 
 ## Two components
 
-repowise-go is built as two cooperating components that share one database:
+vor-go is built as two cooperating components that share one database:
 
-### 1. The CLI — `repowise`
+### 1. The CLI — `vor`
 
 A terminal tool for **indexing and inspecting** repositories. You run it interactively or from scripts and git hooks. It does the cheap, deterministic work (parse, graph, git, health, decisions) with zero LLM calls, plus the LLM-billed documentation generation on demand.
 
 ```bash
-repowise init <path>              # full index: traverse → parse → git → graph → deadcode → health → externals → decisions → persist
-repowise update <path>            # re-index (incremental intent); auto-regenerates CLAUDE.md
-repowise generate --provider anthropic   # LLM wiki pages (file / directory / symbol overviews)
-repowise embed <path>             # index wiki pages into the vector store for semantic search
-repowise status | health | hotspots | dead-code | decisions | externals | costs | pages   # read views
-repowise coverage import <file>   # ingest LCOV/Cobertura → untested_hotspot
-repowise security scan            # secrets / weak crypto / injection sinks
-repowise search <query>           # substring search; add --semantic to rank pages by embedding
-repowise watch <path>             # debounced auto-update on file change
-repowise hook install             # post-commit auto-sync
-repowise workspace add / register # multi-repo registries
+vor init <path>              # full index: traverse → parse → git → graph → deadcode → health → externals → decisions → persist
+vor update <path>            # re-index (incremental intent); auto-regenerates CLAUDE.md
+vor generate --provider anthropic   # LLM wiki pages (file / directory / symbol overviews)
+vor embed <path>             # index wiki pages into the vector store for semantic search
+vor status | health | hotspots | dead-code | decisions | externals | costs | pages   # read views
+vor coverage import <file>   # ingest LCOV/Cobertura → untested_hotspot
+vor security scan            # secrets / weak crypto / injection sinks
+vor search <query>           # substring search; add --semantic to rank pages by embedding
+vor watch <path>             # debounced auto-update on file change
+vor hook install             # post-commit auto-sync
+vor workspace add / register # multi-repo registries
 ```
 
 Every read command accepts `--repo <path>` **or** `--repo-id <id>` so it can address any repo in a shared database without `cd`-ing into it.
 
-### 2. The server — `repowise serve`
+### 2. The server — `vor serve`
 
 A **long-running daemon** that exposes the indexed data over the network. Editor clients and dashboards attach to it instead of each spawning their own process. Two surfaces live on one port:
 
@@ -38,20 +38,20 @@ A **long-running daemon** that exposes the indexed data over the network. Editor
 | MCP (Streamable HTTP) | `/mcp` | AI agents — Claude Code, Cursor, … |
 
 ```bash
-repowise serve                       # single repo
-repowise serve --workspace           # every repo in one workspace
-repowise serve --auto                # every workspace in the user-global registry
+vor serve                       # single repo
+vor serve --workspace           # every repo in one workspace
+vor serve --auto                # every workspace in the user-global registry
 ```
 
-MCP is also available over stdio (`repowise mcp`) for editors that spawn a child process per repo. The HTTP transport is what makes the **daemon** model work — one process, many clients, optionally many repos.
+MCP is also available over stdio (`vor mcp`) for editors that spawn a child process per repo. The HTTP transport is what makes the **daemon** model work — one process, many clients, optionally many repos.
 
 ### How they share state
 
-Both components read/write the same database, selected by `REPOWISE_DB_URL` (or `~/.config/repowise/config.yaml`, or per-repo `.repowise/config.yaml`). Point every `init`/`update`/`serve` at one SQLite file — or a Postgres URL on a central host — and a single daemon serves every indexed repo. Each table is keyed by `repository_id`, so one database cleanly holds N repos.
+Both components read/write the same database, selected by `VOR_DB_URL` (or `~/.config/vor/config.yaml`, or per-repo `.vor/config.yaml`). Point every `init`/`update`/`serve` at one SQLite file — or a Postgres URL on a central host — and a single daemon serves every indexed repo. Each table is keyed by `repository_id`, so one database cleanly holds N repos.
 
 ```
                 ┌─────────────────────────┐
-   repowise ────┤  shared DB (sqlite/pg)  ├──── repowise serve ──── /api  (dashboards)
+   vor ────┤  shared DB (sqlite/pg)  ├──── vor serve ──── /api  (dashboards)
    (CLI:        │  N repos, 1 row each in │     (daemon)        └──── /mcp  (AI agents)
     index/      │  repositories + per-    │
     inspect)    │  repo analysis tables)  │
@@ -62,15 +62,15 @@ Both components read/write the same database, selected by `REPOWISE_DB_URL` (or 
 
 ```bash
 # Single workstation — one daemon for every local repo
-export REPOWISE_DB_URL=sqlite:$HOME/.local/state/repowise/all.db
-repowise workspace add ~/projects/api  && repowise workspace add ~/projects/web
-repowise workspace register .          # remember this workspace root
-repowise workspace update              # index all members
-repowise serve --auto                  # one daemon, all repos, on :7337
+export VOR_DB_URL=sqlite:$HOME/.local/state/vor/all.db
+vor workspace add ~/projects/api  && vor workspace add ~/projects/web
+vor workspace register .          # remember this workspace root
+vor workspace update              # index all members
+vor serve --auto                  # one daemon, all repos, on :7337
 
 # Central host — shared Postgres, many developers attach
-export REPOWISE_DB_URL=postgres://repowise@db.internal/repowise
-repowise serve --auto --addr 0.0.0.0:7337
+export VOR_DB_URL=postgres://vor@db.internal/vor
+vor serve --auto --addr 0.0.0.0:7337
 ```
 
 ## User-global state
@@ -79,27 +79,27 @@ The CLI tracks box-level state under XDG directories:
 
 | File | Purpose |
 |---|---|
-| `~/.config/repowise/config.yaml` | user-global defaults (provider, model, health_rules) — slots into the merge chain `defaults → user → repo → env` |
-| `~/.local/state/repowise/daemon.json` | the running `serve` instance (pid, addr); `repowise status` reports it |
-| `~/.local/state/repowise/workspaces.yaml` | registered workspace roots, consumed by `serve --auto` |
-| `~/.local/state/repowise/watched.json` | per-repo watch + update history, shown by `repowise watched list` |
+| `~/.config/vor/config.yaml` | user-global defaults (provider, model, health_rules) — slots into the merge chain `defaults → user → repo → env` |
+| `~/.local/state/vor/daemon.json` | the running `serve` instance (pid, addr); `vor status` reports it |
+| `~/.local/state/vor/workspaces.yaml` | registered workspace roots, consumed by `serve --auto` |
+| `~/.local/state/vor/watched.json` | per-repo watch + update history, shown by `vor watched list` |
 
 ## Configuration
 
 Settings load through a merge chain — each layer overrides the previous:
 
 ```
-defaults → ~/.config/repowise/config.yaml → <repo>/.repowise/config.yaml → REPOWISE_* env
+defaults → ~/.config/vor/config.yaml → <repo>/.vor/config.yaml → VOR_* env
 ```
 
-`repowise init` writes a commented `<repo>/.repowise/config.yaml` on first run (and never clobbers an existing one). Provider API keys are read from the environment only, never the file, so they can't be committed by accident.
+`vor init` writes a commented `<repo>/.vor/config.yaml` on first run (and never clobbers an existing one). Provider API keys are read from the environment only, never the file, so they can't be committed by accident.
 
 ### Code-health exclusions (`health_rules`)
 
 Suppress biomarker findings for files matching a glob (`pattern`, gitignore syntax) or a path prefix (`path`). `overrides` maps a biomarker name to an action — `disabled` (also `off` / `skip` / `ignore`) turns that check off, and the `"*"` key applies to every biomarker. Exclusions are **health-only**: matched files still appear in the dependency graph, search, and dead-code analysis — they just stop generating health findings (and stop dragging the file's score). Rules from the user-global and repo-local files are **additive**, so a global "ignore tests" rule and a repo-specific rule both apply.
 
 ```yaml
-# <repo>/.repowise/config.yaml
+# <repo>/.vor/config.yaml
 health_rules:
   - pattern: "**/*_test.go"        # table-driven tests aren't real complexity debt
     overrides:
@@ -131,8 +131,8 @@ For a feature-by-feature comparison against the Python implementation
 | Dead code detection | ✅ |
 | Code health biomarkers (11: complexity, long_function, deep_nesting, god_class, untested_hotspot, brain_method, hidden_coupling, duplication, long_parameter_list, feature_envy, shotgun_surgery) | ✅ |
 | Community detection — Louvain modularity (gonum) | ✅ |
-| Coverage ingest — LCOV / Cobertura → untested_hotspot (`repowise coverage import`) | ✅ |
-| Security scan — secrets / weak crypto / injection sinks (`repowise security`) | ✅ |
+| Coverage ingest — LCOV / Cobertura → untested_hotspot (`vor coverage import`) | ✅ |
+| Security scan — secrets / weak crypto / injection sinks (`vor security`) | ✅ |
 | Config health exclusions — per-file / per-check via `health_rules` (gitignore globs) | ✅ |
 | LLM providers — Mock + **Anthropic / OpenAI / Gemini / Ollama / LiteLLM** + cost/ratelimit/retry middleware | ✅ |
 | Embedders — Mock + OpenAI / Gemini / Ollama (real semantic search) | ✅ |
@@ -151,15 +151,15 @@ For a feature-by-feature comparison against the Python implementation
 
 ```bash
 make build
-export REPOWISE_DB_URL=sqlite:$PWD/.repowise/wiki.db
-./bin/repowise db migrate
-./bin/repowise init .                       # index this repo
-./bin/repowise status                       # one-screen summary (+ daemon state if running)
-./bin/repowise health --refactoring-targets # ranked by impact / effort
-./bin/repowise generate --provider mock     # wiki pages (use --provider anthropic with a key)
-./bin/repowise embed .                       # index pages for semantic search
-./bin/repowise search --semantic "auth flow" # rank pages by embedding similarity
-./bin/repowise serve --addr :7337           # HTTP API + MCP daemon
+export VOR_DB_URL=sqlite:$PWD/.vor/wiki.db
+./bin/vor db migrate
+./bin/vor init .                       # index this repo
+./bin/vor status                       # one-screen summary (+ daemon state if running)
+./bin/vor health --refactoring-targets # ranked by impact / effort
+./bin/vor generate --provider mock     # wiki pages (use --provider anthropic with a key)
+./bin/vor embed .                       # index pages for semantic search
+./bin/vor search --semantic "auth flow" # rank pages by embedding similarity
+./bin/vor serve --addr :7337           # HTTP API + MCP daemon
 ```
 
 Requires Go 1.24+. cgo is needed for the tree-sitter parsers; the persistence, git, provider, server, and workspace packages are pure Go.
@@ -168,8 +168,8 @@ Requires Go 1.24+. cgo is needed for the tree-sitter parsers; the persistence, g
 
 ```
 cmd/
-  repowise/              # main CLI binary
-  repowise-augment/      # Claude Code Grep/Glob enrichment hook
+  vor/              # main CLI binary
+  vor-augment/      # Claude Code Grep/Glob enrichment hook
 internal/
   ingestion/             # traverser + parsers + graph + git + external systems
   analysis/

@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/version"
+	"github.com/HundredAcreStudio/vor/internal/version"
 )
 
 func newVersionCmd() *cobra.Command {

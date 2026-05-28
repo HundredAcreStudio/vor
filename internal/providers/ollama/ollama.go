@@ -9,7 +9,7 @@
 //
 // Construction is via providers.NewProvider("ollama", opts) with:
 //
-//	"base_url"      string  (optional, defaults to http://localhost:11434, also REPOWISE_OLLAMA_BASE_URL)
+//	"base_url"      string  (optional, defaults to http://localhost:11434, also VOR_OLLAMA_BASE_URL)
 //	"default_model" string  (optional, defaults llama3.2)
 //	"http_client"   *http.Client (optional — tests)
 package ollama
@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 const (

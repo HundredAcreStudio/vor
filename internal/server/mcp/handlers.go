@@ -7,14 +7,14 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/vector"
-	"github.com/repowise-dev/repowise-go/internal/workspace"
+	"github.com/HundredAcreStudio/vor/internal/persistence/externalstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/graphstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/healthstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/vector"
+	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
-// ---- tool: repowise_workspace_repos --------------------------------------
+// ---- tool: vor_workspace_repos --------------------------------------
 
 type workspaceRepoEntry struct {
 	Alias         string `json:"alias"`
@@ -57,7 +57,7 @@ func (s *Server) toolWorkspaceRepos(ctx context.Context, _ mcp.CallToolRequest) 
 	return jsonResult(map[string]any{"repos": out})
 }
 
-// ---- tool: repowise_status -----------------------------------------------
+// ---- tool: vor_status -----------------------------------------------
 
 type statusPayload struct {
 	GraphNodes       int            `json:"graphNodes"`
@@ -109,7 +109,7 @@ func (s *Server) toolStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	return jsonResult(p)
 }
 
-// ---- tool: repowise_hotspots ---------------------------------------------
+// ---- tool: vor_hotspots ---------------------------------------------
 
 type hotspotPayload struct {
 	Path             string  `json:"path"`
@@ -149,7 +149,7 @@ func (s *Server) toolHotspots(ctx context.Context, req mcp.CallToolRequest) (*mc
 	return jsonResult(map[string]any{"hotspots": out, "limit": limit})
 }
 
-// ---- tool: repowise_dead_code --------------------------------------------
+// ---- tool: vor_dead_code --------------------------------------------
 
 type deadPayload struct {
 	Kind         string  `json:"kind"`
@@ -199,7 +199,7 @@ func (s *Server) toolDeadCode(ctx context.Context, req mcp.CallToolRequest) (*mc
 	return jsonResult(map[string]any{"findings": out, "limit": limit})
 }
 
-// ---- tool: repowise_health -----------------------------------------------
+// ---- tool: vor_health -----------------------------------------------
 
 type healthSummaryPayload struct {
 	AverageScore        float64           `json:"averageScore"`
@@ -252,7 +252,7 @@ func (s *Server) toolHealth(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	return jsonResult(p)
 }
 
-// ---- tool: repowise_health_findings --------------------------------------
+// ---- tool: vor_health_findings --------------------------------------
 
 type healthFindingPayload struct {
 	FilePath      string  `json:"filePath"`
@@ -306,7 +306,7 @@ func (s *Server) toolHealthFindings(ctx context.Context, req mcp.CallToolRequest
 	return jsonResult(map[string]any{"findings": out, "limit": limit})
 }
 
-// ---- tool: repowise_security ---------------------------------------------
+// ---- tool: vor_security ---------------------------------------------
 
 type securityPayload struct {
 	FilePath string `json:"filePath"`
@@ -355,7 +355,7 @@ func (s *Server) toolSecurity(ctx context.Context, req mcp.CallToolRequest) (*mc
 	return jsonResult(map[string]any{"findings": out, "limit": limit})
 }
 
-// ---- tool: repowise_symbol -----------------------------------------------
+// ---- tool: vor_symbol -----------------------------------------------
 
 type symbolPayload struct {
 	NodeID        string  `json:"nodeId"`
@@ -398,7 +398,7 @@ func (s *Server) toolSymbol(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	return jsonResult(p)
 }
 
-// ---- tool: repowise_callers ----------------------------------------------
+// ---- tool: vor_callers ----------------------------------------------
 
 type callerEdgePayload struct {
 	From       string  `json:"from"`
@@ -441,7 +441,7 @@ func (s *Server) toolCallers(ctx context.Context, req mcp.CallToolRequest) (*mcp
 	})
 }
 
-// ---- tool: repowise_dependents -------------------------------------------
+// ---- tool: vor_dependents -------------------------------------------
 
 type dependentEdgePayload struct {
 	From          string   `json:"from"`
@@ -489,7 +489,7 @@ func (s *Server) toolDependents(ctx context.Context, req mcp.CallToolRequest) (*
 	})
 }
 
-// ---- tool: repowise_externals --------------------------------------------
+// ---- tool: vor_externals --------------------------------------------
 
 type externalPayload struct {
 	Name        string `json:"name"`
@@ -543,7 +543,7 @@ func (s *Server) toolExternals(ctx context.Context, req mcp.CallToolRequest) (*m
 	})
 }
 
-// ---- tool: repowise_search -----------------------------------------------
+// ---- tool: vor_search -----------------------------------------------
 
 type searchResultPayload struct {
 	NodeID    string  `json:"nodeId"`
@@ -656,7 +656,7 @@ func (s *Server) semanticSearch(ctx context.Context, rid, q string, limit int) (
 	return res, true, err
 }
 
-// ---- tool: repowise_pipeline_log ------------------------------------------
+// ---- tool: vor_pipeline_log ------------------------------------------
 
 type pipelineLogEntry struct {
 	Phase     string `json:"phase"`
@@ -700,7 +700,7 @@ func (s *Server) toolPipelineLog(ctx context.Context, req mcp.CallToolRequest) (
 	})
 }
 
-// ---- tool: repowise_decisions ---------------------------------------------
+// ---- tool: vor_decisions ---------------------------------------------
 
 type decisionPayload struct {
 	Title        string  `json:"title"`
@@ -755,7 +755,7 @@ func (s *Server) toolDecisions(ctx context.Context, req mcp.CallToolRequest) (*m
 	return jsonResult(map[string]any{"decisions": out, "limit": limit})
 }
 
-// ---- tool: repowise_pages / repowise_page --------------------------------
+// ---- tool: vor_pages / vor_page --------------------------------
 
 type pageSummaryPayload struct {
 	ID           string `json:"id"`

@@ -16,11 +16,11 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/logging"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/pipeline"
-	"github.com/repowise-dev/repowise-go/internal/userconfig"
-	"github.com/repowise-dev/repowise-go/internal/workspace"
+	"github.com/HundredAcreStudio/vor/internal/logging"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/userconfig"
+	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 // recordWatchInRegistry adds path (and optional alias / workspace
@@ -46,10 +46,10 @@ func recordUpdateInRegistry(path string) {
 	_ = userconfig.SaveWatched(reg)
 }
 
-// newWatchCmd starts a file-watcher that runs `repowise update` after
+// newWatchCmd starts a file-watcher that runs `vor update` after
 // any source change settles. Debounced so a burst of saves (formatter,
 // IDE on-save) coalesces into one re-index. Skips .git, node_modules,
-// vendor, dist, build, .repowise — the directories that churn during
+// vendor, dist, build, .vor — the directories that churn during
 // normal use without changing the indexed source.
 //
 // Stops cleanly on Ctrl-C (the root command's signal-aware context is
@@ -137,7 +137,7 @@ func runWorkspaceWatch(
 		return fmt.Errorf("load workspace.json: %w", err)
 	}
 	if len(state.Repos) == 0 {
-		return fmt.Errorf("no repos registered at %s — `repowise workspace add PATH`", wsRoot)
+		return fmt.Errorf("no repos registered at %s — `vor workspace add PATH`", wsRoot)
 	}
 	fmt.Fprintf(out, "watching %d repo(s) under %s (debounce %s) — Ctrl-C to stop\n",
 		len(state.Repos), wsRoot, debounce)
@@ -244,7 +244,7 @@ func runWatchLoop(ctx context.Context, opts watchOptions) error {
 			return
 		}
 		fmt.Fprintln(opts.ProgressOut, "  → updated")
-		// Bump the user-global watched.json so `repowise status` can
+		// Bump the user-global watched.json so `vor status` can
 		// surface "this repo was last reindexed at T". Failures are
 		// non-critical telemetry — log + continue, don't abort the loop.
 		recordUpdateInRegistry(opts.Root)
@@ -330,7 +330,7 @@ func shouldIgnoreEvent(ev fsnotify.Event, root string) bool {
 func isIgnoredDir(name string) bool {
 	switch name {
 	case ".git", "node_modules", "vendor", "dist", "build",
-		".repowise", ".idea", ".vscode", "__pycache__", ".pytest_cache",
+		".vor", ".idea", ".vscode", "__pycache__", ".pytest_cache",
 		".next", ".turbo", "target":
 		return true
 	}

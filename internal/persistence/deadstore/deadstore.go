@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
+	"github.com/HundredAcreStudio/vor/internal/analysis/deadcode"
 )
 
 // Store persists deadcode findings.

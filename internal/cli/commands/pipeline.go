@@ -9,10 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/logging"
-	"github.com/repowise-dev/repowise-go/internal/persistence/pipelinestore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/logging"
+	"github.com/HundredAcreStudio/vor/internal/persistence/pipelinestore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/pipeline"
 )
 
 // newPipelineCmd is a group for pipeline-related subcommands. v1 ships
@@ -57,7 +57,7 @@ func newPipelineLogCmd() *cobra.Command {
 				return err
 			}
 			if len(rows) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "no pipeline_jobs rows (run `repowise init` first)")
+				fmt.Fprintln(cmd.OutOrStdout(), "no pipeline_jobs rows (run `vor init` first)")
 				return nil
 			}
 			tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
@@ -108,7 +108,7 @@ func newPipelineStatusCmd() *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if latest == nil {
-				fmt.Fprintln(out, "no pipeline run yet (run `repowise init`)")
+				fmt.Fprintln(out, "no pipeline run yet (run `vor init`)")
 				return nil
 			}
 			fmt.Fprintf(out, "run_id:    %s\n", latest.RunID)

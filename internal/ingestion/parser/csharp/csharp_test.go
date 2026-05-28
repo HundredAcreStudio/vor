@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 func TestParse_CSharp(t *testing.T) {

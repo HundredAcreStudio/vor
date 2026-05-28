@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 )
 
 // newExportCmd dumps wiki_pages (and optionally decisions / hotspots /
@@ -25,7 +25,7 @@ func newExportCmd() *cobra.Command {
 		Use:   "export [PATH]",
 		Short: "Export persisted wiki pages to disk",
 		Long: `Writes one file per page (markdown / html) or a single JSON dump
-to <repo>/.repowise/export by default. Use --full --format=json to
+to <repo>/.vor/export by default. Use --full --format=json to
 include the cross-cutting analysis tables (decisions, dead code,
 hotspots) in the JSON dump.
 
@@ -37,7 +37,7 @@ in a markdown library dependency.`,
 	}
 	cmd.Flags().StringVar(&o.repoPath, "repo", ".", "repository path (overridden by positional PATH)")
 	cmd.Flags().StringVar(&o.format, "format", "markdown", "output format: markdown | html | json")
-	cmd.Flags().StringVarP(&o.outputDir, "output", "o", "", "output directory (default <repo>/.repowise/export)")
+	cmd.Flags().StringVarP(&o.outputDir, "output", "o", "", "output directory (default <repo>/.vor/export)")
 	cmd.Flags().BoolVar(&o.full, "full", false, "include decisions/hotspots/dead-code in JSON export")
 	return cmd
 }
@@ -82,7 +82,7 @@ func (o *exportOptions) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load pages: %w", err)
 	}
 	if len(pages) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "no pages found. Run `repowise generate` first.")
+		fmt.Fprintln(cmd.OutOrStdout(), "no pages found. Run `vor generate` first.")
 		return nil
 	}
 
@@ -93,12 +93,12 @@ func (o *exportOptions) run(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// resolveExportDir picks the output directory (default <repo>/.repowise/
+// resolveExportDir picks the output directory (default <repo>/.vor/
 // export) and ensures it exists.
 func resolveExportDir(absRoot, outputDir string) (string, error) {
 	outDir := outputDir
 	if outDir == "" {
-		outDir = filepath.Join(absRoot, ".repowise", "export")
+		outDir = filepath.Join(absRoot, ".vor", "export")
 	} else {
 		abs, err := filepath.Abs(outDir)
 		if err != nil {

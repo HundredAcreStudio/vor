@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
-	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/changelog"
+	"github.com/HundredAcreStudio/vor/internal/analysis/decisions"
+	_ "github.com/HundredAcreStudio/vor/internal/analysis/decisions/changelog"
 )
 
 func writeFile(t *testing.T, root, rel, content string) {
@@ -34,12 +34,12 @@ func TestChangelog_KeepACahangelog(t *testing.T) {
 - Improved cache hit ratio
 
 ### Removed
-- BREAKING removal of deprecated repowise_old_status MCP tool
+- BREAKING removal of deprecated vor_old_status MCP tool
 
 ## [1.5.0] - 2024-03-10
 
 ### Added
-- New repowise_decisions tool
+- New vor_decisions tool
 
 ### Fixed
 - Stop a panic on empty repos

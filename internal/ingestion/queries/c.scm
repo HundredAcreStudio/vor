@@ -1,5 +1,5 @@
 ; =============================================================================
-; repowise — C symbol and import queries
+; vor — C symbol and import queries
 ; Re-uses tree-sitter-cpp since C is a subset of that grammar.
 ; =============================================================================
 

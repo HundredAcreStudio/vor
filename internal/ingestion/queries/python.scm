@@ -1,5 +1,5 @@
 ; =============================================================================
-; repowise — Python symbol and import queries
+; vor — Python symbol and import queries
 ; tree-sitter-python >= 0.23
 ;
 ; Capture name conventions (shared across ALL language query files):

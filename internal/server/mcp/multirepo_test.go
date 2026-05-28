@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	mcpserver "github.com/repowise-dev/repowise-go/internal/server/mcp"
-	"github.com/repowise-dev/repowise-go/internal/workspace"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	mcpserver "github.com/HundredAcreStudio/vor/internal/server/mcp"
+	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 // multiRepoFixture sets up one shared DB with two repos plus a
@@ -68,7 +68,7 @@ func multiRepoFixture(t *testing.T) (*mcpserver.Server, string, string, string) 
 
 func TestMultiRepo_WorkspaceReposLists(t *testing.T) {
 	srv, apiID, webID, _ := multiRepoFixture(t)
-	text := callTool(t, srv, "repowise_workspace_repos", nil)
+	text := callTool(t, srv, "vor_workspace_repos", nil)
 	if !strings.Contains(text, `"alias": "api"`) || !strings.Contains(text, `"alias": "web"`) {
 		t.Errorf("workspace_repos missing aliases: %s", text)
 	}
@@ -88,7 +88,7 @@ func TestMultiRepo_StatusByAlias(t *testing.T) {
 	// Both calls should resolve successfully — the actual payloads are
 	// the same shape because both repos are unindexed (zero counts).
 	for _, alias := range []string{"api", "web"} {
-		text := callTool(t, srv, "repowise_status", map[string]any{"repo": alias})
+		text := callTool(t, srv, "vor_status", map[string]any{"repo": alias})
 		if !strings.Contains(text, `"graphNodes"`) {
 			t.Errorf("status by alias %q missing graphNodes: %s", alias, text)
 		}
@@ -97,7 +97,7 @@ func TestMultiRepo_StatusByAlias(t *testing.T) {
 
 func TestMultiRepo_StatusByFullID(t *testing.T) {
 	srv, _, webID, _ := multiRepoFixture(t)
-	text := callTool(t, srv, "repowise_status", map[string]any{"repo": webID})
+	text := callTool(t, srv, "vor_status", map[string]any{"repo": webID})
 	if !strings.Contains(text, `"graphNodes"`) {
 		t.Errorf("status by full id missing shape: %s", text)
 	}
@@ -105,7 +105,7 @@ func TestMultiRepo_StatusByFullID(t *testing.T) {
 
 func TestMultiRepo_StatusByLocalPath(t *testing.T) {
 	srv, _, _, root := multiRepoFixture(t)
-	text := callTool(t, srv, "repowise_status", map[string]any{
+	text := callTool(t, srv, "vor_status", map[string]any{
 		"repo": filepath.Join(root, "web"),
 	})
 	if !strings.Contains(text, `"graphNodes"`) {
@@ -119,7 +119,7 @@ func TestMultiRepo_UnknownRepoArgIsToolError(t *testing.T) {
 	msg := map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 		"params": map[string]any{
-			"name":      "repowise_status",
+			"name":      "vor_status",
 			"arguments": map[string]any{"repo": "does-not-exist"},
 		},
 	}
@@ -138,7 +138,7 @@ func TestMultiRepo_DefaultsToConfiguredRepositoryID(t *testing.T) {
 	// Without a `repo` argument, the server falls back to opts.RepositoryID
 	// (api in this fixture).
 	srv, _, _, _ := multiRepoFixture(t)
-	text := callTool(t, srv, "repowise_status", nil)
+	text := callTool(t, srv, "vor_status", nil)
 	if !strings.Contains(text, `"graphNodes"`) {
 		t.Errorf("status without repo arg should still work via default: %s", text)
 	}
@@ -167,7 +167,7 @@ func TestMultiRepo_WorkspaceOnlyModeRequiresRepoArg(t *testing.T) {
 	}
 	msg := map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-		"params": map[string]any{"name": "repowise_status", "arguments": map[string]any{}},
+		"params": map[string]any{"name": "vor_status", "arguments": map[string]any{}},
 	}
 	raw, _ := json.Marshal(msg)
 	resp := srv.MCPServer().HandleMessage(context.Background(), raw)

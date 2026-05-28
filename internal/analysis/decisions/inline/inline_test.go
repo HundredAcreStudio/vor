@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
-	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/inline"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/analysis/decisions"
+	_ "github.com/HundredAcreStudio/vor/internal/analysis/decisions/inline"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // fixture writes content to a tmp file and returns a ParsedFile that

@@ -1,5 +1,5 @@
 // Package coverage parses test-coverage reports (LCOV and Cobertura XML)
-// into a normalised per-file form the rest of repowise can store and feed
+// into a normalised per-file form the rest of vor can store and feed
 // into the untested_hotspot biomarker.
 //
 // Only line coverage is required downstream; branch coverage is captured

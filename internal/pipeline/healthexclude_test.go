@@ -21,7 +21,7 @@ func TestIsDisableAction(t *testing.T) {
 
 func TestHealthExcludesFor_MapsConfig(t *testing.T) {
 	dir := t.TempDir()
-	cfgDir := filepath.Join(dir, ".repowise")
+	cfgDir := filepath.Join(dir, ".vor")
 	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestHealthExcludesFor_MapsConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Isolate from any real ~/.config/repowise during the test.
+	// Isolate from any real ~/.config/vor during the test.
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "xdg"))
 
 	rules := healthExcludesFor(dir)

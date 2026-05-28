@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/health"
-	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/analysis/health"
+	"github.com/HundredAcreStudio/vor/internal/persistence/healthstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 )
 
 // seedHealth puts a few health rows directly into the test DB so the
@@ -42,11 +42,11 @@ func seedHealth(t *testing.T, tmp string) {
 
 func TestHealth_FileFilter(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 	seedHealth(t, tmp)
-	stdout, _, err := runRepowiseCmd(t, nil, "health", "--file", "alpha", "--repo", tmp)
+	stdout, _, err := runVorCmd(t, nil, "health", "--file", "alpha", "--repo", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,11 +60,11 @@ func TestHealth_FileFilter(t *testing.T) {
 
 func TestHealth_ModuleFilter(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 	seedHealth(t, tmp)
-	stdout, _, err := runRepowiseCmd(t, nil, "health", "--module", "internal/alpha", "--repo", tmp)
+	stdout, _, err := runVorCmd(t, nil, "health", "--module", "internal/alpha", "--repo", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,11 +78,11 @@ func TestHealth_ModuleFilter(t *testing.T) {
 
 func TestHealth_RefactoringTargets(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 	seedHealth(t, tmp)
-	stdout, _, err := runRepowiseCmd(t, nil, "health", "--refactoring-targets", "--repo", tmp)
+	stdout, _, err := runVorCmd(t, nil, "health", "--refactoring-targets", "--repo", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,10 +107,10 @@ func TestHealth_RefactoringTargets(t *testing.T) {
 
 func TestHealth_TrendStub(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
-	stdout, _, err := runRepowiseCmd(t, nil, "health", "--trend", "--repo", tmp)
+	stdout, _, err := runVorCmd(t, nil, "health", "--trend", "--repo", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,10 +121,10 @@ func TestHealth_TrendStub(t *testing.T) {
 
 func TestHealth_CoverageStub(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
-	stdout, _, err := runRepowiseCmd(t, nil, "health", "--coverage", "coverage.lcov", "--repo", tmp)
+	stdout, _, err := runVorCmd(t, nil, "health", "--coverage", "coverage.lcov", "--repo", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}

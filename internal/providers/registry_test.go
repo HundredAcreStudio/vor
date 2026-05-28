@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 // fake is a minimal in-test Provider used to verify the registry surface.

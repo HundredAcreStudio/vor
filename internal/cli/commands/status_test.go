@@ -8,18 +8,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
-	"github.com/repowise-dev/repowise-go/internal/analysis/health"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/deadstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/analysis/deadcode"
+	"github.com/HundredAcreStudio/vor/internal/analysis/health"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/external"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/graph"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/deadstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/externalstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/graphstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/healthstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 )
 
 // TestStatusCommand_RendersPersistedData uses the same shape Pass A
@@ -29,13 +29,13 @@ func TestStatusCommand_RendersPersistedData(t *testing.T) {
 	tmp := t.TempDir()
 	ctx := context.Background()
 
-	// .repowise/wiki.db lives at <repoPath>/.repowise/wiki.db — make the
+	// .vor/wiki.db lives at <repoPath>/.vor/wiki.db — make the
 	// dir so openDB can write into it.
-	if err := os.MkdirAll(filepath.Join(tmp, ".repowise"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, ".vor"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	conn, dialect, err := db.Open(ctx, db.OpenOptions{
-		URL: "sqlite:" + filepath.Join(tmp, ".repowise", "wiki.db"),
+		URL: "sqlite:" + filepath.Join(tmp, ".vor", "wiki.db"),
 	})
 	if err != nil {
 		t.Fatalf("open: %v", err)

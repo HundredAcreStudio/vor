@@ -1,4 +1,4 @@
-# repowise-go — Post-Parity Roadmap
+# vor-go — Post-Parity Roadmap
 
 Phases 0–11 of [PORTING_PLAN.md](PORTING_PLAN.md) are complete: the Go
 port reaches functional parity with the Python project's core, server,
@@ -52,7 +52,7 @@ dependency), matching the existing Anthropic implementation.
 - ✅ CLI wiring: `--provider openai|google|ollama|litellm` and
   `config.embedder` resolve keys/base-URLs from env
   (`OPENAI_API_KEY`, `GEMINI_API_KEY`/`GOOGLE_API_KEY`,
-  `REPOWISE_OLLAMA_BASE_URL`, `REPOWISE_LITELLM_BASE_URL`).
+  `VOR_OLLAMA_BASE_URL`, `VOR_LITELLM_BASE_URL`).
 
 All four providers + embedders are covered by httptest-based unit tests.
 The remaining caveat is empirical: meaningful semantic-search ranking
@@ -87,7 +87,7 @@ land if cross-file resolution quality demands it.
   connected-component placeholder in `graph/metrics.go`. Verified it
   splits bridged clusters that the old labeller would have merged.
 - ✅ **Coverage ingest**: an LCOV + Cobertura parser
-  (`analysis/health/coverage`) → `coveragestore` → `repowise coverage
+  (`analysis/health/coverage`) → `coveragestore` → `vor coverage
   import|status`. When present, coverage makes `untested_hotspot`
   authoritative (below-threshold line coverage = untested), with impact
   scaling as coverage drops.
@@ -98,7 +98,7 @@ land if cross-file resolution quality demands it.
 - ✅ **Security scanner** (`analysis/security`): pattern-based detection
   of hardcoded secrets (redacted), private keys, weak crypto, and
   concatenation-driven SQL/command-injection sinks → `securitystore` →
-  `repowise security scan|list` + the `repowise_security` MCP tool.
+  `vor security scan|list` + the `vor_security` MCP tool.
 
 Deferred (not blocking): the remaining ~6 biomarkers (congestion,
 knowledge loss, code-age volatility, …), Leiden, and health
@@ -120,7 +120,7 @@ trends/governance depth — the framework is in place to add them.
   methods, GraphQL SDL → type/input/enum/interface definitions. They
   land in `external_systems` (ecosystems openapi/grpc/graphql).
 
-`repowise serve` now also prints copy-paste MCP client-install
+`vor serve` now also prints copy-paste MCP client-install
 instructions (Claude Code + generic `mcp.json`) at startup.
 
 Deferred (not blocking): graph + git intelligence still run fully each
@@ -137,20 +137,20 @@ CI build-step extraction.
 - Architecture **page kind** for generation (whole-system narrative),
   alongside the existing file/directory/symbol pages.
 
-**Acceptance:** `repowise_get_risk` (PR mode) returns a directive block
+**Acceptance:** `vor_get_risk` (PR mode) returns a directive block
 for a diff; an architecture page generates and is searchable;
 decision-to-symbol links populate.
 
 ## Phase 17 — Server completeness & client UX
 
-- ✅ **MCP mutation tools** (single-user local): `repowise_reindex`
+- ✅ **MCP mutation tools** (single-user local): `vor_reindex`
   (async — returns a run_id, runs the pipeline in the background, guards
-  against double-firing an in-progress run; poll `repowise_pipeline_log`)
-  and `repowise_security_scan` (sync). Lets an attached agent refresh the
+  against double-firing an in-progress run; poll `vor_pipeline_log`)
+  and `vor_security_scan` (sync). Lets an attached agent refresh the
   index itself instead of shelling out. Left ungated since the target is
   a single-user local daemon; revisit `--allow-write` if it ever serves
   multiple clients.
-- ✅ `repowise serve` prints MCP client-install instructions at startup.
+- ✅ `vor serve` prints MCP client-install instructions at startup.
 - GitHub + GitLab **webhooks**: auto re-index on push, signature
   verification, background job dispatch.
 - **Scheduler** (`robfig/cron`): periodic maintenance (re-index drift,
@@ -158,12 +158,12 @@ decision-to-symbol links populate.
 - Background job executor with status surfaced over `/api` and MCP.
 - charmbracelet **TUI** for interactive `status` / `health` views.
 - Editor MCP-registration helpers (Claude Code / Cursor) so
-  `repowise mcp install` wires the daemon into a client config.
+  `vor mcp install` wires the daemon into a client config.
 - Vector scaling: pgvector native index on Postgres + optional LanceDB
   adapter; embed **symbols** as well as pages.
 
 **Acceptance:** a push webhook triggers a re-index; the scheduler runs a
-maintenance job; `repowise mcp install` writes a valid client config;
+maintenance job; `vor mcp install` writes a valid client config;
 semantic search covers symbols.
 
 ---
@@ -179,4 +179,4 @@ semantic search covers symbols.
   blocking core intelligence.
 
 Non-goals stay as in PORTING_PLAN §7 (no runtime plugins, no reading
-Python `.repowise/wiki.db`, dashboard lives elsewhere).
+Python `.vor/wiki.db`, dashboard lives elsewhere).

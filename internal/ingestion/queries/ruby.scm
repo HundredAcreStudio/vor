@@ -1,5 +1,5 @@
 ; =============================================================================
-; repowise — Ruby symbol, import, and call queries (tree-sitter-ruby)
+; vor — Ruby symbol, import, and call queries (tree-sitter-ruby)
 ; =============================================================================
 
 ; ---- Symbols ----

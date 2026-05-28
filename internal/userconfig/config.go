@@ -12,7 +12,7 @@ import (
 // matching key on the existing config.Config — values land in the
 // merge chain between env vars (highest) and repo-local YAML
 // (middle), giving users a "set once per box" knob without polluting
-// each repo's .repowise/config.yaml.
+// each repo's .vor/config.yaml.
 type Config struct {
 	Provider        string `yaml:"provider,omitempty"`
 	Model           string `yaml:"model,omitempty"`

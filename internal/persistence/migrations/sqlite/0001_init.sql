@@ -1,7 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
 
--- Consolidated end-state schema derived from Python repowise alembic migrations
+-- Consolidated end-state schema derived from Python vor alembic migrations
 -- 0001–0024. The Go port does not replay history; one consolidated migration is
 -- equivalent at first install.
 --

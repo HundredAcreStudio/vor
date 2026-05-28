@@ -12,7 +12,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/external"
 )
 
 const ecosystem = "pypi"

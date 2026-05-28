@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	_ "github.com/repowise-dev/repowise-go/internal/providers/openai"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/openai"
 )
 
 func newServer(t *testing.T, h http.HandlerFunc) (providers.Provider, *httptest.Server) {

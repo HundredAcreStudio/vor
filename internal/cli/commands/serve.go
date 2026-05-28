@@ -18,18 +18,18 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/config"
-	"github.com/repowise-dev/repowise-go/internal/logging"
-	rhttp "github.com/repowise-dev/repowise-go/internal/server/http"
-	"github.com/repowise-dev/repowise-go/internal/server/mcp"
-	"github.com/repowise-dev/repowise-go/internal/userconfig"
-	"github.com/repowise-dev/repowise-go/internal/workspace"
+	"github.com/HundredAcreStudio/vor/internal/config"
+	"github.com/HundredAcreStudio/vor/internal/logging"
+	rhttp "github.com/HundredAcreStudio/vor/internal/server/http"
+	"github.com/HundredAcreStudio/vor/internal/server/mcp"
+	"github.com/HundredAcreStudio/vor/internal/userconfig"
+	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 // newServeCmd starts the long-running HTTP daemon. By default it
 // hosts both the /api/repos/{id}/* REST surface and the /mcp endpoint
 // (MCP Streamable HTTP). Editor clients can attach to the same daemon
-// instead of each spawning a stdio child via `repowise mcp`.
+// instead of each spawning a stdio child via `vor mcp`.
 //
 // Single-repo mode (legacy): --repo resolves to one repository_id.
 // HTTP routes use it as their default; MCP tools without an explicit
@@ -37,7 +37,7 @@ import (
 //
 // Workspace mode: --workspace flips the daemon into multi-repo mode.
 // --repo (or --workspace-root) becomes the workspace root; member
-// repos are discoverable via the new repowise_workspace_repos MCP
+// repos are discoverable via the new vor_workspace_repos MCP
 // tool and addressable per-call via the `repo` argument.
 func newServeCmd() *cobra.Command {
 	var (
@@ -51,7 +51,7 @@ func newServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run the HTTP API + MCP daemon",
-		Long: `Starts a long-running HTTP server exposing repowise's analysis
+		Long: `Starts a long-running HTTP server exposing vor's analysis
 output. Two surfaces live on one port:
 
   /api/repos/{id}/*  REST endpoints — graph, hotspots, dead code,
@@ -60,7 +60,7 @@ output. Two surfaces live on one port:
   /mcp               MCP over Streamable HTTP — editor clients
                      connect here instead of running a stdio child.
 
-Configuration comes from REPOWISE_DB_URL / .repowise/config.yaml.
+Configuration comes from VOR_DB_URL / .vor/config.yaml.
 Use --workspace to serve every repo in the workspace from one
 daemon (one DB holds N repos; MCP tools route per-call by the
 'repo' argument).`,
@@ -114,8 +114,8 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 				return err
 			}
 
-			// Record the daemon in ~/.local/state/repowise/daemon.json
-			// so `repowise status` (or a future watch/auto-attach
+			// Record the daemon in ~/.local/state/vor/daemon.json
+			// so `vor status` (or a future watch/auto-attach
 			// flow) can detect it. Stale records after a hard kill are
 			// caught by DaemonInfo.Alive() in the status path.
 			daemonInfo := &userconfig.DaemonInfo{
@@ -145,11 +145,11 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path (or workspace root with --workspace)")
-	cmd.Flags().StringVar(&addr, "addr", "", "host:port to bind (overrides REPOWISE_HOST/PORT)")
+	cmd.Flags().StringVar(&addr, "addr", "", "host:port to bind (overrides VOR_HOST/PORT)")
 	cmd.Flags().BoolVar(&mcpEnabled, "mcp", true, "mount the MCP server at /mcp (default true)")
 	cmd.Flags().BoolVar(&workspaceMode, "workspace", false, "serve every repo registered in the workspace")
 	cmd.Flags().StringVar(&workspaceRootIn, "workspace-root", "", "workspace root (defaults to --repo when --workspace is set)")
-	cmd.Flags().BoolVar(&autoMode, "auto", false, "serve every workspace in the user-global registry (`repowise workspace register`)")
+	cmd.Flags().BoolVar(&autoMode, "auto", false, "serve every workspace in the user-global registry (`vor workspace register`)")
 	return cmd
 }
 
@@ -184,7 +184,7 @@ func configureMCPScope(ctx context.Context, conn *sql.DB, logger *slog.Logger, m
 			return fmt.Errorf("load workspaces registry: %w", err)
 		}
 		if len(reg.Workspaces) == 0 {
-			return fmt.Errorf("no workspaces registered — `repowise workspace register PATH`")
+			return fmt.Errorf("no workspaces registered — `vor workspace register PATH`")
 		}
 		for _, w := range reg.Workspaces {
 			mcpOpts.WorkspaceRoots = append(mcpOpts.WorkspaceRoots, w.Path)
@@ -213,7 +213,7 @@ func configureMCPScope(ctx context.Context, conn *sql.DB, logger *slog.Logger, m
 			return fmt.Errorf("load workspace.json: %w", err)
 		}
 		if len(state.Repos) == 0 {
-			return fmt.Errorf("no repos registered at %s — add some with `repowise workspace add`", abs)
+			return fmt.Errorf("no repos registered at %s — add some with `vor workspace add`", abs)
 		}
 		mcpOpts.WorkspaceRoot = abs
 		if state.DefaultAlias != "" {
@@ -257,17 +257,17 @@ MCP server ready at %s
 Connect an AI coding agent to this daemon:
 
   Claude Code:
-    claude mcp add --transport http repowise %s
+    claude mcp add --transport http vor %s
 
   Cursor / generic MCP clients — add to the client's mcp.json:
     {
       "mcpServers": {
-        "repowise": { "transport": "http", "url": "%s" }
+        "vor": { "transport": "http", "url": "%s" }
       }
     }
 
 The daemon serves every indexed repo in its database; MCP tools accept a
-`+"`repo`"+` argument to target one (see repowise_workspace_repos).
+`+"`repo`"+` argument to target one (see vor_workspace_repos).
 
 `, url, url, url)
 }

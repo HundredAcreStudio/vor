@@ -1,5 +1,5 @@
 ; =============================================================================
-; repowise — TypeScript symbol and import queries
+; vor — TypeScript symbol and import queries
 ; tree-sitter-typescript >= 0.23
 ; =============================================================================
 

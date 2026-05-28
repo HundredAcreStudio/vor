@@ -10,19 +10,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/cli/commands"
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/cli/commands"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 
 	// Side-effect imports so the pipeline registries are populated.
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/golang"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/gomod"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/golang"
 )
 
-// runRepowiseCmd executes the root command against a fresh argv/env.
+// runVorCmd executes the root command against a fresh argv/env.
 // Returns captured stdout + stderr.
-func runRepowiseCmd(t *testing.T, env map[string]string, args ...string) (string, string, error) {
+func runVorCmd(t *testing.T, env map[string]string, args ...string) (string, string, error) {
 	t.Helper()
 	for k, v := range env {
 		t.Setenv(k, v)
@@ -41,7 +41,7 @@ func repoFixture(t *testing.T) (string, string, *sql.DB) {
 	t.Helper()
 	tmp := t.TempDir()
 	dbURL := "sqlite:" + filepath.Join(tmp, "wiki.db")
-	t.Setenv("REPOWISE_DB_URL", dbURL)
+	t.Setenv("VOR_DB_URL", dbURL)
 
 	// Apply migrations + seed a Go file so init has something to do.
 	conn, dialect, err := db.Open(context.Background(), db.OpenOptions{URL: dbURL})
@@ -69,7 +69,7 @@ func repoFixture(t *testing.T) (string, string, *sql.DB) {
 
 func TestUpdate_RunsPipeline(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
-	stdout, _, err := runRepowiseCmd(t, nil, "update", tmp)
+	stdout, _, err := runVorCmd(t, nil, "update", tmp)
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -86,11 +86,11 @@ func TestUpdate_RunsPipeline(t *testing.T) {
 func TestDelete_RequiresConfirm(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
 	// First index to create the repo row.
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 
-	stdout, _, err := runRepowiseCmd(t, nil, "delete", tmp)
+	stdout, _, err := runVorCmd(t, nil, "delete", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,10 +106,10 @@ func TestDelete_RequiresConfirm(t *testing.T) {
 
 func TestDelete_WithConfirmRemovesRepo(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := runRepowiseCmd(t, nil, "delete", "--yes", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "delete", "--yes", tmp); err != nil {
 		t.Fatal(err)
 	}
 	all, _ := repos.New(conn).List(context.Background())
@@ -120,7 +120,7 @@ func TestDelete_WithConfirmRemovesRepo(t *testing.T) {
 
 func TestDelete_CascadesPersistedTables(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 	// Verify some persisted state exists before delete.
@@ -133,7 +133,7 @@ func TestDelete_CascadesPersistedTables(t *testing.T) {
 		t.Fatal("expected graph_nodes populated after update")
 	}
 
-	if _, _, err := runRepowiseCmd(t, nil, "delete", "--yes", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "delete", "--yes", tmp); err != nil {
 		t.Fatal(err)
 	}
 	var postCount int
@@ -148,10 +148,10 @@ func TestDelete_CascadesPersistedTables(t *testing.T) {
 
 func TestReindex_RequiresConfirm(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
-	stdout, _, err := runRepowiseCmd(t, nil, "reindex", tmp)
+	stdout, _, err := runVorCmd(t, nil, "reindex", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,14 +162,14 @@ func TestReindex_RequiresConfirm(t *testing.T) {
 
 func TestReindex_RebuildsFromScratch(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
-	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
 	var oldID string
 	_ = conn.QueryRowContext(context.Background(),
 		"SELECT id FROM repositories LIMIT 1").Scan(&oldID)
 
-	stdout, _, err := runRepowiseCmd(t, nil, "reindex", "--yes", tmp)
+	stdout, _, err := runVorCmd(t, nil, "reindex", "--yes", tmp)
 	if err != nil {
 		t.Fatalf("reindex --yes: %v", err)
 	}

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	gctx "github.com/repowise-dev/repowise-go/internal/generation/context"
-	"github.com/repowise-dev/repowise-go/internal/providers"
+	gctx "github.com/HundredAcreStudio/vor/internal/generation/context"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 // directoryOverviewSystem is the system prompt for per-directory pages.

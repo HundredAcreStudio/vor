@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/healthstore"
 )
 
 // newHealthCmd reads the persisted health_findings + health_file_metrics
@@ -42,7 +42,7 @@ func newHealthCmd() *cobra.Command {
 		Short: "Show the code health report (read-only)",
 		Long: `Reports the average code health score, per-biomarker finding counts,
 and the worst-scoring files from the last persisted ingestion. Use
-'repowise init' (or 'repowise ingest --persist') first to populate
+'vor init' (or 'vor ingest --persist') first to populate
 the data.
 
 Filter with --file or --module to narrow the report to a subtree.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/security"
+	"github.com/HundredAcreStudio/vor/internal/analysis/security"
 )
 
 func kinds(fs []security.Finding) map[string]security.Finding {
@@ -62,7 +62,7 @@ func TestScan_InjectionRequiresConcat(t *testing.T) {
 func TestScan_SkipsDocFiles(t *testing.T) {
 	// Markdown prose mentioning SQL keywords + backticks must not be
 	// scanned at all (the README false-positive class).
-	md := "Run `repowise update` to refresh. The `SELECT` below is just docs:\n`SELECT * FROM x` + more text\n"
+	md := "Run `vor update` to refresh. The `SELECT` below is just docs:\n`SELECT * FROM x` + more text\n"
 	if got := security.Scan("README.md", []byte(md)); len(got) != 0 {
 		t.Errorf("doc file should yield no findings, got %d: %+v", len(got), got)
 	}

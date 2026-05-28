@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/coststore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/coststore"
 )
 
 // newCostsCmd prints LLM spend from llm_costs.

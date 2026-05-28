@@ -1,5 +1,5 @@
 ; =============================================================================
-; repowise — C# symbol, import, and call queries
+; vor — C# symbol, import, and call queries
 ; tree-sitter-c-sharp >= 0.23
 ;
 ; Symbols: each type gets both a "with modifiers" pattern (to capture

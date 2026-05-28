@@ -7,13 +7,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/logging"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/logging"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/pipeline"
 )
 
 // newUpdateCmd re-runs the indexing pipeline against a repo. Mirrors the
-// Python `repowise update` shape: same effect as `init` but tagged
+// Python `vor update` shape: same effect as `init` but tagged
 // Mode=ModeUpdate so observability can distinguish first-time index from
 // re-runs. Pipeline persistence is idempotent (ReplaceAll semantics on
 // every store), so this is safe to invoke repeatedly.
@@ -26,11 +26,11 @@ func newUpdateCmd() *cobra.Command {
 		Use:   "update [PATH]",
 		Short: "Re-index a repository (incremental — tagged 'update' for observability)",
 		Long: `Walks every pipeline phase against the repo and replaces persisted
-state. Equivalent to ` + "`repowise init`" + ` but Mode=update so the
+state. Equivalent to ` + "`vor init`" + ` but Mode=update so the
 pipeline_jobs row distinguishes a fresh index from a re-index.
 
 For a force-rebuild that wipes prior state before re-indexing, use
-` + "`repowise reindex`" + `.`,
+` + "`vor reindex`" + `.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

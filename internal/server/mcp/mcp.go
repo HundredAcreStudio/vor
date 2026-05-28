@@ -1,4 +1,4 @@
-// Package mcp exposes repowise's analysis output via the Model Context
+// Package mcp exposes vor's analysis output via the Model Context
 // Protocol. Tools are stdio-driven so editor integrations (Claude Code /
 // Cursor) can read graph, git, dead-code, and health data without HTTP.
 //
@@ -9,9 +9,9 @@
 //     the `repo` argument.
 //
 //  2. Multi-repo / workspace. Options.WorkspaceRoot points at a
-//     directory holding .repowise/workspace.json. Each tool call
+//     directory holding .vor/workspace.json. Each tool call
 //     MUST supply a `repo` argument (alias, full id, or local path).
-//     A repowise_workspace_repos tool lets agents discover the
+//     A vor_workspace_repos tool lets agents discover the
 //     registered repos.
 //
 // The two modes can coexist: if both RepositoryID and WorkspaceRoot
@@ -31,10 +31,10 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	"github.com/repowise-dev/repowise-go/internal/version"
-	"github.com/repowise-dev/repowise-go/internal/workspace"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/version"
+	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 // Options configures Server.
@@ -48,15 +48,15 @@ type Options struct {
 	RepositoryID string
 
 	// WorkspaceRoot enables multi-repo mode when non-empty. The path
-	// holds .repowise/workspace.json; tool calls can pass `repo` as
+	// holds .vor/workspace.json; tool calls can pass `repo` as
 	// an alias from that workspace. Convenience for the single-
 	// workspace case — appended to WorkspaceRoots at construction.
 	WorkspaceRoot string
 
 	// WorkspaceRoots is the multi-workspace form, used by
-	// `repowise serve --auto` to span every registered workspace.
+	// `vor serve --auto` to span every registered workspace.
 	// Alias resolution searches each root in order; the first match
-	// wins. repowise_workspace_repos unions members across all roots.
+	// wins. vor_workspace_repos unions members across all roots.
 	WorkspaceRoots []string
 
 	// Provider powers the LLM-synthesis tools (get_answer, get_why).
@@ -69,10 +69,10 @@ type Options struct {
 	// provider pick its default.
 	Model string
 
-	// Embedder powers semantic search in repowise_search. Optional —
+	// Embedder powers semantic search in vor_search. Optional —
 	// when nil (or when no embeddings exist for the repo) the tool
 	// falls back to the LIKE path over graph_nodes. Must match the
-	// embedder used by `repowise embed` for results to be meaningful.
+	// embedder used by `vor embed` for results to be meaningful.
 	Embedder providers.Embedder
 
 	// Logger receives structured tool-call logs. Defaults to slog.Default().
@@ -97,7 +97,7 @@ func (o Options) workspaceRoots() []string {
 	return out
 }
 
-// Server wraps mark3labs/mcp-go's MCPServer with repowise's tool surface.
+// Server wraps mark3labs/mcp-go's MCPServer with vor's tool surface.
 type Server struct {
 	opts Options
 	srv  *server.MCPServer
@@ -117,7 +117,7 @@ func New(opts Options) (*Server, error) {
 	}
 
 	mcpSrv := server.NewMCPServer(
-		"repowise",
+		"vor",
 		version.Current().Version,
 	)
 	s := &Server{opts: opts, srv: mcpSrv}
@@ -141,7 +141,7 @@ func (s *Server) MCPServer() *server.MCPServer { return s.srv }
 // same transport works for short-lived requests (POST one JSON-RPC
 // message, get the reply) and long-lived sessions (SSE).
 //
-// This unlocks the daemon model: one long-running `repowise serve`
+// This unlocks the daemon model: one long-running `vor serve`
 // can host both the /api/* REST endpoints and /mcp, so multiple
 // editor clients can attach without each spawning their own process.
 func (s *Server) HTTPHandler() http.Handler {

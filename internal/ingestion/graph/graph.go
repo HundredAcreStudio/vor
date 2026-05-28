@@ -13,7 +13,7 @@ package graph
 import (
 	"sync"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // NodeKind classifies a graph node.
@@ -74,7 +74,7 @@ type Edge struct {
 	ImportedNames []string
 }
 
-// Graph is the repowise dependency graph for one repository.
+// Graph is the vor dependency graph for one repository.
 type Graph struct {
 	mu        sync.RWMutex
 	byString  map[string]*Node

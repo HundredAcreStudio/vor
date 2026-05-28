@@ -8,10 +8,10 @@ import (
 	"sort"
 	"strings"
 
-	gctx "github.com/repowise-dev/repowise-go/internal/generation/context"
-	"github.com/repowise-dev/repowise-go/internal/generation/models"
-	"github.com/repowise-dev/repowise-go/internal/generation/pages"
-	"github.com/repowise-dev/repowise-go/internal/persistence/wikistore"
+	gctx "github.com/HundredAcreStudio/vor/internal/generation/context"
+	"github.com/HundredAcreStudio/vor/internal/generation/models"
+	"github.com/HundredAcreStudio/vor/internal/generation/pages"
+	"github.com/HundredAcreStudio/vor/internal/persistence/wikistore"
 )
 
 // runDirectoryOverviews iterates every directory that contains at least

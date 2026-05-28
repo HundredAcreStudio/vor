@@ -1,5 +1,5 @@
 // Package mock is the deterministic provider + embedder used by tests and
-// by the default repowise config. It produces hash-stable output for any
+// by the default vor config. It produces hash-stable output for any
 // given input so test fixtures remain reproducible.
 package mock
 
@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 const (

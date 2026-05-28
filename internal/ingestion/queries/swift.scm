@@ -1,5 +1,5 @@
 ; =============================================================================
-; repowise — Swift symbol, import, and call queries (tree-sitter-swift)
+; vor — Swift symbol, import, and call queries (tree-sitter-swift)
 ; Note: class / struct / enum / actor all parse as class_declaration; the
 ; concrete kind is recovered in Go from the leading keyword token.
 ; =============================================================================

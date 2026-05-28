@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/external"
 
 	// Side-effect imports so the extractors register for ScanRoot.
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/cargo"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/npm"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/nuget"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/pypi"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/cargo"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/gomod"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/npm"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/nuget"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/pypi"
 )
 
 // writeFile is a test helper that creates the parent dir and writes content.

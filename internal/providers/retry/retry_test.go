@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	"github.com/repowise-dev/repowise-go/internal/providers/retry"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers/retry"
 )
 
 func TestDo_RetriesOnTransientAndEventuallySucceeds(t *testing.T) {

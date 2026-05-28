@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/userconfig"
+	"github.com/HundredAcreStudio/vor/internal/userconfig"
 )
 
 // withXDGOverrides points $XDG_CONFIG_HOME and $XDG_STATE_HOME at a
@@ -24,7 +24,7 @@ func TestConfigDir_RespectsXDG(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(tmp, "config", "repowise")
+	want := filepath.Join(tmp, "config", "vor")
 	if dir != want {
 		t.Errorf("ConfigDir = %q, want %q", dir, want)
 	}
@@ -39,7 +39,7 @@ func TestStateDir_RespectsXDG(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(tmp, "state", "repowise")
+	want := filepath.Join(tmp, "state", "vor")
 	if dir != want {
 		t.Errorf("StateDir = %q, want %q", dir, want)
 	}

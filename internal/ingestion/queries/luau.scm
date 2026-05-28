@@ -1,5 +1,5 @@
 ; =============================================================================
-; repowise — Lua / Luau symbol, import, and call queries (tree-sitter-lua)
+; vor — Lua / Luau symbol, import, and call queries (tree-sitter-lua)
 ; Luau is a Lua superset; the Lua grammar parses it for symbol/import/call
 ; extraction. require(...) is a plain call recovered as an import.
 ; =============================================================================

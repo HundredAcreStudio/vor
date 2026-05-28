@@ -11,17 +11,17 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/config"
-	"github.com/repowise-dev/repowise-go/internal/persistence/vector"
-	"github.com/repowise-dev/repowise-go/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/config"
+	"github.com/HundredAcreStudio/vor/internal/persistence/vector"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 
 	// Register embedders so config.embedder can name one. Mock is the
 	// zero-config default; real embedders register here as they land.
-	_ "github.com/repowise-dev/repowise-go/internal/providers/mock"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/mock"
 )
 
 // newEmbedCmd embeds generated wiki pages into the vector store so
-// `repowise search --semantic` (and the MCP search tool) can do
+// `vor search --semantic` (and the MCP search tool) can do
 // nearest-neighbour retrieval. Embedding is decoupled from page
 // generation: `generate` produces the prose, `embed` indexes it.
 //
@@ -42,8 +42,8 @@ configured embedder (config.embedder, default "mock"), and upserts the
 vector. Pages whose content hasn't changed since the last embed are
 skipped unless --force is set.
 
-Run after ` + "`repowise generate`" + `. Semantic search then works via
-` + "`repowise search --semantic`" + ` and the MCP search tool.`,
+Run after ` + "`vor generate`" + `. Semantic search then works via
+` + "`vor search --semantic`" + ` and the MCP search tool.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -183,7 +183,7 @@ func buildEmbedder(cfg config.Config) (providers.Embedder, error) {
 		if key := firstSet(cfg.ProviderKeys.OpenAI, os.Getenv("OPENAI_API_KEY")); key != "" {
 			opts["api_key"] = key
 		}
-		if b := os.Getenv("REPOWISE_OPENAI_BASE_URL"); b != "" {
+		if b := os.Getenv("VOR_OPENAI_BASE_URL"); b != "" {
 			opts["base_url"] = b
 		}
 	case "google":
@@ -191,7 +191,7 @@ func buildEmbedder(cfg config.Config) (providers.Embedder, error) {
 			opts["api_key"] = key
 		}
 	case "ollama":
-		if b := os.Getenv("REPOWISE_OLLAMA_BASE_URL"); b != "" {
+		if b := os.Getenv("VOR_OLLAMA_BASE_URL"); b != "" {
 			opts["base_url"] = b
 		}
 	}

@@ -27,7 +27,7 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
+	"github.com/HundredAcreStudio/vor/internal/analysis/decisions"
 )
 
 // Extractor scans the commit log for archaeology signals.

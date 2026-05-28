@@ -8,16 +8,16 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/generation/models"
-	"github.com/repowise-dev/repowise-go/internal/persistence/wikistore"
+	"github.com/HundredAcreStudio/vor/internal/generation/models"
+	"github.com/HundredAcreStudio/vor/internal/persistence/wikistore"
 )
 
-// newPagesCmd is the read-only counterpart to `repowise generate`.
+// newPagesCmd is the read-only counterpart to `vor generate`.
 // "list" enumerates persisted pages; "show" prints one page's body.
 func newPagesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "pages",
-		Short: "Inspect wiki pages persisted by `repowise generate`",
+		Short: "Inspect wiki pages persisted by `vor generate`",
 		Long: `Read-only access to the wiki_pages table. Use ` + "`pages list`" + ` to
 see what's been generated and ` + "`pages show <PATH>`" + ` to print the
 markdown body of one page.`,
@@ -77,7 +77,7 @@ func newPagesListCmd() *cobra.Command {
 				count++
 			}
 			if count == 0 {
-				fmt.Fprintln(out, "no pages match (run `repowise generate` first)")
+				fmt.Fprintln(out, "no pages match (run `vor generate` first)")
 			}
 			return nil
 		},
@@ -119,7 +119,7 @@ func newPagesShowCmd() *cobra.Command {
 			page, err := wikistore.New(conn).GetByTarget(ctx, repoRow.ID, pageKind, args[0])
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
-					return fmt.Errorf("no %s page for %s (run `repowise generate --target %s`)", pageKind, args[0], args[0])
+					return fmt.Errorf("no %s page for %s (run `vor generate --target %s`)", pageKind, args[0], args[0])
 				}
 				return err
 			}

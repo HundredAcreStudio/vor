@@ -14,7 +14,7 @@ package resolver
 import (
 	"sync"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // Resolver maps one Import into target file paths in the analyzed set.

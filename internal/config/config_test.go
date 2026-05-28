@@ -32,10 +32,10 @@ func TestLoad_MissingFileFallsBackToDefaults(t *testing.T) {
 
 func TestLoad_FileOverridesDefaults(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".repowise"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".vor"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfgPath := filepath.Join(dir, ".repowise", "config.yaml")
+	cfgPath := filepath.Join(dir, ".vor", "config.yaml")
 	body := []byte(`provider: openai
 model: gpt-4o
 languages:
@@ -71,16 +71,16 @@ workspace:
 
 func TestLoad_EnvOverridesFile(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".repowise"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".vor"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfgPath := filepath.Join(dir, ".repowise", "config.yaml")
+	cfgPath := filepath.Join(dir, ".vor", "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte("provider: openai\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("REPOWISE_PORT", "9999")
-	t.Setenv("REPOWISE_DB_URL", "sqlite:///tmp/test.db")
-	t.Setenv("REPOWISE_SKIP_LANGUAGES", "java,scala")
+	t.Setenv("VOR_PORT", "9999")
+	t.Setenv("VOR_DB_URL", "sqlite:///tmp/test.db")
+	t.Setenv("VOR_SKIP_LANGUAGES", "java,scala")
 	t.Setenv("ANTHROPIC_API_KEY", "sk-test")
 
 	cfg, err := Load(dir)

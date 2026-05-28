@@ -11,7 +11,7 @@ import (
 func TestEmbed_AndSemanticSearch(t *testing.T) {
 	tmp, _ := exportFixture(t) // seeds 2 wiki pages (main.go, main.go::Sym)
 
-	stdout, _, err := runRepowiseCmd(t, nil, "embed", tmp)
+	stdout, _, err := runVorCmd(t, nil, "embed", tmp)
 	if err != nil {
 		t.Fatalf("embed: %v", err)
 	}
@@ -20,7 +20,7 @@ func TestEmbed_AndSemanticSearch(t *testing.T) {
 	}
 
 	// Second run: content unchanged → all skipped.
-	stdout, _, err = runRepowiseCmd(t, nil, "embed", tmp)
+	stdout, _, err = runVorCmd(t, nil, "embed", tmp)
 	if err != nil {
 		t.Fatalf("re-embed: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestEmbed_AndSemanticSearch(t *testing.T) {
 	}
 
 	// --force re-embeds everything.
-	stdout, _, err = runRepowiseCmd(t, nil, "embed", "--force", tmp)
+	stdout, _, err = runVorCmd(t, nil, "embed", "--force", tmp)
 	if err != nil {
 		t.Fatalf("force embed: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestEmbed_AndSemanticSearch(t *testing.T) {
 
 	// Semantic search ranks the embedded pages; with only 2 pages and
 	// k=25 both come back, so the entrypoint page must appear.
-	stdout, _, err = runRepowiseCmd(t, nil, "search", "--semantic", "--repo", tmp, "the entrypoint")
+	stdout, _, err = runVorCmd(t, nil, "search", "--semantic", "--repo", tmp, "the entrypoint")
 	if err != nil {
 		t.Fatalf("semantic search: %v", err)
 	}
@@ -54,11 +54,11 @@ func TestEmbed_AndSemanticSearch(t *testing.T) {
 // TestSemanticSearch_NoEmbeddings errors clearly when nothing is indexed.
 func TestSemanticSearch_NoEmbeddings(t *testing.T) {
 	tmp, _ := exportFixture(t) // pages exist but were never embedded
-	_, _, err := runRepowiseCmd(t, nil, "search", "--semantic", "--repo", tmp, "anything")
+	_, _, err := runVorCmd(t, nil, "search", "--semantic", "--repo", tmp, "anything")
 	if err == nil {
 		t.Fatal("expected error when no embeddings exist")
 	}
-	if !strings.Contains(err.Error(), "repowise embed") {
-		t.Errorf("error should point user to `repowise embed`, got: %v", err)
+	if !strings.Contains(err.Error(), "vor embed") {
+		t.Errorf("error should point user to `vor embed`, got: %v", err)
 	}
 }

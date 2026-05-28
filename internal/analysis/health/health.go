@@ -1,4 +1,4 @@
-// Package health is repowise's code-health engine. It runs deterministic
+// Package health is vor's code-health engine. It runs deterministic
 // biomarkers over parser output and emits per-finding + per-file metric
 // records that mirror the health_findings and health_file_metrics tables.
 //
@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // Severity classifies a finding's urgency. Mirrors the Python source.

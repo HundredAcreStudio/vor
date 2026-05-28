@@ -1,5 +1,5 @@
 // Package traverser walks a repository's filesystem and yields FileInfo records
-// for every source file repowise should index. It mirrors the Python
+// for every source file vor should index. It mirrors the Python
 // `core.ingestion.traverser.FileTraverser` API and applies the same filter
 // chain in the same order.
 package traverser
@@ -19,8 +19,8 @@ import (
 
 	gitignore "github.com/sabhiram/go-gitignore"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/languages"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/languages"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // Options configures a FileTraverser.
@@ -32,11 +32,11 @@ type Options struct {
 	MaxFileSizeKB int
 
 	// ExtraIgnoreFilename is the per-repo additional ignore file. Empty
-	// means use default (.repowiseIgnore).
+	// means use default (.vorIgnore).
 	ExtraIgnoreFilename string
 
 	// ExtraExcludePatterns are gitignore-syntax patterns supplied via CLI
-	// `--exclude`. Treated as if appended to the root .repowiseIgnore.
+	// `--exclude`. Treated as if appended to the root .vorIgnore.
 	ExtraExcludePatterns []string
 
 	// IncludeSubmodules disables submodule skipping (.gitmodules paths).
@@ -50,7 +50,7 @@ type Options struct {
 // Defaults applied when Options zero-values are encountered.
 const (
 	defaultMaxFileSizeKB   = 500
-	defaultExtraIgnoreFile = ".repowiseIgnore"
+	defaultExtraIgnoreFile = ".vorIgnore"
 	binarySniffBytes       = 8192
 	generatedSniffBytes    = 512
 )
@@ -113,7 +113,7 @@ type FileTraverser struct {
 
 	maxFileSizeBytes int64
 	rootIgnore       *gitignore.GitIgnore // .gitignore at repo root
-	repowiseIgnore   *gitignore.GitIgnore // root .repowiseIgnore + extra excludes
+	vorIgnore        *gitignore.GitIgnore // root .vorIgnore + extra excludes
 	blockedPatterns  *gitignore.GitIgnore // blockedFilenamePatterns compiled
 
 	submoduleDirs map[string]struct{} // absolute paths to .gitmodules entries
@@ -121,7 +121,7 @@ type FileTraverser struct {
 	stats   models.TraversalStats
 	statsMu sync.Mutex
 
-	// dirIgnoreCache caches per-directory .repowiseIgnore files keyed by
+	// dirIgnoreCache caches per-directory .vorIgnore files keyed by
 	// absolute directory path. Loaded lazily.
 	dirIgnoreCache map[string]*gitignore.GitIgnore
 	dirIgnoreMu    sync.Mutex
@@ -157,7 +157,7 @@ func New(opts Options) (*FileTraverser, error) {
 	}
 	ft.blockedPatterns = gitignore.CompileIgnoreLines(blockedFilenamePatterns...)
 	ft.rootIgnore = loadIgnoreFile(filepath.Join(opts.RepoRoot, ".gitignore"))
-	ft.repowiseIgnore = loadRepowiseIgnore(filepath.Join(opts.RepoRoot, opts.ExtraIgnoreFilename), opts.ExtraExcludePatterns)
+	ft.vorIgnore = loadVorIgnore(filepath.Join(opts.RepoRoot, opts.ExtraIgnoreFilename), opts.ExtraExcludePatterns)
 	ft.submoduleDirs = loadSubmoduleDirs(opts.RepoRoot)
 
 	return ft, nil
@@ -286,7 +286,7 @@ func (t *FileTraverser) handleDir(path, rel string, d fs.DirEntry) error {
 	if t.rootIgnore != nil && t.rootIgnore.MatchesPath(rel) {
 		return fs.SkipDir
 	}
-	if t.repowiseIgnore != nil && t.repowiseIgnore.MatchesPath(rel) {
+	if t.vorIgnore != nil && t.vorIgnore.MatchesPath(rel) {
 		return fs.SkipDir
 	}
 	return nil
@@ -333,7 +333,7 @@ func (t *FileTraverser) classifyFile(path, rel string, d fs.DirEntry) (models.Fi
 	if t.rootIgnore != nil && t.rootIgnore.MatchesPath(rel) {
 		return models.FileInfo{}, false, skipGitignore
 	}
-	if t.repowiseIgnore != nil && t.repowiseIgnore.MatchesPath(rel) {
+	if t.vorIgnore != nil && t.vorIgnore.MatchesPath(rel) {
 		return models.FileInfo{}, false, skipExtraIgnore
 	}
 	if t.matchesDirIgnore(path, rel) {
@@ -373,7 +373,7 @@ func (t *FileTraverser) classifyFile(path, rel string, d fs.DirEntry) (models.Fi
 	return info, true, skipNone
 }
 
-// matchesDirIgnore checks .repowiseIgnore files in the file's directory and
+// matchesDirIgnore checks .vorIgnore files in the file's directory and
 // each parent up to RepoRoot. Files are cached after first load.
 func (t *FileTraverser) matchesDirIgnore(absPath, relPath string) bool {
 	dir := filepath.Dir(absPath)
@@ -423,7 +423,7 @@ func loadIgnoreFile(path string) *gitignore.GitIgnore {
 	return gi
 }
 
-func loadRepowiseIgnore(path string, extra []string) *gitignore.GitIgnore {
+func loadVorIgnore(path string, extra []string) *gitignore.GitIgnore {
 	var lines []string
 	if data, err := os.ReadFile(path); err == nil {
 		for _, l := range strings.Split(string(data), "\n") {

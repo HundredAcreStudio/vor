@@ -1,7 +1,7 @@
 # Parity with the Python implementation
 
-Tracks how the Go port (`repowise-go`) compares to upstream
-[repowise](https://github.com/repowise-dev/repowise) (Python, v0.12.x).
+Tracks how the Go port (`vor-go`) compares to upstream
+[vor](https://github.com/HundredAcreStudio/vor) (Python, v0.12.x).
 Phase 11 reference — updated as gaps close.
 
 Legend: ✅ full parity · 🟡 partial / behavioural difference · ⏳ not yet · ➕ Go-only addition
@@ -33,7 +33,7 @@ observability commands.
 | `hook` (group) | `hook` (group) | ✅ | install/uninstall/status; identical post-commit script |
 | `watch` | `watch` | ✅ | Go adds `--workspace` (per-repo watchers) |
 | `workspace` (group) | `workspace` (group) | 🟡 | list/add/remove/scan/set-default + Go-only register/registered/status/update/hook/doctor/co-changes; no cross-repo **contracts** yet |
-| `augment` | `repowise-augment` binary | ✅ | separate binary |
+| `augment` | `vor-augment` binary | ✅ | separate binary |
 | — | `generate` ➕ | ➕ | Go splits LLM generation into its own command (cost control) |
 | — | `pages` (group) ➕ | ➕ | read side of generation |
 | — | `pipeline` (group) ➕ | ➕ | run_id history / status / resume |
@@ -53,27 +53,27 @@ yet the LLM-synthesis layer.
 
 | Python tool | Go equivalent | Status |
 |---|---|---|
-| `get_overview` | `repowise_status` | 🟡 entity vs synthesised narrative |
-| `get_symbol` | `repowise_symbol` | ✅ |
-| `get_callers_callees` | `repowise_callers` + `repowise_dependents` | ✅ (split in two) |
-| `get_dead_code` | `repowise_dead_code` | ✅ |
-| `get_health` | `repowise_health` + `repowise_health_findings` | ✅ |
-| `search_codebase` | `repowise_search` | ✅ substring (default) + `semantic=true` embedding ranking |
-| `get_graph_metrics` | `repowise_status` (partial) | 🟡 |
-| `get_community` | `repowise_get_community` | ✅ |
-| `get_dependency_path` | `repowise_get_dependency_path` | ✅ |
-| `get_execution_flows` | `repowise_get_execution_flows` | ✅ |
-| `get_architecture_diagram` | `repowise_get_architecture_diagram` | ✅ structured + optional mermaid |
-| `get_context` | `repowise_get_context` | ✅ triage card per file/symbol (pure data) |
-| `get_answer` | `repowise_get_answer` | ✅ FTS retrieval + grounded synthesis + citations |
-| `get_why` | `repowise_get_why` | ✅ decision archaeology + synthesised rationale |
-| `get_risk` | `repowise_hotspots` (partial) | 🟡 churn data without the PR `directive` block |
-| — | `repowise_pages` / `repowise_page` ➕ | ➕ generated docs |
-| — | `repowise_pipeline_log` ➕ | ➕ observability |
-| — | `repowise_workspace_repos` ➕ | ➕ multi-repo discovery |
-| — | `repowise_security` ➕ | ➕ pattern-based security findings |
-| — | `repowise_reindex` ➕ | ➕ async re-index (returns run_id; poll pipeline_log) |
-| — | `repowise_security_scan` ➕ | ➕ run the security scan, replace findings |
+| `get_overview` | `vor_status` | 🟡 entity vs synthesised narrative |
+| `get_symbol` | `vor_symbol` | ✅ |
+| `get_callers_callees` | `vor_callers` + `vor_dependents` | ✅ (split in two) |
+| `get_dead_code` | `vor_dead_code` | ✅ |
+| `get_health` | `vor_health` + `vor_health_findings` | ✅ |
+| `search_codebase` | `vor_search` | ✅ substring (default) + `semantic=true` embedding ranking |
+| `get_graph_metrics` | `vor_status` (partial) | 🟡 |
+| `get_community` | `vor_get_community` | ✅ |
+| `get_dependency_path` | `vor_get_dependency_path` | ✅ |
+| `get_execution_flows` | `vor_get_execution_flows` | ✅ |
+| `get_architecture_diagram` | `vor_get_architecture_diagram` | ✅ structured + optional mermaid |
+| `get_context` | `vor_get_context` | ✅ triage card per file/symbol (pure data) |
+| `get_answer` | `vor_get_answer` | ✅ FTS retrieval + grounded synthesis + citations |
+| `get_why` | `vor_get_why` | ✅ decision archaeology + synthesised rationale |
+| `get_risk` | `vor_hotspots` (partial) | 🟡 churn data without the PR `directive` block |
+| — | `vor_pages` / `vor_page` ➕ | ➕ generated docs |
+| — | `vor_pipeline_log` ➕ | ➕ observability |
+| — | `vor_workspace_repos` ➕ | ➕ multi-repo discovery |
+| — | `vor_security` ➕ | ➕ pattern-based security findings |
+| — | `vor_reindex` ➕ | ➕ async re-index (returns run_id; poll pipeline_log) |
+| — | `vor_security_scan` ➕ | ➕ run the security scan, replace findings |
 
 The LLM-synthesis tools (`get_answer`, `get_context`, `get_why`) and
 the graph-traversal tools (`get_community`, `get_dependency_path`,
@@ -81,10 +81,10 @@ the graph-traversal tools (`get_community`, `get_dependency_path`,
 Synthesis tools degrade gracefully without a provider; graph tools
 are deterministic and need none.
 
-Semantic `search_codebase` is now backed by a vector index: `repowise
+Semantic `search_codebase` is now backed by a vector index: `vor
 embed` embeds wiki pages with the configured embedder (default `mock`;
 real embedders register by name) into the `embeddings` table, and
-`repowise_search` / `repowise search --semantic` rank pages by cosine
+`vor_search` / `vor search --semantic` rank pages by cosine
 similarity, falling back to the substring path when no embeddings exist.
 
 **Remaining MCP gaps:** the richer `get_risk` PR-mode `directive`
@@ -120,7 +120,7 @@ consolidate what Python splits.
 
 Community detection uses **Louvain** modularity (gonum), not a
 connected-component placeholder. A pattern-based **security scanner**
-(`repowise security`, `repowise_security` MCP tool) populates
+(`vor security`, `vor_security` MCP tool) populates
 `security_findings`.
 
 Findings can be suppressed per-file and per-biomarker via the config
@@ -186,7 +186,7 @@ and provider-agnostic.
    opt-in. (CLAUDE.md regeneration, which is LLM-free, still runs
    automatically on init/update.)
 
-2. **MCP naming.** Go uses `repowise_<entity>` tool names; Python uses
+2. **MCP naming.** Go uses `vor_<entity>` tool names; Python uses
    `get_<task>`. A future synthesis layer can add the task-oriented
    tools on top of the existing primitives without renaming them.
 

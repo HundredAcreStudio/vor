@@ -7,8 +7,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
-	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/adr"
+	"github.com/HundredAcreStudio/vor/internal/analysis/decisions"
+	_ "github.com/HundredAcreStudio/vor/internal/analysis/decisions/adr"
 )
 
 func writeFile(t *testing.T, root, rel, content string) {

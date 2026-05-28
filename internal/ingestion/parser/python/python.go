@@ -13,9 +13,9 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/python"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/parser"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/parser/common"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/parser"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/parser/common"
 )
 
 const langTag models.LanguageTag = "python"
@@ -94,7 +94,7 @@ func (p *Parser) Parse(ctx context.Context, fi models.FileInfo, source []byte) (
 
 	// Exports for Python: public symbols (those not starting with "_") at
 	// module level. Symbols inside classes aren't exports per se, but
-	// repowise mirrors the Python source which lists everything public.
+	// vor mirrors the Python source which lists everything public.
 	exports := make([]string, 0)
 	for _, s := range symbols {
 		if s.Visibility == models.VisibilityPublic && s.ParentName == nil {

@@ -9,7 +9,7 @@ import (
 
 	backoff "github.com/cenkalti/backoff/v4"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 // Policy configures Do. Zero values are sensible defaults:

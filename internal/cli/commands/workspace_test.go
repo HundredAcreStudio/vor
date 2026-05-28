@@ -26,7 +26,7 @@ func addSiblingRepo(t *testing.T, parent, name string) string {
 
 func TestWorkspace_ListEmpty(t *testing.T) {
 	root := workspaceTempRoot(t)
-	stdout, _, err := runRepowiseCmd(t, nil, "workspace", "list", "--root", root)
+	stdout, _, err := runVorCmd(t, nil, "workspace", "list", "--root", root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,14 +38,14 @@ func TestWorkspace_ListEmpty(t *testing.T) {
 func TestWorkspace_AddAndList(t *testing.T) {
 	root := workspaceTempRoot(t)
 	repo := addSiblingRepo(t, root, "api")
-	stdout, _, err := runRepowiseCmd(t, nil, "workspace", "add", repo, "--root", root)
+	stdout, _, err := runVorCmd(t, nil, "workspace", "add", repo, "--root", root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(stdout, "added api") {
 		t.Errorf("add output = %q", stdout)
 	}
-	list, _, _ := runRepowiseCmd(t, nil, "workspace", "list", "--root", root)
+	list, _, _ := runVorCmd(t, nil, "workspace", "list", "--root", root)
 	if !strings.Contains(list, "api") {
 		t.Errorf("list missing api: %q", list)
 	}
@@ -58,11 +58,11 @@ func TestWorkspace_AddAndList(t *testing.T) {
 func TestWorkspace_AddWithExplicitAlias(t *testing.T) {
 	root := workspaceTempRoot(t)
 	repo := addSiblingRepo(t, root, "api")
-	if _, _, err := runRepowiseCmd(t, nil,
+	if _, _, err := runVorCmd(t, nil,
 		"workspace", "add", repo, "--alias", "backend", "--root", root); err != nil {
 		t.Fatal(err)
 	}
-	list, _, _ := runRepowiseCmd(t, nil, "workspace", "list", "--root", root)
+	list, _, _ := runVorCmd(t, nil, "workspace", "list", "--root", root)
 	if !strings.Contains(list, "backend") {
 		t.Errorf("--alias backend not respected: %q", list)
 	}
@@ -73,7 +73,7 @@ func TestWorkspace_AddRejectsNonDir(t *testing.T) {
 	// Create a regular file.
 	f := filepath.Join(root, "not-a-dir")
 	_ = os.WriteFile(f, []byte("x"), 0o644)
-	_, _, err := runRepowiseCmd(t, nil, "workspace", "add", f, "--root", root)
+	_, _, err := runVorCmd(t, nil, "workspace", "add", f, "--root", root)
 	if err == nil {
 		t.Fatal("expected error when path is not a directory")
 	}
@@ -82,12 +82,12 @@ func TestWorkspace_AddRejectsNonDir(t *testing.T) {
 func TestWorkspace_Remove(t *testing.T) {
 	root := workspaceTempRoot(t)
 	repo := addSiblingRepo(t, root, "api")
-	_, _, _ = runRepowiseCmd(t, nil, "workspace", "add", repo, "--root", root)
-	if _, _, err := runRepowiseCmd(t, nil,
+	_, _, _ = runVorCmd(t, nil, "workspace", "add", repo, "--root", root)
+	if _, _, err := runVorCmd(t, nil,
 		"workspace", "remove", "api", "--root", root); err != nil {
 		t.Fatal(err)
 	}
-	list, _, _ := runRepowiseCmd(t, nil, "workspace", "list", "--root", root)
+	list, _, _ := runVorCmd(t, nil, "workspace", "list", "--root", root)
 	if !strings.Contains(list, "no repos registered") {
 		t.Errorf("expected empty state after remove: %q", list)
 	}
@@ -95,7 +95,7 @@ func TestWorkspace_Remove(t *testing.T) {
 
 func TestWorkspace_RemoveMissingErrors(t *testing.T) {
 	root := workspaceTempRoot(t)
-	_, _, err := runRepowiseCmd(t, nil, "workspace", "remove", "ghost", "--root", root)
+	_, _, err := runVorCmd(t, nil, "workspace", "remove", "ghost", "--root", root)
 	if err == nil {
 		t.Error("expected error removing nonexistent alias")
 	}
@@ -105,14 +105,14 @@ func TestWorkspace_SetDefault(t *testing.T) {
 	root := workspaceTempRoot(t)
 	api := addSiblingRepo(t, root, "api")
 	web := addSiblingRepo(t, root, "web")
-	_, _, _ = runRepowiseCmd(t, nil, "workspace", "add", api, "--root", root)
-	_, _, _ = runRepowiseCmd(t, nil, "workspace", "add", web, "--root", root)
+	_, _, _ = runVorCmd(t, nil, "workspace", "add", api, "--root", root)
+	_, _, _ = runVorCmd(t, nil, "workspace", "add", web, "--root", root)
 
-	if _, _, err := runRepowiseCmd(t, nil,
+	if _, _, err := runVorCmd(t, nil,
 		"workspace", "set-default", "web", "--root", root); err != nil {
 		t.Fatal(err)
 	}
-	list, _, _ := runRepowiseCmd(t, nil, "workspace", "list", "--root", root)
+	list, _, _ := runVorCmd(t, nil, "workspace", "list", "--root", root)
 	// Find the line with web and verify it has the * marker.
 	for _, line := range strings.Split(list, "\n") {
 		if strings.Contains(line, "web") && !strings.Contains(line, "*") {
@@ -125,7 +125,7 @@ func TestWorkspace_ScanDryRun(t *testing.T) {
 	root := workspaceTempRoot(t)
 	addSiblingRepo(t, root, "api")
 	addSiblingRepo(t, root, "web")
-	stdout, _, err := runRepowiseCmd(t, nil, "workspace", "scan", "--root", root)
+	stdout, _, err := runVorCmd(t, nil, "workspace", "scan", "--root", root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,11 +141,11 @@ func TestWorkspace_ScanWithYesRegisters(t *testing.T) {
 	root := workspaceTempRoot(t)
 	addSiblingRepo(t, root, "api")
 	addSiblingRepo(t, root, "web")
-	if _, _, err := runRepowiseCmd(t, nil,
+	if _, _, err := runVorCmd(t, nil,
 		"workspace", "scan", "--yes", "--root", root); err != nil {
 		t.Fatal(err)
 	}
-	list, _, _ := runRepowiseCmd(t, nil, "workspace", "list", "--root", root)
+	list, _, _ := runVorCmd(t, nil, "workspace", "list", "--root", root)
 	if !strings.Contains(list, "api") || !strings.Contains(list, "web") {
 		t.Errorf("scan --yes should have registered both: %q", list)
 	}

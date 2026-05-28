@@ -1,5 +1,5 @@
 ; =============================================================================
-; repowise — PHP symbol, import, and call queries (tree-sitter-php)
+; vor — PHP symbol, import, and call queries (tree-sitter-php)
 ; =============================================================================
 
 ; ---- Imports ----

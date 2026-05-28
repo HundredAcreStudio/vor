@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/config"
+	"github.com/HundredAcreStudio/vor/internal/config"
 )
 
 // TestLoad_UserGlobalAppliedBelowRepoAndEnv exercises the three-layer
@@ -17,7 +17,7 @@ func TestLoad_UserGlobalAppliedBelowRepoAndEnv(t *testing.T) {
 	t.Setenv("HOME", tmp) // safety: if XDG isn't honoured, don't write into real $HOME
 
 	// User-global config: provider=openai (overrides default anthropic).
-	ucfgDir := filepath.Join(tmp, "xdg", "repowise")
+	ucfgDir := filepath.Join(tmp, "xdg", "vor")
 	_ = os.MkdirAll(ucfgDir, 0o755)
 	_ = os.WriteFile(filepath.Join(ucfgDir, "config.yaml"),
 		[]byte("provider: openai\nmodel: gpt-4o\n"), 0o644)
@@ -36,8 +36,8 @@ func TestLoad_UserGlobalAppliedBelowRepoAndEnv(t *testing.T) {
 
 	// Repo-local overrides user-global.
 	repoPath := t.TempDir()
-	_ = os.MkdirAll(filepath.Join(repoPath, ".repowise"), 0o755)
-	_ = os.WriteFile(filepath.Join(repoPath, ".repowise", "config.yaml"),
+	_ = os.MkdirAll(filepath.Join(repoPath, ".vor"), 0o755)
+	_ = os.WriteFile(filepath.Join(repoPath, ".vor", "config.yaml"),
 		[]byte("provider: anthropic\n"), 0o644)
 	cfg, _ = config.Load(repoPath)
 	if cfg.Provider != "anthropic" {
@@ -48,7 +48,7 @@ func TestLoad_UserGlobalAppliedBelowRepoAndEnv(t *testing.T) {
 	}
 
 	// Env var beats both.
-	t.Setenv("REPOWISE_DB_URL", "sqlite:/env-wins.db")
+	t.Setenv("VOR_DB_URL", "sqlite:/env-wins.db")
 	cfg, _ = config.Load(repoPath)
 	if cfg.DatabaseURL != "sqlite:/env-wins.db" {
 		t.Errorf("env should beat repo + user: got %q", cfg.DatabaseURL)

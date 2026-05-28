@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/health/coverage"
-	"github.com/repowise-dev/repowise-go/internal/persistence/coveragestore"
+	"github.com/HundredAcreStudio/vor/internal/analysis/health/coverage"
+	"github.com/HundredAcreStudio/vor/internal/persistence/coveragestore"
 )
 
 // newCoverageCmd groups coverage import/status. Coverage feeds the
@@ -39,7 +39,7 @@ func newCoverageImportCmd() *cobra.Command {
 		Long: `Parses an LCOV (.info) or Cobertura XML report and stores per-file
 line coverage. File paths are normalised to repo-relative POSIX form;
 use --strip-prefix when the report paths carry an extra leading segment
-(e.g. a CI workspace dir). Re-run after ` + "`repowise update`" + ` so the
+(e.g. a CI workspace dir). Re-run after ` + "`vor update`" + ` so the
 untested_hotspot biomarker uses the fresh numbers.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -121,7 +121,7 @@ func newCoverageStatusCmd() *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if n == 0 {
-				fmt.Fprintln(out, "no coverage imported — run `repowise coverage import <report>`")
+				fmt.Fprintln(out, "no coverage imported — run `vor coverage import <report>`")
 				return nil
 			}
 			cov, _ := store.CoverageMap(ctx, repoRow.ID)

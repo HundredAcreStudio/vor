@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/golang"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/gomod"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/golang"
 )
 
 // makeMemberRepo creates a tiny Go repo + initialised DB so workspace
@@ -32,8 +32,8 @@ func makeMemberRepo(t *testing.T, parent, name string) string {
 			t.Fatal(err)
 		}
 	}
-	// Pre-create a per-repo DB so openDB resolves to <repo>/.repowise/wiki.db.
-	dbPath := filepath.Join(dir, ".repowise", "wiki.db")
+	// Pre-create a per-repo DB so openDB resolves to <repo>/.vor/wiki.db.
+	dbPath := filepath.Join(dir, ".vor", "wiki.db")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func workspaceWithTwoRepos(t *testing.T) string {
 	root := t.TempDir()
 	for _, name := range []string{"api", "web"} {
 		dir := makeMemberRepo(t, root, name)
-		if _, _, err := runRepowiseCmd(t, nil, "workspace", "add", dir, "--root", root); err != nil {
+		if _, _, err := runVorCmd(t, nil, "workspace", "add", dir, "--root", root); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -66,7 +66,7 @@ func workspaceWithTwoRepos(t *testing.T) string {
 
 func TestWorkspaceStatus_EmptyRegistry(t *testing.T) {
 	root := t.TempDir()
-	stdout, _, err := runRepowiseCmd(t, nil, "workspace", "status", "--root", root)
+	stdout, _, err := runVorCmd(t, nil, "workspace", "status", "--root", root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestWorkspaceStatus_EmptyRegistry(t *testing.T) {
 
 func TestWorkspaceStatus_NotYetIndexed(t *testing.T) {
 	root := workspaceWithTwoRepos(t)
-	stdout, _, err := runRepowiseCmd(t, nil, "workspace", "status", "--root", root)
+	stdout, _, err := runVorCmd(t, nil, "workspace", "status", "--root", root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestWorkspaceStatus_NotYetIndexed(t *testing.T) {
 
 func TestWorkspaceUpdate_RunsOnAllMembers(t *testing.T) {
 	root := workspaceWithTwoRepos(t)
-	stdout, _, err := runRepowiseCmd(t, nil, "workspace", "update", "--root", root)
+	stdout, _, err := runVorCmd(t, nil, "workspace", "update", "--root", root)
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -111,10 +111,10 @@ func TestWorkspaceUpdate_RunsOnAllMembers(t *testing.T) {
 
 func TestWorkspaceStatus_AfterUpdate(t *testing.T) {
 	root := workspaceWithTwoRepos(t)
-	if _, _, err := runRepowiseCmd(t, nil, "workspace", "update", "--root", root); err != nil {
+	if _, _, err := runVorCmd(t, nil, "workspace", "update", "--root", root); err != nil {
 		t.Fatal(err)
 	}
-	stdout, _, _ := runRepowiseCmd(t, nil, "workspace", "status", "--root", root)
+	stdout, _, _ := runVorCmd(t, nil, "workspace", "status", "--root", root)
 	// After update, both should show as indexed.
 	if strings.Count(stdout, "  yes  ") < 2 {
 		t.Errorf("expected both repos indexed after update: %s", stdout)
@@ -126,7 +126,7 @@ func TestWorkspaceStatus_AfterUpdate(t *testing.T) {
 
 func TestWorkspaceDoctor_FlagsNotIndexed(t *testing.T) {
 	root := workspaceWithTwoRepos(t)
-	stdout, _, err := runRepowiseCmd(t, nil, "workspace", "doctor", "--root", root)
+	stdout, _, err := runVorCmd(t, nil, "workspace", "doctor", "--root", root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,10 +137,10 @@ func TestWorkspaceDoctor_FlagsNotIndexed(t *testing.T) {
 
 func TestWorkspaceDoctor_AllHealthyAfterUpdate(t *testing.T) {
 	root := workspaceWithTwoRepos(t)
-	if _, _, err := runRepowiseCmd(t, nil, "workspace", "update", "--root", root); err != nil {
+	if _, _, err := runVorCmd(t, nil, "workspace", "update", "--root", root); err != nil {
 		t.Fatal(err)
 	}
-	stdout, _, _ := runRepowiseCmd(t, nil, "workspace", "doctor", "--root", root)
+	stdout, _, _ := runVorCmd(t, nil, "workspace", "doctor", "--root", root)
 	// All entries should be OK.
 	for _, alias := range []string{"api", "web"} {
 		if !strings.Contains(stdout, alias+": OK") {
@@ -151,7 +151,7 @@ func TestWorkspaceDoctor_AllHealthyAfterUpdate(t *testing.T) {
 
 func TestWorkspaceHook_InstallAcrossWorkspace(t *testing.T) {
 	root := workspaceWithTwoRepos(t)
-	stdout, _, err := runRepowiseCmd(t, nil, "workspace", "hook", "install", "--root", root)
+	stdout, _, err := runVorCmd(t, nil, "workspace", "hook", "install", "--root", root)
 	if err != nil {
 		t.Fatalf("hook install: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestWorkspaceHook_InstallAcrossWorkspace(t *testing.T) {
 
 func TestWorkspaceHook_StatusAcrossWorkspace(t *testing.T) {
 	root := workspaceWithTwoRepos(t)
-	stdout, _, _ := runRepowiseCmd(t, nil, "workspace", "hook", "status", "--root", root)
+	stdout, _, _ := runVorCmd(t, nil, "workspace", "hook", "status", "--root", root)
 	for _, alias := range []string{"api", "web"} {
 		if !strings.Contains(stdout, alias+":") {
 			t.Errorf("status output missing alias %q: %s", alias, stdout)

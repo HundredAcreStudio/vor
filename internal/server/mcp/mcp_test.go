@@ -8,23 +8,23 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/deadcode"
-	"github.com/repowise-dev/repowise-go/internal/analysis/health"
-	pageModels "github.com/repowise-dev/repowise-go/internal/generation/models"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/graph"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/deadstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/gitstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/persistence/wikistore"
-	mcpserver "github.com/repowise-dev/repowise-go/internal/server/mcp"
+	"github.com/HundredAcreStudio/vor/internal/analysis/deadcode"
+	"github.com/HundredAcreStudio/vor/internal/analysis/health"
+	pageModels "github.com/HundredAcreStudio/vor/internal/generation/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/external"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/git"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/graph"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/deadstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/externalstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/gitstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/graphstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/healthstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/wikistore"
+	mcpserver "github.com/HundredAcreStudio/vor/internal/server/mcp"
 )
 
 // fixtureServer builds a DB with one repo + a representative snapshot
@@ -156,9 +156,9 @@ func callTool(t *testing.T, s *mcpserver.Server, name string, args map[string]an
 	return parsed.Result.Content[0].Text
 }
 
-func TestRepowiseStatus(t *testing.T) {
+func TestVorStatus(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_status", nil)
+	text := callTool(t, srv, "vor_status", nil)
 	for _, want := range []string{`"graphNodes"`, `"deadCodeFindings"`, `"externalsByEcosystem"`, `"npm"`} {
 		if !strings.Contains(text, want) {
 			t.Errorf("status missing %q in %s", want, text)
@@ -166,9 +166,9 @@ func TestRepowiseStatus(t *testing.T) {
 	}
 }
 
-func TestRepowiseHotspots(t *testing.T) {
+func TestVorHotspots(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_hotspots", map[string]any{"limit": 5})
+	text := callTool(t, srv, "vor_hotspots", map[string]any{"limit": 5})
 	if !strings.Contains(text, "main.go") {
 		t.Errorf("hotspots missing main.go: %s", text)
 	}
@@ -177,9 +177,9 @@ func TestRepowiseHotspots(t *testing.T) {
 	}
 }
 
-func TestRepowiseDeadCode_SafeOnly(t *testing.T) {
+func TestVorDeadCode_SafeOnly(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_dead_code", map[string]any{"safe_only": true})
+	text := callTool(t, srv, "vor_dead_code", map[string]any{"safe_only": true})
 	if !strings.Contains(text, "orphan.go") {
 		t.Errorf("dead code missing orphan.go: %s", text)
 	}
@@ -188,9 +188,9 @@ func TestRepowiseDeadCode_SafeOnly(t *testing.T) {
 	}
 }
 
-func TestRepowiseHealth(t *testing.T) {
+func TestVorHealth(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_health", nil)
+	text := callTool(t, srv, "vor_health", nil)
 	for _, want := range []string{`"averageScore"`, `"worstFiles"`, "lib.go", `"high_complexity"`} {
 		if !strings.Contains(text, want) {
 			t.Errorf("health missing %q: %s", want, text)
@@ -198,15 +198,15 @@ func TestRepowiseHealth(t *testing.T) {
 	}
 }
 
-func TestRepowiseHealthFindings_FilterByBiomarker(t *testing.T) {
+func TestVorHealthFindings_FilterByBiomarker(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_health_findings", map[string]any{
+	text := callTool(t, srv, "vor_health_findings", map[string]any{
 		"biomarker": "high_complexity",
 	})
 	if !strings.Contains(text, "Helper") {
 		t.Errorf("findings missing Helper: %s", text)
 	}
-	text2 := callTool(t, srv, "repowise_health_findings", map[string]any{
+	text2 := callTool(t, srv, "vor_health_findings", map[string]any{
 		"biomarker": "nope",
 	})
 	if strings.Contains(text2, "Helper") {
@@ -214,9 +214,9 @@ func TestRepowiseHealthFindings_FilterByBiomarker(t *testing.T) {
 	}
 }
 
-func TestRepowiseSymbol(t *testing.T) {
+func TestVorSymbol(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_symbol", map[string]any{
+	text := callTool(t, srv, "vor_symbol", map[string]any{
 		"symbol_id": "lib.go::Helper",
 	})
 	for _, want := range []string{`"name": "Helper"`, `"nodeType": "symbol"`, `"filePath": "lib.go"`} {
@@ -226,12 +226,12 @@ func TestRepowiseSymbol(t *testing.T) {
 	}
 }
 
-func TestRepowiseSymbol_NotFound(t *testing.T) {
+func TestVorSymbol_NotFound(t *testing.T) {
 	srv, _ := fixtureServer(t)
 	req := map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 		"params": map[string]any{
-			"name":      "repowise_symbol",
+			"name":      "vor_symbol",
 			"arguments": map[string]any{"symbol_id": "does/not/exist::Foo"},
 		},
 	}
@@ -243,9 +243,9 @@ func TestRepowiseSymbol_NotFound(t *testing.T) {
 	}
 }
 
-func TestRepowiseDependents(t *testing.T) {
+func TestVorDependents(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_dependents", map[string]any{
+	text := callTool(t, srv, "vor_dependents", map[string]any{
 		"file_path": "lib.go",
 	})
 	if !strings.Contains(text, "main.go") {
@@ -253,15 +253,15 @@ func TestRepowiseDependents(t *testing.T) {
 	}
 }
 
-func TestRepowiseExternals_EcosystemFilter(t *testing.T) {
+func TestVorExternals_EcosystemFilter(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_externals", map[string]any{
+	text := callTool(t, srv, "vor_externals", map[string]any{
 		"ecosystem": "npm",
 	})
 	if !strings.Contains(text, "react") {
 		t.Errorf("expected react in npm externals: %s", text)
 	}
-	text2 := callTool(t, srv, "repowise_externals", map[string]any{
+	text2 := callTool(t, srv, "vor_externals", map[string]any{
 		"ecosystem": "cargo",
 	})
 	if strings.Contains(text2, "react") {
@@ -276,9 +276,9 @@ func TestNew_RejectsMissingDB(t *testing.T) {
 	}
 }
 
-func TestRepowisePages(t *testing.T) {
+func TestVorPages(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_pages", map[string]any{"limit": 10})
+	text := callTool(t, srv, "vor_pages", map[string]any{"limit": 10})
 	if !strings.Contains(text, `"lib.go"`) {
 		t.Errorf("pages list missing lib.go: %s", text)
 	}
@@ -287,9 +287,9 @@ func TestRepowisePages(t *testing.T) {
 	}
 }
 
-func TestRepowisePage_Found(t *testing.T) {
+func TestVorPage_Found(t *testing.T) {
 	srv, _ := fixtureServer(t)
-	text := callTool(t, srv, "repowise_page", map[string]any{"path": "lib.go"})
+	text := callTool(t, srv, "vor_page", map[string]any{"path": "lib.go"})
 	if !strings.Contains(text, "Defines Helper") {
 		t.Errorf("page body missing markdown: %s", text)
 	}
@@ -299,13 +299,13 @@ func TestRepowisePage_Found(t *testing.T) {
 	}
 }
 
-func TestRepowisePage_NotFoundIsToolError(t *testing.T) {
+func TestVorPage_NotFoundIsToolError(t *testing.T) {
 	srv, _ := fixtureServer(t)
 	// callTool would fail on tool error; use HandleMessage directly so we
 	// can inspect the IsError flag without failing the test.
 	msg := map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-		"params": map[string]any{"name": "repowise_page", "arguments": map[string]any{"path": "no-such-file"}},
+		"params": map[string]any{"name": "vor_page", "arguments": map[string]any{"path": "no-such-file"}},
 	}
 	raw, _ := json.Marshal(msg)
 	resp := srv.MCPServer().HandleMessage(context.Background(), raw)

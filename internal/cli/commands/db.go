@@ -9,9 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/config"
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/config"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
 )
 
 func newDBCmd() *cobra.Command {
@@ -43,7 +43,7 @@ func newDBMigrateCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path (resolves .repowise/config.yaml and default wiki.db)")
+	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path (resolves .vor/config.yaml and default wiki.db)")
 	return cmd
 }
 
@@ -76,8 +76,8 @@ func newDBStatusCmd() *cobra.Command {
 	return cmd
 }
 
-// openDB resolves the database URL from config (env > .repowise/config.yaml >
-// default sqlite://.repowise/wiki.db) and opens the connection.
+// openDB resolves the database URL from config (env > .vor/config.yaml >
+// default sqlite://.vor/wiki.db) and opens the connection.
 func openDB(ctx context.Context, repoPath string) (*sql.DB, db.Dialect, error) {
 	cfg, err := config.Load(repoPath)
 	if err != nil {
@@ -86,12 +86,12 @@ func openDB(ctx context.Context, repoPath string) (*sql.DB, db.Dialect, error) {
 
 	url := cfg.DatabaseURL
 	if url == "" {
-		abs, err := filepath.Abs(filepath.Join(repoPath, ".repowise", "wiki.db"))
+		abs, err := filepath.Abs(filepath.Join(repoPath, ".vor", "wiki.db"))
 		if err != nil {
 			return nil, "", fmt.Errorf("resolve default db path: %w", err)
 		}
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-			return nil, "", fmt.Errorf("create .repowise dir: %w", err)
+			return nil, "", fmt.Errorf("create .vor dir: %w", err)
 		}
 		url = "sqlite:" + abs
 	}

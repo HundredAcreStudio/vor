@@ -3,7 +3,7 @@ package coverage_test
 import (
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/analysis/health/coverage"
+	"github.com/HundredAcreStudio/vor/internal/analysis/health/coverage"
 )
 
 func find(cs []coverage.FileCoverage, path string) *coverage.FileCoverage {

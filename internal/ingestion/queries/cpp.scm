@@ -1,5 +1,5 @@
 ; =============================================================================
-; repowise — C++ symbol and import queries
+; vor — C++ symbol and import queries
 ; tree-sitter-cpp >= 0.23 (also used for .c files — C is a subset of this
 ; grammar for our purposes)
 ; =============================================================================

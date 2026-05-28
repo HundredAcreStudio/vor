@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/languages"
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/languages"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // Parser is the per-language extractor. Implementations should be safe for

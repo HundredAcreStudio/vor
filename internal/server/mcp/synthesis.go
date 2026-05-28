@@ -9,7 +9,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 // This file implements the three task-oriented (vs entity-oriented)
@@ -302,7 +302,7 @@ func (s *Server) toolWhy(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 		return jsonResult(map[string]any{
 			"query":     query,
 			"rationale": "",
-			"note":      "no architectural decisions matched — try `repowise_decisions` to browse all of them, or widen the query",
+			"note":      "no architectural decisions matched — try `vor_decisions` to browse all of them, or widen the query",
 			"decisions": []whyDecision{},
 		})
 	}

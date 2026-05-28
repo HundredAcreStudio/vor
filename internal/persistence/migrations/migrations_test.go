@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
 )
 
 // TestUp_SQLite is the primary smoke test for the persistence layer: open a

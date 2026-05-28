@@ -1,5 +1,5 @@
 // Hook management — install / uninstall / status of the post-commit
-// hook that runs `repowise update` after every commit. The hook script
+// hook that runs `vor update` after every commit. The hook script
 // content matches the Python implementation byte-for-byte (modulo the
 // "Installed by" attribution line) so users can switch between
 // implementations on the same repo without re-installing.
@@ -16,50 +16,50 @@ import (
 )
 
 const (
-	hookMarkerStart = "# repowise-hook-start"
-	hookMarkerEnd   = "# repowise-hook-end"
+	hookMarkerStart = "# vor-hook-start"
+	hookMarkerEnd   = "# vor-hook-end"
 )
 
 // hookScript is the shell body installed between the markers. Kept in
-// sync with packages/cli/src/repowise/cli/hooks.py:_HOOK_SCRIPT so the
+// sync with packages/cli/src/vor/cli/hooks.py:_HOOK_SCRIPT so the
 // behaviour is identical across implementations:
-//   - capture commit info into .repowise/.update.queued so augment can
+//   - capture commit info into .vor/.update.queued so augment can
 //     see the pending update synchronously
-//   - background the actual `repowise update` so the commit doesn't
+//   - background the actual `vor update` so the commit doesn't
 //     block on it
-//   - capture all output to .repowise/.update.log for diagnosis
-const hookScript = `# repowise-hook-start
-# Auto-syncs repowise wiki after each commit (background, non-blocking).
-# Installed by: repowise hook install
+//   - capture all output to .vor/.update.log for diagnosis
+const hookScript = `# vor-hook-start
+# Auto-syncs vor wiki after each commit (background, non-blocking).
+# Installed by: vor hook install
 {
   ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
-  [ -d "$ROOT/.repowise" ] || exit 0
+  [ -d "$ROOT/.vor" ] || exit 0
   HEAD=$(git rev-parse HEAD 2>/dev/null) || HEAD=""
   TS=$(date +%s 2>/dev/null) || TS=""
   if [ -n "$TS" ]; then
     printf '{"target_commit":"%s","queued_at":%s}\n' "$HEAD" "$TS" \
-      > "$ROOT/.repowise/.update.queued" 2>/dev/null || true
+      > "$ROOT/.vor/.update.queued" 2>/dev/null || true
   fi
-  LOG="$ROOT/.repowise/.update.log"
+  LOG="$ROOT/.vor/.update.log"
   {
     printf '\n--- post-commit hook fired at %s for HEAD %s ---\n' \
       "$(date 2>/dev/null)" "$HEAD"
   } >> "$LOG" 2>/dev/null || true
   (
     cd "$ROOT" || exit 1
-    if command -v repowise >/dev/null 2>&1; then
-      repowise update >> "$LOG" 2>&1
+    if command -v vor >/dev/null 2>&1; then
+      vor update >> "$LOG" 2>&1
     fi
   ) &
 } >/dev/null 2>&1
-# repowise-hook-end
+# vor-hook-end
 `
 
 // newHookCmd is the hook subcommand group.
 func newHookCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "hook",
-		Short: "Manage the git post-commit hook that runs `repowise update`",
+		Short: "Manage the git post-commit hook that runs `vor update`",
 	}
 	cmd.AddCommand(newHookInstallCmd())
 	cmd.AddCommand(newHookUninstallCmd())
@@ -94,7 +94,7 @@ func newHookUninstallCmd() *cobra.Command {
 	var repoPath string
 	cmd := &cobra.Command{
 		Use:   "uninstall [PATH]",
-		Short: "Remove the repowise section from .git/hooks/post-commit",
+		Short: "Remove the vor section from .git/hooks/post-commit",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := resolveHookRoot(args, repoPath)
@@ -209,19 +209,19 @@ func uninstallHook(root string) (string, error) {
 	}
 	stripped, removed := stripHookBlock(string(existing))
 	if !removed {
-		return "repowise hook not found in post-commit", nil
+		return "vor hook not found in post-commit", nil
 	}
 	if strings.TrimSpace(stripped) == "" || strings.TrimSpace(stripped) == "#!/bin/sh" {
 		// Don't leave a useless empty hook around.
 		if err := os.Remove(hookPath); err != nil {
 			return "", err
 		}
-		return "removed repowise hook (post-commit was otherwise empty; deleted)", nil
+		return "removed vor hook (post-commit was otherwise empty; deleted)", nil
 	}
 	if err := os.WriteFile(hookPath, []byte(stripped), 0o755); err != nil {
 		return "", err
 	}
-	return "removed repowise hook section from post-commit", nil
+	return "removed vor hook section from post-commit", nil
 }
 
 // hookStatus returns a one-line summary of the hook's state.
@@ -235,12 +235,12 @@ func hookStatus(root string) string {
 		return "error reading hook: " + err.Error()
 	}
 	if strings.Contains(string(body), hookMarkerStart) && strings.Contains(string(body), hookMarkerEnd) {
-		return "repowise hook installed at " + hookPath
+		return "vor hook installed at " + hookPath
 	}
-	return "post-commit hook exists but contains no repowise section: " + hookPath
+	return "post-commit hook exists but contains no vor section: " + hookPath
 }
 
-// mergeHookBlock inserts or replaces the repowise block inside existing
+// mergeHookBlock inserts or replaces the vor block inside existing
 // content. Preserves everything outside the marker pair.
 func mergeHookBlock(existing, block string) string {
 	startIdx := strings.Index(existing, hookMarkerStart)

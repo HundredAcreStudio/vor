@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/git"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/git"
 )
 
 // Store writes git.PerFile records to the database.

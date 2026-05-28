@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // Tier ranks the depth of analysis available for a language.
@@ -146,7 +146,7 @@ var All = []LanguageSpec{
 	{
 		Tag: "c", Name: "C",
 		Extensions:         []string{".c", ".h"},
-		GrammarPackage:     "tree-sitter-cpp", // shares grammar with C++ in repowise
+		GrammarPackage:     "tree-sitter-cpp", // shares grammar with C++ in vor
 		GrammarTag:         "cpp",
 		QueryFile:          "c.scm",
 		Tier:               TierPartial,

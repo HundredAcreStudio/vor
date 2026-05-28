@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
 )
 
 func TestDoctor_OnEmptyTempDir(t *testing.T) {
@@ -28,11 +28,11 @@ func TestDoctor_AfterMigrate(t *testing.T) {
 	tmp := t.TempDir()
 	ctx := context.Background()
 	// Pre-create the schema so the DB check reports OK.
-	if err := os.MkdirAll(filepath.Join(tmp, ".repowise"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, ".vor"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	conn, dialect, err := db.Open(ctx, db.OpenOptions{
-		URL: "sqlite:" + filepath.Join(tmp, ".repowise", "wiki.db"),
+		URL: "sqlite:" + filepath.Join(tmp, ".vor", "wiki.db"),
 	})
 	if err != nil {
 		t.Fatalf("open: %v", err)

@@ -1,5 +1,5 @@
 ; =============================================================================
-; repowise — Kotlin symbol, import, and call queries (tree-sitter-kotlin)
+; vor — Kotlin symbol, import, and call queries (tree-sitter-kotlin)
 ; class / interface both parse as class_declaration; the concrete kind is
 ; recovered in Go from the leading keyword token.
 ; =============================================================================

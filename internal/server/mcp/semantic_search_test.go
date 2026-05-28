@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/vector"
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	_ "github.com/repowise-dev/repowise-go/internal/providers/mock"
-	mcpserver "github.com/repowise-dev/repowise-go/internal/server/mcp"
+	"github.com/HundredAcreStudio/vor/internal/persistence/vector"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	_ "github.com/HundredAcreStudio/vor/internal/providers/mock"
+	mcpserver "github.com/HundredAcreStudio/vor/internal/server/mcp"
 )
 
 // TestSearch_SemanticMode embeds the seeded wiki page and confirms
-// repowise_search with semantic=true ranks pages via the vector store.
+// vor_search with semantic=true ranks pages via the vector store.
 func TestSearch_SemanticMode(t *testing.T) {
 	ctx := context.Background()
 	conn, rid := synthFixture(t) // seeds wiki page "auth.go"
@@ -22,7 +22,7 @@ func TestSearch_SemanticMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Embed the page the way `repowise embed` does.
+	// Embed the page the way `vor embed` does.
 	vstore := vector.New(conn)
 	text := "auth.go — authentication entrypoint\nLogin validates JWT bearer tokens and establishes the session.\n# auth.go\n"
 	vecs, _ := embedder.Embed(ctx, []string{text})
@@ -38,7 +38,7 @@ func TestSearch_SemanticMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	text = callTool(t, srv, "repowise_search", map[string]any{
+	text = callTool(t, srv, "vor_search", map[string]any{
 		"query": "how does login work", "semantic": true,
 	})
 	var out struct {
@@ -69,7 +69,7 @@ func TestSearch_SemanticFallsBackToLexical(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := callTool(t, srv, "repowise_search", map[string]any{
+	text := callTool(t, srv, "vor_search", map[string]any{
 		"query": "auth.go", "semantic": true,
 	})
 	// Lexical payload carries nodeId; semantic payload carries targetPath.

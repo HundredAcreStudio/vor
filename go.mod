@@ -1,4 +1,4 @@
-module github.com/repowise-dev/repowise-go
+module github.com/HundredAcreStudio/vor
 
 go 1.25.7
 

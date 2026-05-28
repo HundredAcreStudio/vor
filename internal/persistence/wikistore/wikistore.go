@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/generation/models"
+	"github.com/HundredAcreStudio/vor/internal/generation/models"
 )
 
 // Store wraps a *sql.DB with the wiki-page CRUD methods.

@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/external"
 
 	// Side-effect registration of the API-contract extractors.
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/graphql"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/openapi"
-	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/protobuf"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/graphql"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/openapi"
+	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/protobuf"
 )
 
 func write(t *testing.T, dir, name, body string) string {

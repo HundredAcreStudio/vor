@@ -9,14 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/coststore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/db"
-	"github.com/repowise-dev/repowise-go/internal/persistence/migrations"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/providers"
-	"github.com/repowise-dev/repowise-go/internal/providers/middleware"
-	"github.com/repowise-dev/repowise-go/internal/providers/ratelimit"
-	"github.com/repowise-dev/repowise-go/internal/providers/retry"
+	"github.com/HundredAcreStudio/vor/internal/persistence/coststore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers/middleware"
+	"github.com/HundredAcreStudio/vor/internal/providers/ratelimit"
+	"github.com/HundredAcreStudio/vor/internal/providers/retry"
 )
 
 // stubProvider is a controllable Provider for testing middleware. Each

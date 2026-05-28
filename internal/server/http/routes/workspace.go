@@ -10,15 +10,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/pipelinestore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
-	"github.com/repowise-dev/repowise-go/internal/server/http/httpx"
-	"github.com/repowise-dev/repowise-go/internal/workspace"
+	"github.com/HundredAcreStudio/vor/internal/persistence/pipelinestore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/server/http/httpx"
+	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 // MountWorkspace registers workspace-level routes. These are only
 // useful when the daemon was started against a workspace root (so
-// .repowise/workspace.json exists at that path); when not, the
+// .vor/workspace.json exists at that path); when not, the
 // endpoints return an empty payload with a hint.
 //
 // The workspace root is discovered lazily from each request via the
@@ -55,7 +55,7 @@ func listWorkspaceRepos(deps Deps) http.HandlerFunc {
 			httpx.JSON(w, http.StatusOK, map[string]any{
 				"root":  root,
 				"repos": []workspaceRepoDTO{},
-				"hint":  "no repos registered — use `repowise workspace add PATH`",
+				"hint":  "no repos registered — use `vor workspace add PATH`",
 			})
 			return
 		}
@@ -84,7 +84,7 @@ func listWorkspaceRepos(deps Deps) http.HandlerFunc {
 
 // listWorkspaceCoChanges returns the cached cross-repo co-change
 // report (workspace.LoadReport). Empty when no report exists yet —
-// callers should run `repowise workspace co-changes --refresh`.
+// callers should run `vor workspace co-changes --refresh`.
 func listWorkspaceCoChanges(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		root := r.URL.Query().Get("root")
@@ -98,7 +98,7 @@ func listWorkspaceCoChanges(deps Deps) http.HandlerFunc {
 			httpx.JSON(w, http.StatusOK, map[string]any{
 				"root":  root,
 				"pairs": []any{},
-				"hint":  "no cached report — run `repowise workspace co-changes --refresh`",
+				"hint":  "no cached report — run `vor workspace co-changes --refresh`",
 			})
 			return
 		}

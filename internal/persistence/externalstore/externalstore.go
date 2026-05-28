@@ -9,7 +9,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/external"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/external"
 )
 
 // Store writes external.Record sets to the database.

@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/repowise-dev/repowise-go/internal/providers"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 const (
@@ -285,7 +285,7 @@ func (p *Provider) buildRequest(req providers.Request) wireRequest {
 	return wr
 }
 
-// messagesToContents maps repowise roles to Gemini's: assistant→model,
+// messagesToContents maps vor roles to Gemini's: assistant→model,
 // system turns are dropped (encoded as systemInstruction instead).
 func messagesToContents(msgs []providers.Message) []content {
 	out := make([]content, 0, len(msgs))

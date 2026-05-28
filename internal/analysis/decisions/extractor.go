@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
+	"github.com/HundredAcreStudio/vor/internal/ingestion/models"
 )
 
 // Extractor mines decisions from one source (inline markers, ADR files,

@@ -10,10 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
-	"github.com/repowise-dev/repowise-go/internal/userconfig"
+	"github.com/HundredAcreStudio/vor/internal/persistence/externalstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/graphstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/healthstore"
+	"github.com/HundredAcreStudio/vor/internal/userconfig"
 )
 
 // newStatusCmd reads the persisted database for the configured repo and
@@ -89,7 +89,7 @@ func newStatusCmd() *cobra.Command {
 			// Watched-repos footer. Only renders when watchers have
 			// recorded activity for *this* repo path; otherwise it's
 			// noise — the global registry view lives at
-			// `repowise workspace registered` and (future) a richer
+			// `vor workspace registered` and (future) a richer
 			// listing command.
 			if reg, _ := userconfig.LoadWatched(); reg != nil {
 				abs := repoRow.LocalPath
