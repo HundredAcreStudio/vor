@@ -121,7 +121,11 @@ consolidate what Python splits.
 | Language | Status |
 |---|---|
 | Go, Python, TypeScript, JavaScript, Rust, Java, C, C++, C# | ✅ |
-| Ruby, PHP, Swift, Kotlin, Scala, Luau | ⏳ |
+| Ruby, PHP, Swift, Kotlin, Scala, Lua/Luau | ✅ |
+
+Full-tier languages (Go, Python, …) get heritage + binding analysis;
+the Phase 13 additions are Partial/Traversal tier (symbols + imports +
+calls). Luau is parsed with the Lua grammar (it is a Lua superset).
 
 ---
 

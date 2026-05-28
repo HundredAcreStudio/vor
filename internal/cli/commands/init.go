@@ -26,8 +26,14 @@ import (
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/golang"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/java"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/javascript"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/kotlin"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/luau"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/php"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/python"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/ruby"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/rust"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/scala"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/swift"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/typescript"
 )
 

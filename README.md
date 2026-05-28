@@ -93,7 +93,7 @@ For a feature-by-feature comparison against the Python implementation
 | Persistence (28 tables, SQLite + Postgres) | ✅ |
 | Traverser (gitignore, binary + generated-file detection) | ✅ |
 | Parsers — Go / Python / TypeScript / JavaScript / Rust / Java / C / C++ / C# | ✅ |
-| Parsers — Ruby / PHP / Swift / Kotlin / Scala / Luau | ⏳ |
+| Parsers — Ruby / PHP / Swift / Kotlin / Scala / Lua-Luau | ✅ |
 | External extractors — npm / pypi / cargo / go.mod / nuget | ✅ |
 | Graph build + PageRank + SCC + multi-edge persistence | ✅ |
 | Git intelligence — hotspots, ownership, co-change, bus factor | ✅ |
