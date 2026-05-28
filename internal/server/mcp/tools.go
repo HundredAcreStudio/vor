@@ -61,6 +61,39 @@ func (s *Server) registerTools() {
 		mcp.WithString("question", mcp.Required(), mcp.Description("The natural-language question to answer.")),
 	), s.wrap(s.toolAnswer))
 
+	// --- graph-traversal tools (deterministic, no LLM) ---
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_get_community",
+		mcp.WithDescription("Graph communities — clusters of files that are tightly interconnected (Louvain-style community_id from the graph build). With no args, returns the largest communities and their top files by PageRank. With `target`, returns every member of that file's community. Use to discover the natural module boundaries the import graph reveals."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+		mcp.WithString("target", mcp.Description("A file path or node_id; returns the members of its community.")),
+		mcp.WithNumber("limit", mcp.DefaultNumber(20), mcp.Description("Max communities to list in survey mode (1–100).")),
+	), s.wrap(s.toolCommunity))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_get_dependency_path",
+		mcp.WithDescription("Shortest dependency path between two nodes over imports/calls/defines edges. Answers 'how does A reach B?' — returns the node sequence and hop count, or found=false when no path exists. Both endpoints accept a file path or a node_id."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+		mcp.WithString("from", mcp.Required(), mcp.Description("Source file path or node_id.")),
+		mcp.WithString("to", mcp.Required(), mcp.Description("Target file path or node_id.")),
+	), s.wrap(s.toolDependencyPath))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_get_execution_flows",
+		mcp.WithDescription("Outbound flow trees rooted at the repo's entry points (or an explicit `entry`), walking imports/calls to a bounded depth. Use to understand 'what runs when this entry point fires?'. Cycle-guarded; children capped for legibility."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+		mcp.WithString("entry", mcp.Description("Explicit root file path or node_id; defaults to indexed entry points.")),
+		mcp.WithNumber("max_depth", mcp.DefaultNumber(4), mcp.Description("Maximum traversal depth (1–8, default 4).")),
+		mcp.WithNumber("limit", mcp.DefaultNumber(10), mcp.Description("Max entry-point roots to expand (1–50, default 10).")),
+	), s.wrap(s.toolExecutionFlows))
+
+	s.srv.AddTool(mcp.NewTool(
+		"repowise_get_architecture_diagram",
+		mcp.WithDescription("Repo-level architecture map: the largest communities (with a representative file each), the weighted import dependencies between them, and the entry points. Pass format=mermaid for a renderable flowchart string alongside the structured data. The fastest way to orient on an unfamiliar repo's shape."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+		mcp.WithString("format", mcp.Description("Set to 'mermaid' to also receive a mermaid flowchart string.")),
+	), s.wrap(s.toolArchitectureDiagram))
+
 	s.srv.AddTool(mcp.NewTool(
 		"repowise_hotspots",
 		mcp.WithDescription("Files with high git churn. Returns the top N files by churn percentile, with owner, contributor count, and bus factor. Use this to find where a refactoring effort will have outsized impact."),
