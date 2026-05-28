@@ -36,6 +36,7 @@ func Root() *cobra.Command {
 	root.AddCommand(newExportCmd())
 	root.AddCommand(newWatchCmd())
 	root.AddCommand(newWorkspaceCmd())
+	root.AddCommand(newWatchedCmd())
 	root.AddCommand(newHotspotsCmd())
 	root.AddCommand(newSearchCmd())
 	root.AddCommand(newExternalsCmd())
