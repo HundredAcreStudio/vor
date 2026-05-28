@@ -8,16 +8,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/HundredAcreStudio/vor/internal/persistence/db"
 	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
-	"github.com/HundredAcreStudio/vor/internal/persistence/pipelinestore"
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 	mcpserver "github.com/HundredAcreStudio/vor/internal/server/mcp"
 
-	// Register the Go parser so a reindex does real work in this test
-	// binary (resolvers + decision sources come in via the pipeline import).
+	// Register the Go parser so the security scan walks real source in
+	// this test binary.
 	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/golang"
 )
 
@@ -55,88 +53,6 @@ func mutationFixture(t *testing.T, files map[string]string) (*mcpserver.Server, 
 		t.Fatal(err)
 	}
 	return srv, conn, r.ID, src
-}
-
-func TestReindex_AsyncRunCompletes(t *testing.T) {
-	srv, conn, repoID, _ := mutationFixture(t, map[string]string{
-		"main.go": "package main\nfunc main(){ helper() }\nfunc helper(){}\n",
-		"go.mod":  "module example.com/x\ngo 1.21\n",
-	})
-
-	text := callTool(t, srv, "vor_reindex", map[string]any{"mode": "update"})
-	var out struct {
-		Status string `json:"status"`
-		RunID  string `json:"runId"`
-	}
-	if err := json.Unmarshal([]byte(text), &out); err != nil {
-		t.Fatalf("decode: %v\n%s", err, text)
-	}
-	if out.Status != "started" || out.RunID == "" {
-		t.Fatalf("expected started + run_id, got %s", text)
-	}
-
-	// Poll the run to completion, then confirm the runID matches. (Done via
-	// the store directly — the cheapest signal that the bg goroutine finished.)
-	store := pipelinestore.New(conn)
-	deadline := time.Now().Add(10 * time.Second)
-	var overall string
-	for time.Now().Before(deadline) {
-		run, err := store.LatestRun(context.Background(), repoID)
-		if err == nil && run != nil && run.Overall != pipelinestore.OutcomeRunning {
-			overall = run.Overall
-			if run.RunID != out.RunID {
-				t.Errorf("latest run id = %s, want %s", run.RunID, out.RunID)
-			}
-			break
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	if overall != pipelinestore.OutcomeSucceeded {
-		t.Fatalf("run did not succeed in time (overall=%q)", overall)
-	}
-
-	// pipeline_log should report the completed phases. Poll it the way a
-	// real client would: with SQLite's connection pool the phase rows can
-	// lag a beat behind the LatestRun snapshot read above.
-	var logText string
-	for time.Now().Before(deadline) {
-		logText = callTool(t, srv, "vor_pipeline_log", map[string]any{"limit": 20})
-		if strings.Contains(logText, "completed") && strings.Contains(logText, "parse") {
-			break
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	if !strings.Contains(logText, "completed") || !strings.Contains(logText, "parse") {
-		t.Errorf("pipeline_log missing completed phases: %s", logText)
-	}
-}
-
-func TestReindex_DoesNotDoubleFire(t *testing.T) {
-	srv, conn, repoID, _ := mutationFixture(t, map[string]string{
-		"main.go": "package main\nfunc main(){}\n", "go.mod": "module x\ngo 1.21\n",
-	})
-	// Seed an in-progress run directly so the guard has something to find.
-	store := pipelinestore.New(conn)
-	job, err := store.Begin(context.Background(), repoID, "parse", "stuck-run")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Start(context.Background(), job.ID); err != nil {
-		t.Fatal(err)
-	}
-
-	text := callTool(t, srv, "vor_reindex", nil)
-	var out struct {
-		Status string `json:"status"`
-		RunID  string `json:"runId"`
-	}
-	_ = json.Unmarshal([]byte(text), &out)
-	if out.Status != "already_running" {
-		t.Errorf("expected already_running, got %s", text)
-	}
-	if out.RunID != "stuck-run" {
-		t.Errorf("expected the in-progress run id, got %s", out.RunID)
-	}
 }
 
 func TestSecurityScan_StoresAndReadsBack(t *testing.T) {

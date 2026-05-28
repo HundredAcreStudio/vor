@@ -175,13 +175,6 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolPipelineLog))
 
 	s.srv.AddTool(mcp.NewTool(
-		"vor_reindex",
-		mcp.WithDescription("Re-index a repo so the data reflects current source. ASYNCHRONOUS: returns a run_id immediately and runs in the background — poll vor_pipeline_log for phase progress. Mode 'update' (default) is incremental (reuses the parse cache); 'init' forces a full pass. A run already in progress is returned rather than duplicated."),
-		mcp.WithString("repo", mcp.Description(repoArgDesc)),
-		mcp.WithString("mode", mcp.DefaultString("update"), mcp.Description("'update' (incremental, default) or 'init' (full re-index).")),
-	), s.wrap(s.toolReindex))
-
-	s.srv.AddTool(mcp.NewTool(
 		"vor_security_scan",
 		mcp.WithDescription("Run the pattern-based security scanner over the repo and replace stored findings. Synchronous (regex over source — no LLM). Returns a severity breakdown; read individual findings with vor_security."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
