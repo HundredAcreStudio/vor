@@ -54,10 +54,9 @@ type Options struct {
 	// workspace case — appended to WorkspaceRoots at construction.
 	WorkspaceRoot string
 
-	// WorkspaceRoots is the multi-workspace form, used by
-	// `vor serve --auto` to span every registered workspace.
-	// Alias resolution searches each root in order; the first match
-	// wins. vor_workspace_repos unions members across all roots.
+	// WorkspaceRoots is the multi-workspace form: alias resolution
+	// searches each root in order and the first match wins;
+	// vor_workspace_repos unions members across all roots.
 	WorkspaceRoots []string
 
 	// Provider powers the LLM-synthesis tools (get_answer, get_why).

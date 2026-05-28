@@ -17,11 +17,10 @@
 //	                       workspace_root). Written by `vor
 //	                       serve` on startup, cleared on graceful
 //	                       shutdown.
-//	  workspaces.yaml      registry of known workspace roots so the
-//	                       daemon / status command don't need --root
-//	                       on every invocation.
-//	  watched.json         per-repo last-watched / last-update
-//	                       timestamps maintained by `vor watch`.
+//
+// The set of repos the daemon tracks lives in the database (the
+// repositories table's tracked/ephemeral columns), not here — see
+// `vor register` / `vor unregister`.
 package userconfig
 
 import (
@@ -87,24 +86,6 @@ func DaemonPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "daemon.json"), nil
-}
-
-// WorkspacesPath returns the canonical path to workspaces.yaml.
-func WorkspacesPath() (string, error) {
-	dir, err := StateDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "workspaces.yaml"), nil
-}
-
-// WatchedPath returns the canonical path to watched.json.
-func WatchedPath() (string, error) {
-	dir, err := StateDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "watched.json"), nil
 }
 
 func ensureDir(p string) (string, error) {

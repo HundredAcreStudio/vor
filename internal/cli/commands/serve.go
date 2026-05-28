@@ -51,7 +51,6 @@ func newServeCmd() *cobra.Command {
 		mcpEnabled      bool
 		workspaceMode   bool
 		workspaceRootIn string
-		autoMode        bool
 		watchEnabled    bool
 	)
 	cmd := &cobra.Command{
@@ -89,7 +88,7 @@ repository id. An explicit --repo/--workspace scopes to that tree instead.`,
 			// DB (VOR_DB_URL, else the state-dir wiki.db) and watches the
 			// registered/tracked repos. An explicit --repo/--workspace scopes
 			// to that tree's own DB instead.
-			explicitScope := workspaceMode || autoMode || cmd.Flags().Changed("repo")
+			explicitScope := workspaceMode || cmd.Flags().Changed("repo")
 			dbURL := cfg.DatabaseURL
 			if dbURL == "" && !explicitScope {
 				dir, derr := userconfig.StateDir()
@@ -171,7 +170,7 @@ repository id. An explicit --repo/--workspace scopes to that tree instead.`,
 			}
 
 			if mcpEnabled {
-				handler, err := buildMCPHandler(ctx, conn, cfg, logger, repoPath, workspaceRootIn, autoMode, workspaceMode, explicitScope, defaultRepoID, reg)
+				handler, err := buildMCPHandler(ctx, conn, cfg, logger, repoPath, workspaceRootIn, workspaceMode, explicitScope, defaultRepoID, reg)
 				if err != nil {
 					return err
 				}
@@ -230,21 +229,20 @@ repository id. An explicit --repo/--workspace scopes to that tree instead.`,
 	cmd.Flags().BoolVar(&mcpEnabled, "mcp", true, "mount the MCP server at /mcp (default true)")
 	cmd.Flags().BoolVar(&workspaceMode, "workspace", false, "serve every repo registered in the workspace")
 	cmd.Flags().StringVar(&workspaceRootIn, "workspace-root", "", "workspace root (defaults to --repo when --workspace is set)")
-	cmd.Flags().BoolVar(&autoMode, "auto", false, "serve every workspace in the user-global registry (`vor workspace register`)")
 	cmd.Flags().BoolVar(&watchEnabled, "watch", true, "auto-reindex on startup and on source changes; overrides config `watch.enabled` (default true)")
 	return cmd
 }
 
 // buildMCPHandler wires an MCP server (LLM synthesis when configured) and
 // returns its Streamable-HTTP handler for mounting at /mcp.
-func buildMCPHandler(ctx context.Context, conn *sql.DB, cfg config.Config, logger *slog.Logger, repoPath, workspaceRootIn string, autoMode, workspaceMode, explicitScope bool, defaultRepoID string, reg *registry.Registrar) (http.Handler, error) {
+func buildMCPHandler(ctx context.Context, conn *sql.DB, cfg config.Config, logger *slog.Logger, repoPath, workspaceRootIn string, workspaceMode, explicitScope bool, defaultRepoID string, reg *registry.Registrar) (http.Handler, error) {
 	provider, model := buildOptionalProvider(cfg)
 	embedder, _ := buildEmbedder(cfg)
 	mcpOpts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model, Embedder: embedder, Registrar: reg}
 	if provider != nil {
 		logger.Info("serve: LLM synthesis enabled", "provider", cfg.Provider)
 	}
-	if err := configureMCPScope(ctx, conn, logger, &mcpOpts, repoPath, workspaceRootIn, autoMode, workspaceMode, explicitScope, defaultRepoID); err != nil {
+	if err := configureMCPScope(ctx, conn, logger, &mcpOpts, repoPath, workspaceRootIn, workspaceMode, explicitScope, defaultRepoID); err != nil {
 		return nil, err
 	}
 	mcpSrv, err := mcp.New(mcpOpts)
@@ -256,33 +254,11 @@ func buildMCPHandler(ctx context.Context, conn *sql.DB, cfg config.Config, logge
 }
 
 // configureMCPScope sets the repo/workspace targeting on mcpOpts for the
-// selected serve mode: --auto (every registered workspace), --workspace
-// (one workspace), explicit --repo (single), or the bare daemon (no
-// default unless exactly one repo is tracked — clients address repos by
-// the `repo` argument).
-func configureMCPScope(ctx context.Context, conn *sql.DB, logger *slog.Logger, mcpOpts *mcp.Options, repoPath, workspaceRootIn string, autoMode, workspaceMode, explicitScope bool, defaultRepoID string) error {
+// selected serve mode: --workspace (one workspace), explicit --repo
+// (single), or the bare daemon (no default unless exactly one repo is
+// tracked — clients address repos by the `repo` argument).
+func configureMCPScope(ctx context.Context, conn *sql.DB, logger *slog.Logger, mcpOpts *mcp.Options, repoPath, workspaceRootIn string, workspaceMode, explicitScope bool, defaultRepoID string) error {
 	switch {
-	case autoMode:
-		reg, err := userconfig.LoadWorkspaces()
-		if err != nil {
-			return fmt.Errorf("load workspaces registry: %w", err)
-		}
-		if len(reg.Workspaces) == 0 {
-			return fmt.Errorf("no workspaces registered — `vor workspace register PATH`")
-		}
-		for _, w := range reg.Workspaces {
-			mcpOpts.WorkspaceRoots = append(mcpOpts.WorkspaceRoots, w.Path)
-		}
-		// Default repo: the default alias of the first registered workspace,
-		// so no-`repo` calls still work.
-		if first, err := workspace.Load(reg.Workspaces[0].Path); err == nil && first.DefaultAlias != "" {
-			if e, ok := first.Lookup(first.DefaultAlias); ok {
-				if id, err := mcp.ResolveRepositoryID(ctx, conn, e.Path); err == nil {
-					mcpOpts.RepositoryID = id
-				}
-			}
-		}
-		logger.Info("serve: auto mode", "workspaces", len(reg.Workspaces))
 	case workspaceMode:
 		root := workspaceRootIn
 		if root == "" {
