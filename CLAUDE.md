@@ -11,15 +11,15 @@
 > (documentation, ownership, history, decisions). **Always verify against
 > actual source files before making changes** — the index may be stale.
 
-Last indexed: 2026-05-28 19:19:20Z (commit 9f931cb954f2).
+Last indexed: 2026-05-28 19:27:44Z (commit 671ca7a58d39).
 
 ## Indexed state
 
 - **Files indexed**: 272
 - **Symbols indexed**: 2812
 - **Wiki pages generated**: 0
-- **Health findings**: 678
-  - brain_method=30, deep_nesting=25, duplication=374, feature_envy=38, hidden_coupling=24, high_complexity=92, long_function=63, long_parameter_list=25, shotgun_surgery=4, untested_hotspot=3
+- **Health findings**: 679
+  - brain_method=30, deep_nesting=25, duplication=374, feature_envy=38, hidden_coupling=25, high_complexity=92, long_function=63, long_parameter_list=25, shotgun_surgery=4, untested_hotspot=3
 
 ## Entry points
 
