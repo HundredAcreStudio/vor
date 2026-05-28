@@ -98,6 +98,10 @@ func TestClaudeMd_Stdout(t *testing.T) {
 	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
 		t.Fatal(err)
 	}
+	// `update` auto-regenerates CLAUDE.md (matches the Python flow).
+	// Delete it so we can assert --stdout doesn't re-create it.
+	_ = os.RemoveAll(filepath.Join(tmp, ".claude"))
+
 	stdout, _, err := runRepowiseCmd(t, nil, "claude-md", "--stdout", tmp)
 	if err != nil {
 		t.Fatal(err)
@@ -105,9 +109,24 @@ func TestClaudeMd_Stdout(t *testing.T) {
 	if !strings.Contains(stdout, "REPOWISE:START") {
 		t.Error("stdout output missing marker")
 	}
-	// --stdout should NOT write a file.
 	if _, err := os.Stat(filepath.Join(tmp, ".claude", "CLAUDE.md")); !os.IsNotExist(err) {
 		t.Error("--stdout should not create a file")
+	}
+}
+
+// TestUpdate_AutoRegeneratesClaudeMd documents the auto-regen
+// contract: every `update` writes <repo>/.claude/CLAUDE.md.
+func TestUpdate_AutoRegeneratesClaudeMd(t *testing.T) {
+	tmp, _, _ := repoFixture(t)
+	if _, _, err := runRepowiseCmd(t, nil, "update", tmp); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(tmp, ".claude", "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("update did not auto-write CLAUDE.md: %v", err)
+	}
+	if !strings.Contains(string(body), "REPOWISE:START") {
+		t.Errorf("auto-regen output missing REPOWISE:START marker: %q", body)
 	}
 }
 

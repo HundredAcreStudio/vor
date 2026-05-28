@@ -107,6 +107,24 @@ Use --stdout to preview the rendered output without writing.`,
 	return cmd
 }
 
+// regenerateClaudeMd runs the data collection + merge that the
+// claude-md command does, but with no flag handling — meant to be
+// called from init/update so users don't need a separate command
+// invocation to keep CLAUDE.md in sync with the indexed state.
+//
+// Errors here are non-fatal at the call site: a broken CLAUDE.md
+// regen shouldn't block a successful re-index. The caller is
+// expected to surface the error as a warning, not propagate it.
+func regenerateClaudeMd(ctx context.Context, conn *sql.DB, repoID, absRoot string) error {
+	data, err := collectClaudeMdData(ctx, conn, repoID, absRoot)
+	if err != nil {
+		return fmt.Errorf("collect data: %w", err)
+	}
+	managed := renderClaudeMdManaged(data)
+	dest := filepath.Join(absRoot, ".claude", "CLAUDE.md")
+	return writeClaudeMd(dest, managed)
+}
+
 // claudeMdData is the projection feed for the template. Light and
 // nullable — missing pieces just render as empty sections.
 type claudeMdData struct {

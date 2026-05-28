@@ -93,6 +93,18 @@ inspect the most recent runs.`,
 				return err
 			}
 			printRunSummary(cmd, result, false)
+
+			// Auto-regenerate CLAUDE.md from the freshly-indexed state.
+			// Mirrors the Python flow: every init/update produces a
+			// fresh managed block under <repo>/.claude/CLAUDE.md
+			// without touching content above the REPOWISE:START
+			// marker. No LLM calls — just structured SQL queries.
+			if mdErr := regenerateClaudeMd(ctx, conn, repoRow.ID, absRoot); mdErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: CLAUDE.md auto-regen skipped: %v\n", mdErr)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "CLAUDE.md regenerated at %s\n",
+					filepath.Join(absRoot, ".claude", "CLAUDE.md"))
+			}
 			return nil
 		},
 	}

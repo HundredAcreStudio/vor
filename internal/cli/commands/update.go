@@ -71,6 +71,14 @@ For a force-rebuild that wipes prior state before re-indexing, use
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "\nupdate complete (run %s, %d phases)\n",
 				res.RunID, len(res.Phases))
+
+			// Auto-regenerate CLAUDE.md so the indexed context stays
+			// in sync with the source. Matches the Python flow.
+			if mdErr := regenerateClaudeMd(ctx, conn, repoRow.ID, absRoot); mdErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: CLAUDE.md auto-regen skipped: %v\n", mdErr)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "CLAUDE.md regenerated\n")
+			}
 			return nil
 		},
 	}
