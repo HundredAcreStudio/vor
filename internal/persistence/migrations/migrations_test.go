@@ -81,16 +81,16 @@ func TestUp_SQLite(t *testing.T) {
 	}
 
 	// Down rolls back the most-recent migration only (goose semantics),
-	// so the latest table (embeddings, from 0002) should disappear while
-	// the 0001 tables remain.
+	// so the latest table (parse_cache, from 0003) should disappear while
+	// the earlier tables remain.
 	if err := Down(ctx, conn, dialect); err != nil {
 		t.Fatalf("Down: %v", err)
 	}
 	var probe string
 	row := conn.QueryRowContext(ctx,
-		`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`, "embeddings")
+		`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`, "parse_cache")
 	if err := row.Scan(&probe); err == nil {
-		t.Errorf("embeddings table still present after one Down")
+		t.Errorf("parse_cache table still present after one Down")
 	}
 	// A 0001 table should survive a single-step Down.
 	row = conn.QueryRowContext(ctx,

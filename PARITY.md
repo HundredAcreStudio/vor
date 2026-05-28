@@ -156,15 +156,18 @@ and provider-agnostic.
 
 ## Subsystems with full parity
 
-- Persistence: 28-table schema (SQLite + Postgres), consolidates
-  Python's 24 alembic migrations.
+- Persistence: 31-table schema (SQLite + Postgres), consolidates
+  Python's 24 alembic migrations; plus embeddings + parse-cache.
 - Traverser: gitignore semantics, binary + generated-file detection.
-- Graph: PageRank, SCC/community ids, multi-edge persistence.
+- Graph: PageRank, Louvain community ids, multi-edge persistence.
 - Git intelligence: hotspots, ownership, co-change, bus factor.
 - Dead-code detection.
 - Decision intelligence: inline markers, ADR, CHANGELOG, commit
   archaeology (4 sources).
-- Pipeline orchestration: phase tracking, run_id grouping, resume.
+- External + API-contract extraction: npm/pypi/cargo/go.mod/nuget deps
+  plus OpenAPI/gRPC/GraphQL contracts.
+- Pipeline orchestration: phase tracking, run_id grouping, resume,
+  incremental parse cache (re-parse only changed files on `update`).
 
 ---
 

@@ -10,7 +10,10 @@ package pipeline
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -60,6 +63,7 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/persistence/gitstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
+	"github.com/repowise-dev/repowise-go/internal/persistence/parsestore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/pipelinestore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 )
@@ -71,8 +75,11 @@ type Mode string
 const (
 	// ModeInit is the first-time index of a repository.
 	ModeInit Mode = "init"
-	// ModeUpdate is an incremental re-index (no-op vs init for now;
-	// distinguishes user intent in pipeline_jobs.metadata).
+	// ModeUpdate is an incremental re-index. The parse phase reuses cached
+	// parse results for files whose content is unchanged (see parserVersion
+	// + parsestore), re-parsing only changed/new files and pruning deleted
+	// ones. Init and update run the same phases; the cache is what makes
+	// update cheap on large repos.
 	ModeUpdate Mode = "update"
 	// ModeResume continues the most recent unfinished run for the repo.
 	// At the start of Run() we look up the latest run via
@@ -100,6 +107,11 @@ const (
 	PhaseDecisions = "decisions"
 	PhasePersist   = "persist"
 )
+
+// parserVersion tags parse-cache rows. Bump it whenever a grammar upgrade
+// or extraction change could alter parse output for unchanged source, so
+// stale cache entries are transparently invalidated.
+const parserVersion = "1"
 
 // Options configures a pipeline run.
 type Options struct {
@@ -143,6 +155,11 @@ type Result struct {
 	Decisions      []decisions.Record
 	TraversalStats models.TraversalStats
 
+	// ParseStats reports incremental-parse outcomes for the run: how many
+	// files were freshly parsed vs reused from the cache, and how many
+	// stale cache rows were pruned.
+	ParseStats ParseStats
+
 	// Phases records the IDs of pipeline_jobs rows written this run, in
 	// execution order. Useful for tests + the "show pipeline history"
 	// CLI surface.
@@ -153,6 +170,14 @@ type Result struct {
 	// Useful for resume — a caller can ask "what run did I just kick
 	// off?" without parsing pipeline_jobs.
 	RunID string
+}
+
+// ParseStats summarises the incremental-parse outcome for a run.
+type ParseStats struct {
+	Total  int // files with a registered parser
+	Parsed int // freshly parsed (changed/new or cache miss)
+	Reused int // served from the parse cache (unchanged)
+	Pruned int // stale cache rows removed (deleted files)
 }
 
 // PhaseRecord is one line in the run log.
@@ -227,9 +252,25 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 		return res, err
 	}
 
-	// Phase: parse.
+	// Phase: parse. Incremental: files whose content hash + parser version
+	// match a cached entry skip the (expensive, cgo) tree-sitter parse and
+	// reuse the stored result. Changed/new files are re-parsed and cached;
+	// deleted files are pruned from the cache.
 	if err := runPhase(ctx, opts, store, PhaseParse, res, func() error {
 		ap := parser.New()
+		useCache := opts.DB != nil && opts.RepositoryID != ""
+		pstore := parsestore.New(opts.DB)
+
+		var cache map[string]parsestore.Cached
+		if useCache {
+			if c, err := pstore.LoadAll(ctx, opts.RepositoryID, parserVersion); err == nil {
+				cache = c
+			}
+		}
+
+		var dirty []parsestore.Entry
+		var keep []string
+		var stats ParseStats
 		for _, fi := range res.Files {
 			if parser.LookupParser(fi.Language) == nil {
 				continue
@@ -238,12 +279,48 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 			if err != nil {
 				continue
 			}
+			stats.Total++
+			keep = append(keep, fi.Path)
+			h := sha256Hex(data)
+
+			if c, ok := cache[fi.Path]; ok && c.ContentHash == h {
+				var pf models.ParsedFile
+				if json.Unmarshal(c.ParsedJSON, &pf) == nil {
+					pf.FileInfo = fi // re-attach the live FileInfo
+					res.Parsed = append(res.Parsed, pf)
+					stats.Reused++
+					continue
+				}
+			}
+
 			pf, err := ap.Parse(ctx, fi, data)
 			if err != nil {
 				continue // tolerate per-file parse errors
 			}
 			res.Parsed = append(res.Parsed, pf)
+			stats.Parsed++
+			// Cache without the volatile FileInfo (paths/mtimes come from the
+			// live traversal on reload).
+			cp := pf
+			cp.FileInfo = models.FileInfo{}
+			if b, mErr := json.Marshal(cp); mErr == nil {
+				dirty = append(dirty, parsestore.Entry{Path: fi.Path, ContentHash: h, ParsedJSON: b})
+			}
 		}
+
+		if useCache {
+			if err := pstore.Upsert(ctx, opts.RepositoryID, parserVersion, dirty); err != nil {
+				opts.Logger.Warn("parse cache upsert failed", "err", err)
+			}
+			if n, err := pstore.Prune(ctx, opts.RepositoryID, keep); err != nil {
+				opts.Logger.Warn("parse cache prune failed", "err", err)
+			} else {
+				stats.Pruned = n
+			}
+		}
+		res.ParseStats = stats
+		opts.Logger.Info("parse phase", "parsed", stats.Parsed, "reused", stats.Reused,
+			"pruned", stats.Pruned, "total", stats.Total)
 		return nil
 	}); err != nil {
 		return res, err
@@ -445,6 +522,12 @@ func runPhase(ctx context.Context, opts Options, store *pipelinestore.Store, pha
 // filesystem abstraction.
 func readFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
+}
+
+// sha256Hex returns the hex-encoded SHA-256 of data — the parse-cache key.
+func sha256Hex(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 // newRunID generates a fresh run_id. Format mirrors pipelinestore.newID

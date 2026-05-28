@@ -18,8 +18,11 @@ import (
 	// Side-effect imports: ingest's registry hooks need to fire here too.
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/cargo"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/graphql"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/npm"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/nuget"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/openapi"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/protobuf"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/pypi"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/cpp"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/parser/csharp"

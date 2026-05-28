@@ -43,8 +43,11 @@ import (
 	// Side-effect imports: each manifest extractor registers itself.
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/cargo"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/gomod"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/graphql"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/npm"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/nuget"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/openapi"
+	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/protobuf"
 	_ "github.com/repowise-dev/repowise-go/internal/ingestion/external/pypi"
 
 	// Side-effect imports: each per-language import resolver registers

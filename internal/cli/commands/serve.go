@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -200,6 +203,10 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 			}
 			defer func() { _ = userconfig.ClearDaemon() }()
 
+			if mcpEnabled {
+				printMCPInstructions(cmd.OutOrStdout(), bind)
+			}
+
 			if err := srv.ListenAndServe(ctx); err != nil && !errors.Is(err, context.Canceled) {
 				return err
 			}
@@ -213,4 +220,38 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 	cmd.Flags().StringVar(&workspaceRootIn, "workspace-root", "", "workspace root (defaults to --repo when --workspace is set)")
 	cmd.Flags().BoolVar(&autoMode, "auto", false, "serve every workspace in the user-global registry (`repowise workspace register`)")
 	return cmd
+}
+
+// printMCPInstructions writes copy-paste instructions for attaching an MCP
+// client to the running daemon. bind is the listen address (e.g. ":7337"
+// or "0.0.0.0:7337"); we render a reachable localhost URL from it.
+func printMCPInstructions(out io.Writer, bind string) {
+	host, port, err := net.SplitHostPort(bind)
+	if err != nil {
+		host, port = "", strings.TrimPrefix(bind, ":")
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "localhost"
+	}
+	url := fmt.Sprintf("http://%s/mcp", net.JoinHostPort(host, port))
+
+	fmt.Fprintf(out, `
+MCP server ready at %s
+
+Connect an AI coding agent to this daemon:
+
+  Claude Code:
+    claude mcp add --transport http repowise %s
+
+  Cursor / generic MCP clients — add to the client's mcp.json:
+    {
+      "mcpServers": {
+        "repowise": { "transport": "http", "url": "%s" }
+      }
+    }
+
+The daemon serves every indexed repo in its database; MCP tools accept a
+`+"`repo`"+` argument to target one (see repowise_workspace_repos).
+
+`, url, url, url)
 }

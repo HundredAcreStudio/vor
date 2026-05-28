@@ -19,12 +19,12 @@ working binary and tests, same as the original plan.
 | Area | Shipped | Known gap |
 |---|---|---|
 | Persistence | SQLite + Postgres, goose, 29 tables, FTS, vector store | pgvector/LanceDB native index |
-| Ingestion | 14 parsers, graph + metrics, externals (5 ecosystems) | API-contract extraction (Phase 13 ✅) |
+| Ingestion | 14 parsers, graph + metrics, externals (5 ecosystems + OpenAPI/gRPC/GraphQL contracts) | — (Phase 15 ✅) |
 | Git intelligence | hotspots, ownership, co-change, bus factor | — |
 | Providers | Mock + Anthropic + OpenAI/Gemini/Ollama/LiteLLM, cost/retry/ratelimit middleware | — (Phase 12 ✅) |
 | Generation | pages (file/dir/symbol), context (RAG), templates, resume | architecture page kind |
 | Analysis | 11 biomarkers, dead code, 4-source decisions, Louvain communities, coverage ingest, security scan | ~6 more biomarkers; Leiden; trends/governance (Phase 14 ✅) |
-| Pipeline | init/update, phase timing, checkpoint/resume | true incremental (update == full re-index today) |
+| Pipeline | init/update (incremental parse cache), phase timing, checkpoint/resume | graph/git still rebuilt fully (Phase 15 ✅ for parse) |
 | Server | HTTP `/api`, MCP (22 tools, stdio + Streamable HTTP) | webhooks, scheduler |
 | CLI | full command set, `--repo`/`--repo-id`, semantic search | charmbracelet TUI, editor MCP registration |
 | Workspace | multi-repo registry, cross-repo co-change, `serve --auto` | — |
@@ -104,23 +104,28 @@ Deferred (not blocking): the remaining ~6 biomarkers (congestion,
 knowledge loss, code-age volatility, …), Leiden, and health
 trends/governance depth — the framework is in place to add them.
 
-## Phase 15 — Incremental indexing & API-contract extraction
+## ✅ Phase 15 — Incremental indexing & API-contract extraction (done)
 
-`update` currently re-runs the full pipeline (`ModeUpdate` is a no-op
-vs. `init`). Real incremental indexing is the biggest single perf win.
+- ✅ **Incremental parse**: a per-file `parse_cache` (content hash +
+  `parserVersion`) backed by `parsestore`. The pipeline parse phase
+  reuses cached results for unchanged files, re-parses only changed/new
+  ones, and prunes deleted files — skipping the dominant (cgo
+  tree-sitter) cost on `update`. Run `Result.ParseStats` reports
+  parsed/reused/pruned; verified: edit one file → exactly one re-parse,
+  delete one → one prune, unchanged re-index → zero parses. A
+  `parserVersion` bump transparently invalidates the whole cache.
+- ✅ **API-contract extraction** via three new external extractors fed
+  through the existing externals phase: OpenAPI/Swagger (YAML+JSON) →
+  `METHOD /path` endpoints, protobuf → gRPC services + `Service.Rpc`
+  methods, GraphQL SDL → type/input/enum/interface definitions. They
+  land in `external_systems` (ecosystems openapi/grpc/graphql).
 
-- `ChangeDetector`: diff content hashes against persisted state, parse
-  and re-graph only changed files, prune deleted ones.
-- Wire it into the pipeline so `update` is genuinely incremental and
-  `watch` stays cheap on large repos.
-- API-contract **extraction** (not just filename detection): pull HTTP
-  routes from OpenAPI/Swagger, services/messages from protobuf, types
-  from GraphQL SDL, build steps from Dockerfiles/CI into
-  `external_systems`.
+`repowise serve` now also prints copy-paste MCP client-install
+instructions (Claude Code + generic `mcp.json`) at startup.
 
-**Acceptance:** editing one file re-indexes only that file (assert via
-pipeline log / timing); OpenAPI + proto fixtures produce extracted
-endpoints/services in the graph.
+Deferred (not blocking): graph + git intelligence still run fully each
+re-index (incremental there is a separate, harder problem); Dockerfile /
+CI build-step extraction.
 
 ## Phase 16 — Risk & knowledge intelligence
 

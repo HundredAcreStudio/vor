@@ -97,6 +97,8 @@ For a feature-by-feature comparison against the Python implementation
 | Parsers — Go / Python / TypeScript / JavaScript / Rust / Java / C / C++ / C# | ✅ |
 | Parsers — Ruby / PHP / Swift / Kotlin / Scala / Lua-Luau | ✅ |
 | External extractors — npm / pypi / cargo / go.mod / nuget | ✅ |
+| API-contract extraction — OpenAPI/Swagger endpoints, gRPC services, GraphQL types | ✅ |
+| Incremental indexing — content-hash parse cache (`update` re-parses only changed files) | ✅ |
 | Graph build + PageRank + SCC + multi-edge persistence | ✅ |
 | Git intelligence — hotspots, ownership, co-change, bus factor | ✅ |
 | Dead code detection | ✅ |
@@ -113,6 +115,7 @@ For a feature-by-feature comparison against the Python implementation
 | MCP server — stdio **and** Streamable HTTP, 23 tools (LLM-synthesis get_answer/get_why/get_context + graph-traversal community/dependency-path/flows/architecture + security), per-call repo routing | ✅ |
 | Workspace / multi-repo — bulk ops, cross-repo co-change, `serve --auto` | ✅ |
 | Pipeline orchestrator — phase tracking, run_id grouping, resume | ✅ |
+| `serve` prints MCP client-install instructions (Claude Code / mcp.json) at startup | ✅ |
 | Auto CLAUDE.md regeneration on init/update | ✅ |
 | Parity testing & polish vs Python (Phase 11) | ⏳ |
 
