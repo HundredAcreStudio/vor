@@ -1,0 +1,14 @@
+# Keep the build context small and free of host state.
+.git
+bin/
+.vor/
+**/.vor/
+*.db
+*.sqlite
+*.sqlite3
+# Node / UI build artifacts (the UI image has its own context).
+ui/node_modules/
+node_modules/
+# Editor / OS cruft
+.DS_Store
+*.log

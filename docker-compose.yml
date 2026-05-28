@@ -1,0 +1,64 @@
+# vor — containerized daemon (+ a future UI container).
+#
+# The server is machine-wide: it serves every repo registered into its
+# database. The database and the global config are mounted in; source repos
+# to index are mounted under /repos and registered by their in-container
+# path. (Eventually config + registry all live in the DB and the UI drives
+# it — for now the DB volume is the source of truth.)
+#
+# Quick start:
+#   docker compose up -d --build
+#   docker compose exec server vor register /repos/myrepo
+#   curl localhost:7337/api/repos/tracked
+#
+# NOTE: on Docker Desktop for macOS, filesystem events for bind-mounted host
+# dirs don't always reach the watcher (virtiofs/inotify gap). Auto-reindex on
+# change may be unreliable there; `vor reindex` / re-register still work. On
+# Linux hosts, bind-mount inotify works normally.
+
+services:
+  server:
+    build:
+      context: .
+      args:
+        VERSION: ${VOR_VERSION:-docker}
+        COMMIT: ${VOR_COMMIT:-unknown}
+    image: vor-server
+    ports:
+      - "7337:7337"
+    volumes:
+      # Database — survives restarts; the registry of tracked repos lives here.
+      - vor-data:/data
+      # Global config.yaml (settings only). Mounted read-only; must exist on
+      # the host. Override the host path with VOR_CONFIG_DIR.
+      - ${VOR_CONFIG_DIR:-${HOME}/.config/vor}:/config/vor:ro
+      # Source repos to register + watch. Override with VOR_REPOS_DIR.
+      - ${VOR_REPOS_DIR:-./repos}:/repos
+    environment:
+      VOR_HOST: "0.0.0.0"
+      VOR_DB_URL: "sqlite:/data/wiki.db"
+      XDG_CONFIG_HOME: /config
+      # Provider keys for LLM-backed tools are env-only (never the config
+      # file). Pass through from the host shell if you use them.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    restart: unless-stopped
+
+  # UI container — not built yet. Expects ui/Dockerfile and talks to the
+  # server over the compose network at http://server:7337. Uncomment once
+  # the UI exists.
+  #
+  # ui:
+  #   build:
+  #     context: ./ui
+  #   image: vor-ui
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     VOR_API_URL: "http://server:7337"
+  #   depends_on:
+  #     - server
+  #   restart: unless-stopped
+
+volumes:
+  vor-data:
