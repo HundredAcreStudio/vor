@@ -16,6 +16,7 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/logging"
 	rhttp "github.com/repowise-dev/repowise-go/internal/server/http"
 	"github.com/repowise-dev/repowise-go/internal/server/mcp"
+	"github.com/repowise-dev/repowise-go/internal/userconfig"
 	"github.com/repowise-dev/repowise-go/internal/workspace"
 )
 
@@ -143,6 +144,27 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 			if err != nil {
 				return err
 			}
+
+			// Record the daemon in ~/.local/state/repowise/daemon.json
+			// so `repowise status` (or a future watch/auto-attach
+			// flow) can detect it. Stale records after a hard kill are
+			// caught by DaemonInfo.Alive() in the status path.
+			daemonInfo := &userconfig.DaemonInfo{
+				PID:         os.Getpid(),
+				Addr:        bind,
+				StartedAt:   time.Now().UTC(),
+				DatabaseURL: cfg.DatabaseURL,
+			}
+			if workspaceMode {
+				if root, err := filepath.Abs(repoPath); err == nil {
+					daemonInfo.WorkspaceRoot = root
+				}
+			}
+			if err := userconfig.SaveDaemon(daemonInfo); err != nil {
+				logger.Warn("could not record daemon state", "err", err)
+			}
+			defer func() { _ = userconfig.ClearDaemon() }()
+
 			if err := srv.ListenAndServe(ctx); err != nil && !errors.Is(err, context.Canceled) {
 				return err
 			}

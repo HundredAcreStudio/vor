@@ -14,6 +14,7 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
+	"github.com/repowise-dev/repowise-go/internal/userconfig"
 )
 
 // newStatusCmd reads the persisted database for the configured repo and
@@ -43,6 +44,22 @@ func newStatusCmd() *cobra.Command {
 
 			tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 			defer tw.Flush()
+			// Daemon record — printed first so the user sees the
+			// big-picture "is anything running on this box" line
+			// before drilling into one repo's numbers.
+			if info, _ := userconfig.LoadDaemon(); info != nil {
+				alive := info.Alive()
+				state := "stale (process gone)"
+				if alive {
+					state = "running"
+				}
+				fmt.Fprintf(tw, "daemon\t%s\tpid=%d  addr=%s  since=%s\n",
+					state, info.PID, info.Addr, info.StartedAt.Format("2006-01-02 15:04:05"))
+				if info.WorkspaceRoot != "" {
+					fmt.Fprintf(tw, "  workspace\t%s\n", info.WorkspaceRoot)
+				}
+				fmt.Fprintln(tw)
+			}
 			fmt.Fprintf(tw, "repository\t%s\n", repoRow.Name)
 			fmt.Fprintf(tw, "local path\t%s\n", repoRow.LocalPath)
 			if repoRow.HeadCommit != "" {

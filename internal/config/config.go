@@ -106,11 +106,25 @@ func Defaults() Config {
 	}
 }
 
-// Load resolves the configuration for the given repo path. It applies
-// defaults, then merges .repowise/config.yaml (if present), then env vars.
-// A missing config file is not an error.
+// Load resolves the configuration for the given repo path. The merge
+// chain is, in increasing precedence:
+//
+//   defaults  →  ~/.config/repowise/config.yaml  →
+//   <repo>/.repowise/config.yaml                 →
+//   REPOWISE_* env vars
+//
+// A missing config file at any layer is not an error — that layer is
+// just skipped.
 func Load(repoPath string) (Config, error) {
 	cfg := Defaults()
+
+	// User-global config: same shape as the per-repo file, but lives
+	// in $XDG_CONFIG_HOME/repowise/config.yaml. Loaded via the
+	// userconfig package so XDG resolution is shared with the rest
+	// of the daemon-state plumbing.
+	if userCfg, err := loadUserGlobal(); err == nil && userCfg != nil {
+		cfg = mergeFile(cfg, *userCfg)
+	}
 
 	if repoPath != "" {
 		configPath := filepath.Join(repoPath, ".repowise", "config.yaml")
@@ -125,6 +139,47 @@ func Load(repoPath string) (Config, error) {
 
 	applyEnv(&cfg)
 	return cfg, nil
+}
+
+// loadUserGlobal reads the user-global ~/.config/repowise/config.yaml
+// and projects it onto the Config shape. Returns (nil, nil) when no
+// file exists — that just means "no user-global overrides". Live in
+// this file rather than the userconfig package to avoid a cycle when
+// userconfig imports config in tests.
+func loadUserGlobal() (*Config, error) {
+	dir := userConfigDirHook()
+	if dir == "" {
+		return nil, nil
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "config.yaml"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	// User-global file uses a subset of Config keys (provider, model,
+	// db_url, log_level, rpm/tpm). Unmarshal into the same Config
+	// struct so mergeFile + applyEnv compose without translation.
+	var c Config
+	if err := yaml.Unmarshal(body, &c); err != nil {
+		return nil, fmt.Errorf("parse user-global config: %w", err)
+	}
+	return &c, nil
+}
+
+// userConfigDirHook resolves $XDG_CONFIG_HOME/repowise without
+// importing userconfig (which would cycle on the test side). Mirrors
+// userconfig.ConfigDir's logic minus the mkdir.
+func userConfigDirHook() string {
+	if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {
+		return filepath.Join(v, "repowise")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "repowise")
 }
 
 // loadFile reads and parses a YAML config file. Returns os.ErrNotExist
