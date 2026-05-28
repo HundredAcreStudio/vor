@@ -83,6 +83,23 @@ func newStatusCmd() *cobra.Command {
 			}
 			fmt.Fprintf(tw, "dead-code findings\t%d\n", summary.DeadCodeFindings)
 			fmt.Fprintf(tw, "code health\tavg %.2f / 10\t(%d findings)\n", summary.AvgHealthScore, summary.HealthFindings)
+
+			// Watched-repos footer. Only renders when watchers have
+			// recorded activity for *this* repo path; otherwise it's
+			// noise — the global registry view lives at
+			// `repowise workspace registered` and (future) a richer
+			// listing command.
+			if reg, _ := userconfig.LoadWatched(); reg != nil {
+				abs := repoRow.LocalPath
+				for _, w := range reg.Repos {
+					if w.Path == abs && w.UpdateCount > 0 {
+						fmt.Fprintln(tw)
+						fmt.Fprintf(tw, "watched\tlast update %s\t(%d updates total)\n",
+							w.LastUpdatedAt.Format("2006-01-02 15:04:05"), w.UpdateCount)
+						break
+					}
+				}
+			}
 			return nil
 		},
 	}

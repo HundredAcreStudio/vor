@@ -19,8 +19,32 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/logging"
 	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 	"github.com/repowise-dev/repowise-go/internal/pipeline"
+	"github.com/repowise-dev/repowise-go/internal/userconfig"
 	"github.com/repowise-dev/repowise-go/internal/workspace"
 )
+
+// recordWatchInRegistry adds path (and optional alias / workspace
+// root) to the user-global watched.json. Errors are silenced —
+// telemetry is non-critical.
+func recordWatchInRegistry(path, alias, workspaceRoot string) {
+	reg, err := userconfig.LoadWatched()
+	if err != nil {
+		return
+	}
+	reg.RecordWatch(path, alias, workspaceRoot)
+	_ = userconfig.SaveWatched(reg)
+}
+
+// recordUpdateInRegistry bumps update_count + last_updated_at for
+// path. Fired once per successful pipeline.Run inside the watch loop.
+func recordUpdateInRegistry(path string) {
+	reg, err := userconfig.LoadWatched()
+	if err != nil {
+		return
+	}
+	reg.RecordUpdate(path)
+	_ = userconfig.SaveWatched(reg)
+}
 
 // newWatchCmd starts a file-watcher that runs `repowise update` after
 // any source change settles. Debounced so a burst of saves (formatter,
@@ -77,6 +101,7 @@ func newWatchCmd() *cobra.Command {
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "watching %s (debounce %dms) — Ctrl-C to stop\n", absRoot, debounceMs)
+			recordWatchInRegistry(absRoot, "", "")
 			return runWatchLoop(ctx, watchOptions{
 				Root:         absRoot,
 				DB:           conn,
@@ -123,6 +148,7 @@ func runWorkspaceWatch(
 	done := make(chan error, len(state.Repos))
 	for _, e := range state.Sorted() {
 		entry := e
+		recordWatchInRegistry(entry.Path, entry.Alias, wsRoot)
 		go func() {
 			conn, _, err := openDB(ctx, entry.Path)
 			if err != nil {
@@ -218,6 +244,10 @@ func runWatchLoop(ctx context.Context, opts watchOptions) error {
 			return
 		}
 		fmt.Fprintln(opts.ProgressOut, "  → updated")
+		// Bump the user-global watched.json so `repowise status` can
+		// surface "this repo was last reindexed at T". Failures are
+		// non-critical telemetry — log + continue, don't abort the loop.
+		recordUpdateInRegistry(opts.Root)
 		if opts.OnUpdate != nil {
 			opts.OnUpdate()
 		}
