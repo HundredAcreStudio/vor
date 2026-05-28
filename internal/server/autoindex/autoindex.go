@@ -35,6 +35,10 @@ import (
 // reindex once the dust settles.
 const defaultDebounce = 1500 * time.Millisecond
 
+// maxConcurrentReindex bounds how many repos reindex at once, so registering
+// or starting up with many repos doesn't stampede the CPU.
+const maxConcurrentReindex = 2
+
 // Options configures a Watcher.
 type Options struct {
 	// DB is the open *sql.DB shared with the serving handlers. Required.
@@ -49,11 +53,18 @@ type Options struct {
 	Debounce time.Duration
 }
 
-// Watcher runs startup reindexes and per-repo filesystem watching.
+// Watcher runs auto-reindex for the daemon's tracked repos. Repos can be
+// added and removed at runtime via Track/Untrack (driven by the
+// register/unregister endpoints), not just at startup.
 type Watcher struct {
 	db       *sql.DB
 	logger   *slog.Logger
 	debounce time.Duration
+	sem      chan struct{} // bounds concurrent reindexes
+
+	mu     sync.Mutex
+	base   context.Context               // daemon lifetime; set by Run
+	active map[string]context.CancelFunc // repoID -> stop its watch goroutine
 }
 
 // New builds a Watcher from opts.
@@ -66,92 +77,129 @@ func New(opts Options) *Watcher {
 	if debounce <= 0 {
 		debounce = defaultDebounce
 	}
-	return &Watcher{db: opts.DB, logger: logger, debounce: debounce}
+	return &Watcher{
+		db:       opts.DB,
+		logger:   logger,
+		debounce: debounce,
+		sem:      make(chan struct{}, maxConcurrentReindex),
+		active:   map[string]context.CancelFunc{},
+	}
 }
 
-// Run reindexes every locally-present repo once, then watches each for
-// changes until ctx is cancelled. It blocks for the daemon's lifetime.
+// Run starts watching every tracked repo, then blocks until ctx is
+// cancelled. New repos registered while running are picked up via Track.
 // An in-flight reindex shares ctx, so shutdown cancels it cleanly.
 func (w *Watcher) Run(ctx context.Context) error {
-	all, err := repos.New(w.db).List(ctx)
+	w.mu.Lock()
+	w.base = ctx
+	w.mu.Unlock()
+
+	tracked, err := repos.New(w.db).ListTracked(ctx)
 	if err != nil {
 		return err
 	}
-
-	var targets []*repoWatcher
-	for _, r := range all {
-		if r.LocalPath == "" {
-			continue
-		}
-		if fi, err := os.Stat(r.LocalPath); err != nil || !fi.IsDir() {
-			w.logger.Warn("auto-reindex: skipping repo whose local path is gone",
-				"repo", r.ID, "path", r.LocalPath)
-			continue
-		}
-
-		// Per-repo override: the daemon-level policy (CLI flag / global
-		// config, captured in w.debounce) is the base; a repo's own
-		// .vor/config.yaml can disable watching for itself or set its own
-		// debounce. We read only the repo-local file so the global layer
-		// isn't counted twice.
-		enabled, debounce := true, w.debounce
-		if rc, ok, err := config.LoadRepoFile(r.LocalPath); err != nil {
-			w.logger.Warn("auto-reindex: cannot read repo config", "repo", r.ID, "err", err)
-		} else if ok {
-			if rc.Watch.Enabled != nil {
-				enabled = *rc.Watch.Enabled
-			}
-			if rc.Watch.Debounce != "" {
-				if d, perr := time.ParseDuration(rc.Watch.Debounce); perr == nil {
-					debounce = d
-				} else {
-					w.logger.Warn("auto-reindex: invalid repo watch.debounce, using daemon default",
-						"repo", r.ID, "value", rc.Watch.Debounce, "err", perr)
-				}
-			}
-		}
-		if !enabled {
-			w.logger.Info("auto-reindex: repo opted out via config, not watching",
-				"repo", r.ID, "path", r.LocalPath)
-			continue
-		}
-
-		targets = append(targets, &repoWatcher{
-			db:       w.db,
-			logger:   w.logger,
-			debounce: debounce,
-			repoID:   r.ID,
-			root:     r.LocalPath,
-		})
+	for _, r := range tracked {
+		w.Track(r.ID, r.LocalPath)
 	}
-	if len(targets) == 0 {
-		w.logger.Info("auto-reindex: no local repos to watch")
-		<-ctx.Done()
-		return nil
-	}
+	w.logger.Info("auto-reindex: watching tracked repos", "count", len(tracked))
 
-	// Startup pass: incremental reindex of each repo so first queries are
-	// fresh. Sequential — these share the daemon's CPU with request serving
-	// and there's no value in stampeding them.
-	for _, rw := range targets {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		rw.reindex(ctx, "startup")
-	}
-
-	w.logger.Info("auto-reindex: watching for changes", "repos", len(targets))
-	var wg sync.WaitGroup
-	for _, rw := range targets {
-		wg.Add(1)
-		go func(rw *repoWatcher) {
-			defer wg.Done()
-			rw.watch(ctx)
-		}(rw)
-	}
 	<-ctx.Done()
-	wg.Wait()
+
+	// Cancel any still-running watch goroutines (they also exit on ctx).
+	w.mu.Lock()
+	for _, cancel := range w.active {
+		cancel()
+	}
+	w.mu.Unlock()
 	return nil
+}
+
+// Track begins watching repoID at root: an initial incremental reindex
+// followed by the live fsnotify loop, in a background goroutine. No-ops if
+// the repo is already tracked, its path is gone, or its .vor/config.yaml
+// opts out (watch.enabled: false). Safe to call before or after Run.
+func (w *Watcher) Track(repoID, root string) {
+	if root == "" {
+		return
+	}
+	if fi, err := os.Stat(root); err != nil || !fi.IsDir() {
+		w.logger.Warn("auto-reindex: cannot track repo, path is gone", "repo", repoID, "path", root)
+		return
+	}
+
+	enabled, debounce := w.resolveRepoWatch(repoID, root)
+	if !enabled {
+		w.logger.Info("auto-reindex: repo opted out via config, not watching", "repo", repoID, "path", root)
+		return
+	}
+
+	w.mu.Lock()
+	if w.base == nil {
+		w.mu.Unlock()
+		w.logger.Warn("auto-reindex: Track before watcher started, ignoring", "repo", repoID)
+		return
+	}
+	if _, ok := w.active[repoID]; ok {
+		w.mu.Unlock()
+		return // already watching
+	}
+	cctx, cancel := context.WithCancel(w.base)
+	w.active[repoID] = cancel
+	w.mu.Unlock()
+
+	rw := &repoWatcher{db: w.db, logger: w.logger, debounce: debounce, repoID: repoID, root: root, sem: w.sem}
+	go func() {
+		defer func() {
+			w.mu.Lock()
+			delete(w.active, repoID)
+			w.mu.Unlock()
+		}()
+		rw.reindex(cctx, "register") // initial index so first queries are fresh
+		rw.watch(cctx)               // then watch until cancelled
+	}()
+}
+
+// Untrack stops watching repoID (if active). It does not touch the DB —
+// the registrar decides whether to purge an ephemeral repo's data.
+func (w *Watcher) Untrack(repoID string) {
+	w.mu.Lock()
+	cancel, ok := w.active[repoID]
+	if ok {
+		delete(w.active, repoID)
+	}
+	w.mu.Unlock()
+	if ok {
+		cancel()
+		w.logger.Info("auto-reindex: stopped watching", "repo", repoID)
+	}
+}
+
+// resolveRepoWatch reads the repo-local .vor/config.yaml for per-repo watch
+// overrides. The daemon-level debounce is the base; a repo can disable
+// watching for itself or set its own debounce. Only the repo-local file is
+// read so the global layer isn't counted twice.
+func (w *Watcher) resolveRepoWatch(repoID, root string) (enabled bool, debounce time.Duration) {
+	enabled, debounce = true, w.debounce
+	rc, ok, err := config.LoadRepoFile(root)
+	if err != nil {
+		w.logger.Warn("auto-reindex: cannot read repo config", "repo", repoID, "err", err)
+		return enabled, debounce
+	}
+	if !ok {
+		return enabled, debounce
+	}
+	if rc.Watch.Enabled != nil {
+		enabled = *rc.Watch.Enabled
+	}
+	if rc.Watch.Debounce != "" {
+		if d, perr := time.ParseDuration(rc.Watch.Debounce); perr == nil {
+			debounce = d
+		} else {
+			w.logger.Warn("auto-reindex: invalid repo watch.debounce, using daemon default",
+				"repo", repoID, "value", rc.Watch.Debounce, "err", perr)
+		}
+	}
+	return enabled, debounce
 }
 
 // repoWatcher owns the fsnotify watch + debounce loop for one repository.
@@ -161,6 +209,7 @@ type repoWatcher struct {
 	debounce time.Duration
 	repoID   string
 	root     string
+	sem      chan struct{} // shared concurrency limiter for reindexes
 }
 
 // watch installs filesystem watches on the repo's source directories and
@@ -284,6 +333,16 @@ func (rw *repoWatcher) sourceDirs() map[string]bool {
 // in flight for this repo (the MCP vor_reindex tool can fire concurrently).
 // reason is logged for observability ("startup" or "change").
 func (rw *repoWatcher) reindex(ctx context.Context, reason string) {
+	// Bound concurrent reindexes across all repos.
+	if rw.sem != nil {
+		select {
+		case rw.sem <- struct{}{}:
+			defer func() { <-rw.sem }()
+		case <-ctx.Done():
+			return
+		}
+	}
+
 	pstore := pipelinestore.New(rw.db)
 	if latest, err := pstore.LatestRun(ctx, rw.repoID); err == nil && latest != nil &&
 		latest.Overall == pipelinestore.OutcomeRunning {

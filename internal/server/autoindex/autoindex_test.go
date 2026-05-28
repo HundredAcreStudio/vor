@@ -42,8 +42,13 @@ func fixture(t *testing.T, files map[string]string) (*Watcher, string, string) {
 			t.Fatal(err)
 		}
 	}
-	r, err := repos.New(conn).EnsureByLocalPath(ctx, src, "auto")
+	store := repos.New(conn)
+	r, err := store.EnsureByLocalPath(ctx, src, "auto")
 	if err != nil {
+		t.Fatal(err)
+	}
+	// Mark it tracked so Run (which lists tracked repos) picks it up.
+	if err := store.SetTracked(ctx, r.ID, true, false); err != nil {
 		t.Fatal(err)
 	}
 	w := New(Options{DB: conn, Debounce: 100 * time.Millisecond})
@@ -138,6 +143,75 @@ func TestRun_RepoOptsOutViaConfig(t *testing.T) {
 			t.Fatalf("opted-out repo was reindexed (run %s)", run.RunID)
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestTrackUntrack_Dynamic(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	conn, dialect, err := db.Open(ctx, db.OpenOptions{URL: "sqlite:" + filepath.Join(tmp, "wiki.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	if err := migrations.Up(ctx, conn, dialect); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(tmp, "src")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for rel, body := range map[string]string{
+		"main.go": "package main\nfunc main(){}\n",
+		"go.mod":  "module example.com/x\ngo 1.21\n",
+	} {
+		if err := os.WriteFile(filepath.Join(src, rel), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Registered but NOT tracked — Run starts with nothing to watch.
+	r, err := repos.New(conn).EnsureByLocalPath(ctx, src, "dyn")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := New(Options{DB: conn, Debounce: 100 * time.Millisecond})
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go w.Run(runCtx)
+
+	// Track at runtime; retry until it takes (Run sets the base ctx first
+	// thing, but a Track racing ahead of that is a harmless no-op).
+	store := pipelinestore.New(conn)
+	deadline := time.Now().Add(15 * time.Second)
+	var firstRun string
+	for time.Now().Before(deadline) {
+		w.Track(r.ID, src)
+		if run, err := store.LatestRun(ctx, r.ID); err == nil && run != nil &&
+			run.Overall == pipelinestore.OutcomeSucceeded {
+			firstRun = run.RunID
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if firstRun == "" {
+		t.Fatal("Track did not produce an initial reindex")
+	}
+
+	// Untrack: watching stops, so edits must NOT trigger a new run.
+	w.Untrack(r.ID)
+	time.Sleep(200 * time.Millisecond) // let the watch goroutine exit
+	if err := os.WriteFile(filepath.Join(src, "main.go"),
+		[]byte("package main\nfunc main(){ x() }\nfunc x(){}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	run, err := store.LatestRun(ctx, r.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.RunID != firstRun {
+		t.Errorf("edit after Untrack triggered a new run %s (want still %s)", run.RunID, firstRun)
 	}
 }
 
