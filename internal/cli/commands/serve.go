@@ -144,8 +144,23 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 			// reindex per repo at startup (so a daemon launched before its
 			// first ingest finished doesn't serve an empty graph), then watch
 			// each repo's source tree. Tied to ctx so shutdown cancels it.
-			if watchEnabled {
-				w := autoindex.New(autoindex.Options{DB: conn, Logger: logger})
+			//
+			// Resolution: config file / env set the default; an explicit
+			// --watch on the command line wins over both.
+			watchOn := watchEnabled
+			if !cmd.Flags().Changed("watch") && cfg.Watch.Enabled != nil {
+				watchOn = *cfg.Watch.Enabled
+			}
+			if watchOn {
+				var debounce time.Duration
+				if cfg.Watch.Debounce != "" {
+					if d, err := time.ParseDuration(cfg.Watch.Debounce); err == nil {
+						debounce = d
+					} else {
+						logger.Warn("invalid watch.debounce, using default", "value", cfg.Watch.Debounce, "err", err)
+					}
+				}
+				w := autoindex.New(autoindex.Options{DB: conn, Logger: logger, Debounce: debounce})
 				go func() {
 					if err := w.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 						logger.Error("auto-reindex watcher stopped", "err", err)
@@ -165,7 +180,7 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 	cmd.Flags().BoolVar(&workspaceMode, "workspace", false, "serve every repo registered in the workspace")
 	cmd.Flags().StringVar(&workspaceRootIn, "workspace-root", "", "workspace root (defaults to --repo when --workspace is set)")
 	cmd.Flags().BoolVar(&autoMode, "auto", false, "serve every workspace in the user-global registry (`vor workspace register`)")
-	cmd.Flags().BoolVar(&watchEnabled, "watch", true, "auto-reindex on startup and on source changes (default true)")
+	cmd.Flags().BoolVar(&watchEnabled, "watch", true, "auto-reindex on startup and on source changes; overrides config `watch.enabled` (default true)")
 	return cmd
 }
 

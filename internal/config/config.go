@@ -33,6 +33,9 @@ type Config struct {
 	// Workspace settings (multi-repo).
 	Workspace WorkspaceConfig `yaml:"workspace"`
 
+	// Watch controls `vor serve` auto-reindex behaviour.
+	Watch WatchConfig `yaml:"watch"`
+
 	// Reasoning enables LLM-assisted decision mining.
 	Reasoning bool `yaml:"reasoning"`
 
@@ -77,6 +80,17 @@ type HealthRule struct {
 // WorkspaceConfig configures multi-repo behaviour.
 type WorkspaceConfig struct {
 	Primary string `yaml:"primary"`
+}
+
+// WatchConfig configures `vor serve`'s auto-reindex watcher. Enabled is a
+// pointer so an absent key is distinguishable from an explicit `false` —
+// absent means "use the default" (on), which lets the --watch flag and the
+// default-on behaviour survive a partial config file. Debounce is a Go
+// duration string (e.g. "1.5s", "500ms"); empty means use the built-in
+// default.
+type WatchConfig struct {
+	Enabled  *bool  `yaml:"enabled"`
+	Debounce string `yaml:"debounce"`
 }
 
 // ProviderKeys holds API keys for LLM providers. Empty values mean unset.
@@ -218,6 +232,14 @@ func mergeFile(base, file Config) Config {
 	if file.Workspace.Primary != "" {
 		base.Workspace.Primary = file.Workspace.Primary
 	}
+	// Watch: overlay only the keys the file actually set, so a partial
+	// `watch:` block (e.g. just `debounce`) doesn't clobber the other field.
+	if file.Watch.Enabled != nil {
+		base.Watch.Enabled = file.Watch.Enabled
+	}
+	if file.Watch.Debounce != "" {
+		base.Watch.Debounce = file.Watch.Debounce
+	}
 	// bool is intentionally always overlaid — a file `reasoning: false` should
 	// take effect against the default of false anyway, and an explicit `true`
 	// must be respected.
@@ -264,6 +286,13 @@ func applyEnv(cfg *Config) {
 		cfg.Languages.Skip = splitCSV(v)
 	}
 
+	if v, ok := envBool("VOR_WATCH"); ok {
+		cfg.Watch.Enabled = &v
+	}
+	if v := os.Getenv("VOR_WATCH_DEBOUNCE"); v != "" {
+		cfg.Watch.Debounce = v
+	}
+
 	cfg.ProviderKeys = ProviderKeys{
 		Anthropic:  os.Getenv("ANTHROPIC_API_KEY"),
 		OpenAI:     os.Getenv("OPENAI_API_KEY"),
@@ -282,6 +311,21 @@ func envInt(key string) (int, bool) {
 		return 0, false
 	}
 	return n, true
+}
+
+// envBool parses a boolean env var (1/t/true/0/f/false, case-insensitive).
+// Returns ok=false when the var is unset or unparseable, so the caller
+// leaves the existing value untouched.
+func envBool(key string) (bool, bool) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return false, false
+	}
+	b, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, false
+	}
+	return b, true
 }
 
 func splitCSV(s string) []string {

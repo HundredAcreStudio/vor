@@ -119,6 +119,54 @@ func TestSplitCSV(t *testing.T) {
 	}
 }
 
+func TestLoad_WatchConfig(t *testing.T) {
+	// Absent by default: Enabled nil (caller treats as on), Debounce empty.
+	def, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if def.Watch.Enabled != nil {
+		t.Errorf("default Watch.Enabled = %v, want nil", *def.Watch.Enabled)
+	}
+	if def.Watch.Debounce != "" {
+		t.Errorf("default Watch.Debounce = %q, want empty", def.Watch.Debounce)
+	}
+
+	// File sets both keys.
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".vor"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("watch:\n  enabled: false\n  debounce: 3s\n")
+	if err := os.WriteFile(filepath.Join(dir, ".vor", "config.yaml"), body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Watch.Enabled == nil || *cfg.Watch.Enabled != false {
+		t.Errorf("Watch.Enabled = %v, want false", cfg.Watch.Enabled)
+	}
+	if cfg.Watch.Debounce != "3s" {
+		t.Errorf("Watch.Debounce = %q, want %q", cfg.Watch.Debounce, "3s")
+	}
+
+	// Env overrides the file (higher precedence).
+	t.Setenv("VOR_WATCH", "true")
+	t.Setenv("VOR_WATCH_DEBOUNCE", "750ms")
+	cfg, err = Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Watch.Enabled == nil || *cfg.Watch.Enabled != true {
+		t.Errorf("VOR_WATCH override: Enabled = %v, want true", cfg.Watch.Enabled)
+	}
+	if cfg.Watch.Debounce != "750ms" {
+		t.Errorf("VOR_WATCH_DEBOUNCE override: Debounce = %q, want %q", cfg.Watch.Debounce, "750ms")
+	}
+}
+
 func equalSlice(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
