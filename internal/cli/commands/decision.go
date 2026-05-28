@@ -12,7 +12,6 @@ import (
 
 	"github.com/repowise-dev/repowise-go/internal/analysis/decisions"
 	"github.com/repowise-dev/repowise-go/internal/persistence/decisionstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 )
 
 // newDecisionCmd is the decision subcommand group. The existing
@@ -40,6 +39,7 @@ func newDecisionCmd() *cobra.Command {
 func newDecisionListCmd() *cobra.Command {
 	var (
 		repoPath string
+		repoID   string
 		source   string
 		status   string
 		limit    int
@@ -54,9 +54,9 @@ func newDecisionListCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 			query := `SELECT id, title, status, source, COALESCE(evidence_file,''),
 			                COALESCE(evidence_line,0), confidence, verification
@@ -107,6 +107,7 @@ func newDecisionListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	cmd.Flags().StringVar(&source, "source", "", "filter by source (inline_marker|adr|changelog|git_archaeology|cli)")
 	cmd.Flags().StringVar(&status, "status", "", "filter by status (active|proposed|deprecated|superseded)")
 	cmd.Flags().IntVar(&limit, "limit", 50, "max records to show")
@@ -114,7 +115,10 @@ func newDecisionListCmd() *cobra.Command {
 }
 
 func newDecisionShowCmd() *cobra.Command {
-	var repoPath string
+	var (
+		repoPath string
+		repoID   string
+	)
 	cmd := &cobra.Command{
 		Use:   "show ID",
 		Short: "Print one decision's full record by id (8-char prefix accepted)",
@@ -126,9 +130,9 @@ func newDecisionShowCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 			id, err := resolveDecisionID(ctx, conn, repoRow.ID, args[0])
 			if err != nil {
@@ -166,12 +170,14 @@ func newDecisionShowCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	return cmd
 }
 
 func newDecisionAddCmd() *cobra.Command {
 	var (
 		repoPath      string
+		repoID        string
 		title         string
 		decisionText  string
 		rationale     string
@@ -193,9 +199,9 @@ func newDecisionAddCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 			rec := decisions.Record{
 				Title:         title,
@@ -217,6 +223,7 @@ func newDecisionAddCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	cmd.Flags().StringVar(&title, "title", "", "decision title (required)")
 	cmd.Flags().StringVar(&decisionText, "decision", "", "what was decided")
 	cmd.Flags().StringVar(&rationale, "rationale", "", "why this decision was made")
@@ -249,7 +256,10 @@ func newDecisionDeprecateCmd() *cobra.Command {
 // subcommands. flipConfidence toggles whether confidence/verification
 // are updated alongside the status flip.
 func newDecisionStatusCmd(name, short, newStatus string, newConfidence float64, newVerification string, flipConfidence bool) *cobra.Command {
-	var repoPath string
+	var (
+		repoPath string
+		repoID   string
+	)
 	cmd := &cobra.Command{
 		Use:   name + " ID",
 		Short: short,
@@ -261,9 +271,9 @@ func newDecisionStatusCmd(name, short, newStatus string, newConfidence float64, 
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 			id, err := resolveDecisionID(ctx, conn, repoRow.ID, args[0])
 			if err != nil {
@@ -283,11 +293,15 @@ func newDecisionStatusCmd(name, short, newStatus string, newConfidence float64, 
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	return cmd
 }
 
 func newDecisionHealthCmd() *cobra.Command {
-	var repoPath string
+	var (
+		repoPath string
+		repoID   string
+	)
 	cmd := &cobra.Command{
 		Use:   "health",
 		Short: "Summarise the decision corpus (counts by source / status, low-confidence list)",
@@ -298,9 +312,9 @@ func newDecisionHealthCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 			out := cmd.OutOrStdout()
 
@@ -364,6 +378,7 @@ func newDecisionHealthCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	return cmd
 }
 

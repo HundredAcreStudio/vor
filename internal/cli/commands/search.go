@@ -6,8 +6,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 )
 
 // newSearchCmd searches the persisted graph_nodes by name (LIKE-based for
@@ -16,6 +14,7 @@ import (
 func newSearchCmd() *cobra.Command {
 	var (
 		repoPath string
+		repoID   string
 		limit    int
 		nodeType string
 	)
@@ -30,9 +29,9 @@ func newSearchCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 
 			query := strings.Join(args, " ")
@@ -90,6 +89,7 @@ func newSearchCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	cmd.Flags().IntVar(&limit, "limit", 25, "max matches to show")
 	cmd.Flags().StringVar(&nodeType, "type", "", "filter by node type (file|symbol)")
 	return cmd

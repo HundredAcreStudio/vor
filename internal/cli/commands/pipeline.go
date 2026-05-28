@@ -34,6 +34,7 @@ func newPipelineCmd() *cobra.Command {
 func newPipelineLogCmd() *cobra.Command {
 	var (
 		repoPath string
+		repoID   string
 		limit    int
 	)
 	cmd := &cobra.Command{
@@ -46,9 +47,9 @@ func newPipelineLogCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 
 			rows, err := pipelinestore.New(conn).LatestByRepo(ctx, repoRow.ID, limit)
@@ -74,6 +75,7 @@ func newPipelineLogCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	cmd.Flags().IntVar(&limit, "limit", 50, "max rows to show")
 	return cmd
 }
@@ -82,7 +84,10 @@ func newPipelineLogCmd() *cobra.Command {
 // can answer "is my index up to date?" without piecing it together from
 // the log.
 func newPipelineStatusCmd() *cobra.Command {
-	var repoPath string
+	var (
+		repoPath string
+		repoID   string
+	)
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show the latest pipeline run's verdict",
@@ -93,9 +98,9 @@ func newPipelineStatusCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 			latest, err := pipelinestore.New(conn).LatestRun(ctx, repoRow.ID)
 			if err != nil {
@@ -129,6 +134,7 @@ func newPipelineStatusCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	return cmd
 }
 
@@ -189,7 +195,10 @@ func newPipelineResumeCmd() *cobra.Command {
 }
 
 func newPipelineSummaryCmd() *cobra.Command {
-	var repoPath string
+	var (
+		repoPath string
+		repoID   string
+	)
 	cmd := &cobra.Command{
 		Use:   "summary",
 		Short: "Show pipeline_jobs counts per state",
@@ -200,9 +209,9 @@ func newPipelineSummaryCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 			counts, err := pipelinestore.New(conn).CountByState(ctx, repoRow.ID)
 			if err != nil {
@@ -222,5 +231,6 @@ func newPipelineSummaryCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	return cmd
 }

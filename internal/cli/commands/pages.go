@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/repowise-dev/repowise-go/internal/generation/models"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 	"github.com/repowise-dev/repowise-go/internal/persistence/wikistore"
 )
 
@@ -31,6 +30,7 @@ markdown body of one page.`,
 func newPagesListCmd() *cobra.Command {
 	var (
 		repoPath string
+		repoID   string
 		kind     string
 		stale    bool
 		limit    int
@@ -45,9 +45,9 @@ func newPagesListCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 
 			pages, err := wikistore.New(conn).ListByRepo(ctx, repoRow.ID)
@@ -83,6 +83,7 @@ func newPagesListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	cmd.Flags().StringVar(&kind, "kind", "", "filter by page_type (file_overview|directory_overview|symbol_detail|architecture)")
 	cmd.Flags().BoolVar(&stale, "stale", false, "show only stale pages")
 	cmd.Flags().IntVar(&limit, "limit", 0, "max rows to show (0 = all)")
@@ -92,6 +93,7 @@ func newPagesListCmd() *cobra.Command {
 func newPagesShowCmd() *cobra.Command {
 	var (
 		repoPath string
+		repoID   string
 		kind     string
 	)
 	cmd := &cobra.Command{
@@ -105,9 +107,9 @@ func newPagesShowCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 
 			pageKind := models.PageKind(kind)
@@ -131,6 +133,7 @@ func newPagesShowCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	cmd.Flags().StringVar(&kind, "kind", "", "page kind (default: file_overview)")
 	return cmd
 }

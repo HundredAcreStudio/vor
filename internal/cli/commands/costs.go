@@ -8,12 +8,14 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/repowise-dev/repowise-go/internal/persistence/coststore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 )
 
 // newCostsCmd prints LLM spend from llm_costs.
 func newCostsCmd() *cobra.Command {
-	var repoPath string
+	var (
+		repoPath string
+		repoID   string
+	)
 	cmd := &cobra.Command{
 		Use:   "costs",
 		Short: "Show LLM spend recorded for this repository",
@@ -24,9 +26,9 @@ func newCostsCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 			store := coststore.New(conn)
 
@@ -63,5 +65,6 @@ func newCostsCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	return cmd
 }

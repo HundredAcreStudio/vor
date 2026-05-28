@@ -13,14 +13,16 @@ import (
 	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/graphstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 	"github.com/repowise-dev/repowise-go/internal/userconfig"
 )
 
 // newStatusCmd reads the persisted database for the configured repo and
 // prints a one-screen summary. Doesn't re-ingest — purely a read view.
 func newStatusCmd() *cobra.Command {
-	var repoPath string
+	var (
+		repoPath string
+		repoID   string
+	)
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show a summary of the latest indexed state",
@@ -32,9 +34,9 @@ func newStatusCmd() *cobra.Command {
 			}
 			defer conn.Close()
 
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 
 			summary, err := collectStatus(ctx, conn, repoRow.ID)
@@ -104,6 +106,7 @@ func newStatusCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	return cmd
 }
 

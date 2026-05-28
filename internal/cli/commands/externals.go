@@ -5,14 +5,13 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 )
 
 // newExternalsCmd prints external_systems rows.
 func newExternalsCmd() *cobra.Command {
 	var (
 		repoPath  string
+		repoID    string
 		ecosystem string
 		devOnly   bool
 		limit     int
@@ -27,9 +26,9 @@ func newExternalsCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 
 			query := `SELECT name, ecosystem, COALESCE(version,''), declared_in, is_dev_dep
@@ -78,6 +77,7 @@ func newExternalsCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	cmd.Flags().StringVar(&ecosystem, "ecosystem", "", "filter by ecosystem (npm|pypi|cargo|go|nuget)")
 	cmd.Flags().BoolVar(&devOnly, "dev", false, "show only dev/test dependencies")
 	cmd.Flags().IntVar(&limit, "limit", 200, "max records to show")

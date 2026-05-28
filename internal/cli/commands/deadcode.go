@@ -5,8 +5,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 )
 
 // newDeadCodeCmd reads dead_code_findings from the persisted DB and
@@ -14,6 +12,7 @@ import (
 func newDeadCodeCmd() *cobra.Command {
 	var (
 		repoPath string
+		repoID   string
 		limit    int
 		safeOnly bool
 	)
@@ -30,9 +29,9 @@ to findings the analyzer flagged SafeToDelete (confidence ≥ 0.9).`,
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 
 			query := `SELECT kind, file_path, COALESCE(symbol_name,''), COALESCE(symbol_kind,''),
@@ -84,6 +83,7 @@ to findings the analyzer flagged SafeToDelete (confidence ≥ 0.9).`,
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	cmd.Flags().IntVar(&limit, "limit", 50, "max findings to show")
 	cmd.Flags().BoolVar(&safeOnly, "safe-only", false, "only show findings flagged SafeToDelete")
 	return cmd

@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/repowise-dev/repowise-go/internal/persistence/healthstore"
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 )
 
 // newHealthCmd reads the persisted health_findings + health_file_metrics
@@ -29,6 +28,7 @@ import (
 func newHealthCmd() *cobra.Command {
 	var (
 		repoPath           string
+		repoID             string
 		limit              int
 		fileFilter         string
 		moduleFilter       string
@@ -53,9 +53,9 @@ Use --refactoring-targets for an effort-weighted ranking.`,
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 			out := cmd.OutOrStdout()
 
@@ -109,6 +109,7 @@ Use --refactoring-targets for an effort-weighted ranking.`,
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	cmd.Flags().IntVar(&limit, "limit", 20, "max rows to show")
 	cmd.Flags().StringVar(&fileFilter, "file", "", "filter to file paths containing this substring")
 	cmd.Flags().StringVar(&moduleFilter, "module", "", "filter to file paths under this directory prefix")

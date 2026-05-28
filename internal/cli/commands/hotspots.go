@@ -5,14 +5,13 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-
-	"github.com/repowise-dev/repowise-go/internal/persistence/repos"
 )
 
 // newHotspotsCmd prints git_metadata hotspots from the persisted DB.
 func newHotspotsCmd() *cobra.Command {
 	var (
 		repoPath string
+		repoID   string
 		limit    int
 		all      bool
 	)
@@ -26,9 +25,9 @@ func newHotspotsCmd() *cobra.Command {
 				return err
 			}
 			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRepoPath(repoPath), "")
+			repoRow, err := resolveReadRepo(ctx, conn, readRepoOptions{Path: repoPath, ID: repoID})
 			if err != nil {
-				return fmt.Errorf("ensure repo: %w", err)
+				return err
 			}
 
 			query := `SELECT file_path, churn_percentile, commit_count_total, commit_count_90d,
@@ -83,6 +82,7 @@ func newHotspotsCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path")
+	cmd.Flags().StringVar(&repoID, "repo-id", "", repoIDFlagDesc)
 	cmd.Flags().IntVar(&limit, "limit", 20, "max files to show")
 	cmd.Flags().BoolVar(&all, "all", false, "show all tracked files, not just hotspots")
 	return cmd
