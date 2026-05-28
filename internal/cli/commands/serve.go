@@ -20,6 +20,7 @@ import (
 
 	"github.com/HundredAcreStudio/vor/internal/config"
 	"github.com/HundredAcreStudio/vor/internal/logging"
+	"github.com/HundredAcreStudio/vor/internal/server/autoindex"
 	rhttp "github.com/HundredAcreStudio/vor/internal/server/http"
 	"github.com/HundredAcreStudio/vor/internal/server/mcp"
 	"github.com/HundredAcreStudio/vor/internal/userconfig"
@@ -47,6 +48,7 @@ func newServeCmd() *cobra.Command {
 		workspaceMode   bool
 		workspaceRootIn string
 		autoMode        bool
+		watchEnabled    bool
 	)
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -138,6 +140,19 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 				printMCPInstructions(cmd.OutOrStdout(), bind)
 			}
 
+			// Keep the index fresh for the daemon's lifetime: one incremental
+			// reindex per repo at startup (so a daemon launched before its
+			// first ingest finished doesn't serve an empty graph), then watch
+			// each repo's source tree. Tied to ctx so shutdown cancels it.
+			if watchEnabled {
+				w := autoindex.New(autoindex.Options{DB: conn, Logger: logger})
+				go func() {
+					if err := w.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+						logger.Error("auto-reindex watcher stopped", "err", err)
+					}
+				}()
+			}
+
 			if err := srv.ListenAndServe(ctx); err != nil && !errors.Is(err, context.Canceled) {
 				return err
 			}
@@ -150,6 +165,7 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 	cmd.Flags().BoolVar(&workspaceMode, "workspace", false, "serve every repo registered in the workspace")
 	cmd.Flags().StringVar(&workspaceRootIn, "workspace-root", "", "workspace root (defaults to --repo when --workspace is set)")
 	cmd.Flags().BoolVar(&autoMode, "auto", false, "serve every workspace in the user-global registry (`vor workspace register`)")
+	cmd.Flags().BoolVar(&watchEnabled, "watch", true, "auto-reindex on startup and on source changes (default true)")
 	return cmd
 }
 
