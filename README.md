@@ -82,6 +82,10 @@ The CLI tracks box-level state under XDG directories:
 
 ## Status
 
+For a feature-by-feature comparison against the Python implementation
+(CLI commands, MCP tools, biomarkers, languages, providers), see
+[PARITY.md](./PARITY.md).
+
 | Subsystem | Status |
 |---|---|
 | Persistence (28 tables, SQLite + Postgres) | ✅ |
