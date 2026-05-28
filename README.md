@@ -79,10 +79,37 @@ The CLI tracks box-level state under XDG directories:
 
 | File | Purpose |
 |---|---|
-| `~/.config/repowise/config.yaml` | user-global defaults (provider, model, db_url) — slots into the merge chain `defaults → user → repo → env` |
+| `~/.config/repowise/config.yaml` | user-global defaults (provider, model, health_rules) — slots into the merge chain `defaults → user → repo → env` |
 | `~/.local/state/repowise/daemon.json` | the running `serve` instance (pid, addr); `repowise status` reports it |
 | `~/.local/state/repowise/workspaces.yaml` | registered workspace roots, consumed by `serve --auto` |
 | `~/.local/state/repowise/watched.json` | per-repo watch + update history, shown by `repowise watched list` |
+
+## Configuration
+
+Settings load through a merge chain — each layer overrides the previous:
+
+```
+defaults → ~/.config/repowise/config.yaml → <repo>/.repowise/config.yaml → REPOWISE_* env
+```
+
+`repowise init` writes a commented `<repo>/.repowise/config.yaml` on first run (and never clobbers an existing one). Provider API keys are read from the environment only, never the file, so they can't be committed by accident.
+
+### Code-health exclusions (`health_rules`)
+
+Suppress biomarker findings for files matching a glob (`pattern`, gitignore syntax) or a path prefix (`path`). `overrides` maps a biomarker name to an action — `disabled` (also `off` / `skip` / `ignore`) turns that check off, and the `"*"` key applies to every biomarker. Exclusions are **health-only**: matched files still appear in the dependency graph, search, and dead-code analysis — they just stop generating health findings (and stop dragging the file's score). Rules from the user-global and repo-local files are **additive**, so a global "ignore tests" rule and a repo-specific rule both apply.
+
+```yaml
+# <repo>/.repowise/config.yaml
+health_rules:
+  - pattern: "**/*_test.go"        # table-driven tests aren't real complexity debt
+    overrides:
+      high_complexity: disabled
+      long_function: disabled
+      brain_method: disabled
+  - path: "internal/generated/"    # suppress every biomarker under a prefix
+    overrides:
+      "*": disabled
+```
 
 ## Status
 
@@ -106,6 +133,7 @@ For a feature-by-feature comparison against the Python implementation
 | Community detection — Louvain modularity (gonum) | ✅ |
 | Coverage ingest — LCOV / Cobertura → untested_hotspot (`repowise coverage import`) | ✅ |
 | Security scan — secrets / weak crypto / injection sinks (`repowise security`) | ✅ |
+| Config health exclusions — per-file / per-check via `health_rules` (gitignore globs) | ✅ |
 | LLM providers — Mock + **Anthropic / OpenAI / Gemini / Ollama / LiteLLM** + cost/ratelimit/retry middleware | ✅ |
 | Embedders — Mock + OpenAI / Gemini / Ollama (real semantic search) | ✅ |
 | Documentation generation — file / directory / symbol pages | ✅ |

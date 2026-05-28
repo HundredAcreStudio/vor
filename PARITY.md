@@ -123,6 +123,12 @@ connected-component placeholder. A pattern-based **security scanner**
 (`repowise security`, `repowise_security` MCP tool) populates
 `security_findings`.
 
+Findings can be suppressed per-file and per-biomarker via the config
+`health_rules` block (gitignore-glob `pattern` or `path` prefix +
+`overrides: {biomarker: disabled}`, or `"*"` for all). Exclusions are
+health-only — matched files stay in the graph/search/dead-code — and the
+user-global and repo-local rule sets are additive.
+
 ---
 
 ## Languages (tree-sitter parsers)
