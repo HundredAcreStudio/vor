@@ -64,18 +64,24 @@ yet the LLM-synthesis layer.
 | `get_dependency_path` | — | ⏳ |
 | `get_execution_flows` | — | ⏳ |
 | `get_architecture_diagram` | — | ⏳ (architecture page kind also pending) |
-| `get_context` | — | ⏳ task-oriented multi-target card (LLM) |
-| `get_answer` | — | ⏳ synthesised Q&A with citations (LLM) |
-| `get_why` | `repowise_decisions` (data only) | 🟡 raw decisions vs synthesised rationale |
+| `get_context` | `repowise_get_context` | ✅ triage card per file/symbol (pure data) |
+| `get_answer` | `repowise_get_answer` | ✅ FTS retrieval + grounded synthesis + citations |
+| `get_why` | `repowise_get_why` | ✅ decision archaeology + synthesised rationale |
 | `get_risk` | `repowise_hotspots` (partial) | 🟡 churn data without the PR `directive` block |
 | — | `repowise_pages` / `repowise_page` ➕ | ➕ generated docs |
 | — | `repowise_pipeline_log` ➕ | ➕ observability |
 | — | `repowise_workspace_repos` ➕ | ➕ multi-repo discovery |
 
-**Biggest gap:** the LLM-synthesis tools (`get_answer`, `get_context`,
-`get_why`). They depend on the provider layer (Anthropic landed) plus a
-retrieval+synthesis pipeline that hasn't been ported. The data they'd
-synthesise from is all present and queryable today.
+The LLM-synthesis tools (`get_answer`, `get_context`, `get_why`) are
+now ported. They degrade gracefully without a provider —
+`get_answer` returns retrieved candidates as `best_guesses`,
+`get_why` returns the matched decisions raw — so a provider-less
+server stays useful. `get_context` never needs an LLM.
+
+**Remaining MCP gaps:** the graph-traversal tools (`get_community`,
+`get_dependency_path`, `get_execution_flows`, `get_architecture_diagram`)
+and embedding-backed `search_codebase`. The data exists; these need
+graph-walk surfacing + a vector index.
 
 ---
 
