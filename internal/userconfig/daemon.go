@@ -13,11 +13,10 @@ import (
 // on startup, removed on graceful shutdown. A missing file means
 // "no daemon was started here, or the last one crashed".
 type DaemonInfo struct {
-	PID           int       `json:"pid"`
-	Addr          string    `json:"addr"`
-	StartedAt     time.Time `json:"started_at"`
-	WorkspaceRoot string    `json:"workspace_root,omitempty"`
-	DatabaseURL   string    `json:"database_url,omitempty"`
+	PID         int       `json:"pid"`
+	Addr        string    `json:"addr"`
+	StartedAt   time.Time `json:"started_at"`
+	DatabaseURL string    `json:"database_url,omitempty"`
 }
 
 // SaveDaemon writes info to DaemonPath() atomically (write to .tmp,

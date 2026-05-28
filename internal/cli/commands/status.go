@@ -57,9 +57,6 @@ func newStatusCmd() *cobra.Command {
 				}
 				fmt.Fprintf(tw, "daemon\t%s\tpid=%d  addr=%s  since=%s\n",
 					state, info.PID, info.Addr, info.StartedAt.Format("2006-01-02 15:04:05"))
-				if info.WorkspaceRoot != "" {
-					fmt.Fprintf(tw, "  workspace\t%s\n", info.WorkspaceRoot)
-				}
 				fmt.Fprintln(tw)
 			}
 			fmt.Fprintf(tw, "repository\t%s\n", repoRow.Name)

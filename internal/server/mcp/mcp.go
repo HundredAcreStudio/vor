@@ -2,21 +2,13 @@
 // Protocol. Tools are stdio-driven so editor integrations (Claude Code /
 // Cursor) can read graph, git, dead-code, and health data without HTTP.
 //
-// The server can be configured in two modes:
+// Repo targeting:
 //
-//  1. Single-repo (legacy). Options.RepositoryID is set; every tool
-//     call queries that repo unless the call explicitly overrides via
-//     the `repo` argument.
-//
-//  2. Multi-repo / workspace. Options.WorkspaceRoot points at a
-//     directory holding .vor/workspace.json. Each tool call
-//     MUST supply a `repo` argument (alias, full id, or local path).
-//     A vor_workspace_repos tool lets agents discover the
-//     registered repos.
-//
-// The two modes can coexist: if both RepositoryID and WorkspaceRoot
-// are set, RepositoryID is the default and the workspace data is
-// available for alias lookups.
+//   - Single-repo: Options.RepositoryID is the default for tool calls
+//     that don't override via the `repo` argument.
+//   - Daemon/registry: Options.Registrar is set and RepositoryID may be
+//     empty; every tool call supplies a `repo` argument (full id or local
+//     path) to pick the repo.
 package mcp
 
 import (
@@ -35,7 +27,6 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/providers"
 	"github.com/HundredAcreStudio/vor/internal/server/registry"
 	"github.com/HundredAcreStudio/vor/internal/version"
-	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 // Options configures Server.
@@ -44,20 +35,9 @@ type Options struct {
 	DB *sql.DB
 
 	// RepositoryID is the default repo for tool calls that don't
-	// override via a `repo` argument. Required when WorkspaceRoot is
-	// empty; optional otherwise.
+	// override via a `repo` argument. Optional when a Registrar is set
+	// (registry mode), where callers address repos per-call.
 	RepositoryID string
-
-	// WorkspaceRoot enables multi-repo mode when non-empty. The path
-	// holds .vor/workspace.json; tool calls can pass `repo` as
-	// an alias from that workspace. Convenience for the single-
-	// workspace case — appended to WorkspaceRoots at construction.
-	WorkspaceRoot string
-
-	// WorkspaceRoots is the multi-workspace form: alias resolution
-	// searches each root in order and the first match wins;
-	// vor_workspace_repos unions members across all roots.
-	WorkspaceRoots []string
 
 	// Provider powers the LLM-synthesis tools (get_answer, get_why).
 	// Optional — when nil those tools degrade to returning the
@@ -83,24 +63,6 @@ type Options struct {
 	Registrar *registry.Registrar
 }
 
-// workspaceRoots returns the effective list of workspace roots: the
-// plural slice plus the singular convenience field, de-duplicated.
-func (o Options) workspaceRoots() []string {
-	seen := map[string]bool{}
-	out := []string{}
-	add := func(p string) {
-		if p != "" && !seen[p] {
-			seen[p] = true
-			out = append(out, p)
-		}
-	}
-	add(o.WorkspaceRoot)
-	for _, r := range o.WorkspaceRoots {
-		add(r)
-	}
-	return out
-}
-
 // Server wraps mark3labs/mcp-go's MCPServer with vor's tool surface.
 type Server struct {
 	opts Options
@@ -115,8 +77,8 @@ func New(opts Options) (*Server, error) {
 	}
 	// A registrar-backed daemon may run with no default repo (registry
 	// mode): clients address repos per-call via the `repo` argument.
-	if opts.RepositoryID == "" && len(opts.workspaceRoots()) == 0 && opts.Registrar == nil {
-		return nil, fmt.Errorf("Options.RepositoryID, WorkspaceRoot, or WorkspaceRoots is required")
+	if opts.RepositoryID == "" && opts.Registrar == nil {
+		return nil, fmt.Errorf("Options.RepositoryID or a Registrar is required")
 	}
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
@@ -168,12 +130,12 @@ func ResolveRepositoryID(ctx context.Context, db *sql.DB, localPath string) (str
 // resolveRepoID picks the repository ID for a single tool call. The
 // resolution order:
 //
-//  1. The call's `repo` argument, if present. Tried as workspace
-//     alias → full repo id → local path. The first match wins.
+//  1. The call's `repo` argument, if present. Tried as full repo id →
+//     local path. The first match wins.
 //  2. opts.RepositoryID, the construction-time default.
 //
-// Returns an error when neither is available (workspace-only mode +
-// no `repo` arg supplied).
+// Returns an error when neither is available (registry mode with no
+// `repo` arg supplied).
 func (s *Server) resolveRepoID(ctx context.Context, req mcp.CallToolRequest) (string, error) {
 	if spec := req.GetString("repo", ""); spec != "" {
 		return s.resolveRepoSpec(ctx, spec)
@@ -181,23 +143,13 @@ func (s *Server) resolveRepoID(ctx context.Context, req mcp.CallToolRequest) (st
 	if s.opts.RepositoryID != "" {
 		return s.opts.RepositoryID, nil
 	}
-	return "", errors.New("missing required `repo` argument (server is in workspace-only mode)")
+	return "", errors.New("missing required `repo` argument (no default repo configured)")
 }
 
-// resolveRepoSpec interprets one repo-pointing string in the order:
-// alias from any registered workspace, full repository id, local
-// filesystem path. Read-only — does not create new repository rows.
+// resolveRepoSpec interprets one repo-pointing string as a full repository
+// id first, then a local filesystem path. Read-only — does not create new
+// repository rows.
 func (s *Server) resolveRepoSpec(ctx context.Context, spec string) (string, error) {
-	// Alias from any registered workspace — first match wins.
-	for _, root := range s.opts.workspaceRoots() {
-		state, err := workspace.Load(root)
-		if err != nil {
-			continue
-		}
-		if entry, ok := state.Lookup(spec); ok {
-			return s.repoIDForPath(ctx, entry.Path)
-		}
-	}
 	// Full repository id.
 	var id string
 	if err := s.opts.DB.QueryRowContext(ctx,
@@ -210,7 +162,7 @@ func (s *Server) resolveRepoSpec(ctx context.Context, spec string) (string, erro
 			return rid, nil
 		}
 	}
-	return "", fmt.Errorf("could not resolve %q (tried workspace alias, repository id, local path)", spec)
+	return "", fmt.Errorf("could not resolve %q (tried repository id and local path)", spec)
 }
 
 // repoIDForPath is a read-only lookup — returns the row id for the

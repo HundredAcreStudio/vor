@@ -76,11 +76,6 @@ func New(opts Options) (*Server, error) {
 	// Per-domain route packages mount themselves on /api.
 	deps := routes.Deps{DB: opts.DB, Logger: opts.Logger, Registrar: opts.Registrar}
 	r.Route("/api", func(api chi.Router) {
-		// Workspace-level routes — these need to live under the same
-		// /api subtree as /repos so chi's prefix routing resolves
-		// both. Mounting them in two separate r.Route("/api", ...)
-		// blocks loses one of them.
-		routes.MountWorkspace(api, deps)
 		api.Route("/repos", func(reposR chi.Router) {
 			routes.MountRepos(reposR, deps)
 			reposR.Route("/{repoID}", func(per chi.Router) {

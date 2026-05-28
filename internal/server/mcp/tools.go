@@ -15,22 +15,15 @@ import (
 var jsonUnmarshalLocal = json.Unmarshal
 
 // repoArgDesc is the shared text for the `repo` parameter, attached to
-// every tool so agents in workspace mode can address a specific repo.
+// every tool so a daemon serving multiple repos can address a specific one.
 // Single-repo mode treats the argument as optional (falls back to the
 // server's default RepositoryID).
-const repoArgDesc = "Workspace repo to query: alias from the workspace registry, or full repository id, or local filesystem path. Optional in single-repo mode (falls back to the configured default)."
+const repoArgDesc = "Repo to query: full repository id or local filesystem path. Optional in single-repo mode (falls back to the configured default)."
 
 // registerTools wires every tool onto s.srv. New tools should land here so
 // the registration sits in one place and a follow-up can split this file
 // per tool group when the count grows.
 func (s *Server) registerTools() {
-	// Discovery tool — only meaningful in workspace mode but cheap
-	// enough to always expose.
-	s.srv.AddTool(mcp.NewTool(
-		"vor_workspace_repos",
-		mcp.WithDescription("List repos registered in the workspace, with aliases and full repository ids. Agents in workspace mode should call this first to discover which `repo` values are valid for other tools. Returns the empty list when the server isn't running in workspace mode."),
-	), s.wrap(s.toolWorkspaceRepos))
-
 	s.srv.AddTool(mcp.NewTool(
 		"vor_status",
 		mcp.WithDescription("Repository-wide summary: graph size, hotspot count, dead-code count, average health score, external dependency totals. Use this as the first tool call to understand what's been indexed."),

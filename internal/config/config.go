@@ -30,9 +30,6 @@ type Config struct {
 	// Per-pattern health rule overrides.
 	HealthRules []HealthRule `yaml:"health_rules"`
 
-	// Workspace settings (multi-repo).
-	Workspace WorkspaceConfig `yaml:"workspace"`
-
 	// Watch controls `vor serve` auto-reindex behaviour.
 	Watch WatchConfig `yaml:"watch"`
 
@@ -75,11 +72,6 @@ type HealthRule struct {
 	Pattern   string            `yaml:"pattern,omitempty"`
 	Path      string            `yaml:"path,omitempty"`
 	Overrides map[string]string `yaml:"overrides"`
-}
-
-// WorkspaceConfig configures multi-repo behaviour.
-type WorkspaceConfig struct {
-	Primary string `yaml:"primary"`
 }
 
 // WatchConfig configures `vor serve`'s auto-reindex watcher. Enabled is a
@@ -247,9 +239,6 @@ func mergeFile(base, file Config) Config {
 	// **/*_test.go) and a repo-local rule both apply, rather than the repo
 	// file replacing the global set.
 	base.HealthRules = append(base.HealthRules, file.HealthRules...)
-	if file.Workspace.Primary != "" {
-		base.Workspace.Primary = file.Workspace.Primary
-	}
 	// Watch: overlay only the keys the file actually set, so a partial
 	// `watch:` block (e.g. just `debounce`) doesn't clobber the other field.
 	if file.Watch.Enabled != nil {

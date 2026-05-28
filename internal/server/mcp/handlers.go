@@ -11,51 +11,7 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/persistence/graphstore"
 	"github.com/HundredAcreStudio/vor/internal/persistence/healthstore"
 	"github.com/HundredAcreStudio/vor/internal/persistence/vector"
-	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
-
-// ---- tool: vor_workspace_repos --------------------------------------
-
-type workspaceRepoEntry struct {
-	Alias         string `json:"alias"`
-	Path          string `json:"path"`
-	RepositoryID  string `json:"repository_id"`
-	WorkspaceRoot string `json:"workspace_root,omitempty"`
-	IsDefault     bool   `json:"is_default"`
-}
-
-func (s *Server) toolWorkspaceRepos(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	roots := s.opts.workspaceRoots()
-	if len(roots) == 0 {
-		return jsonResult(map[string]any{
-			"repos":   []workspaceRepoEntry{},
-			"message": "server is not running in workspace mode (no workspace root configured)",
-		})
-	}
-	// Union members across every registered workspace. The
-	// workspace_root field disambiguates when the same alias appears
-	// in two workspaces.
-	out := []workspaceRepoEntry{}
-	for _, root := range roots {
-		state, err := workspace.Load(root)
-		if err != nil {
-			continue
-		}
-		for _, e := range state.Sorted() {
-			entry := workspaceRepoEntry{
-				Alias:         e.Alias,
-				Path:          e.Path,
-				WorkspaceRoot: root,
-				IsDefault:     e.Alias == state.DefaultAlias,
-			}
-			if id, err := s.repoIDForPath(ctx, e.Path); err == nil {
-				entry.RepositoryID = id
-			}
-			out = append(out, entry)
-		}
-	}
-	return jsonResult(map[string]any{"repos": out})
-}
 
 // ---- tool: vor_status -----------------------------------------------
 

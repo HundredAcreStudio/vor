@@ -28,7 +28,6 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/server/mcp"
 	"github.com/HundredAcreStudio/vor/internal/server/registry"
 	"github.com/HundredAcreStudio/vor/internal/userconfig"
-	"github.com/HundredAcreStudio/vor/internal/workspace"
 )
 
 // newServeCmd starts the long-running HTTP daemon. By default it
@@ -36,22 +35,15 @@ import (
 // (MCP Streamable HTTP). Editor clients can attach to the same daemon
 // instead of each spawning a stdio child via `vor mcp`.
 //
-// Single-repo mode (legacy): --repo resolves to one repository_id.
-// HTTP routes use it as their default; MCP tools without an explicit
-// `repo` argument fall back to it.
-//
-// Workspace mode: --workspace flips the daemon into multi-repo mode.
-// --repo (or --workspace-root) becomes the workspace root; member
-// repos are discoverable via the new vor_workspace_repos MCP
-// tool and addressable per-call via the `repo` argument.
+// The daemon is machine-wide: it uses one shared DB and watches the repos
+// registered via `vor register`. MCP/HTTP callers address a repo per-call
+// by its full id or local path. An explicit --repo scopes to one repo.
 func newServeCmd() *cobra.Command {
 	var (
-		repoPath        string
-		addr            string
-		mcpEnabled      bool
-		workspaceMode   bool
-		workspaceRootIn string
-		watchEnabled    bool
+		repoPath     string
+		addr         string
+		mcpEnabled   bool
+		watchEnabled bool
 	)
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -60,15 +52,14 @@ func newServeCmd() *cobra.Command {
 output. Two surfaces live on one port:
 
   /api/repos/{id}/*  REST endpoints — graph, hotspots, dead code,
-                     health, decisions, externals, pages, pipeline,
-                     workspace co-changes.
+                     health, decisions, externals, pages, pipeline.
   /mcp               MCP over Streamable HTTP — editor clients
                      connect here instead of running a stdio child.
 
 The daemon is machine-wide: a bare 'vor serve' uses one shared database
 (VOR_DB_URL, else the user state-dir wiki.db) and watches whatever repos
 are registered with 'vor register'. Address them per-call by local path or
-repository id. An explicit --repo/--workspace scopes to that tree instead.`,
+repository id. An explicit --repo scopes the daemon to a single repo.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(repoPath)
 			if err != nil {
@@ -88,7 +79,7 @@ repository id. An explicit --repo/--workspace scopes to that tree instead.`,
 			// DB (VOR_DB_URL, else the state-dir wiki.db) and watches the
 			// registered/tracked repos. An explicit --repo/--workspace scopes
 			// to that tree's own DB instead.
-			explicitScope := workspaceMode || cmd.Flags().Changed("repo")
+			explicitScope := cmd.Flags().Changed("repo")
 			dbURL := cfg.DatabaseURL
 			if dbURL == "" && !explicitScope {
 				dir, derr := userconfig.StateDir()
@@ -170,7 +161,7 @@ repository id. An explicit --repo/--workspace scopes to that tree instead.`,
 			}
 
 			if mcpEnabled {
-				handler, err := buildMCPHandler(ctx, conn, cfg, logger, repoPath, workspaceRootIn, workspaceMode, explicitScope, defaultRepoID, reg)
+				handler, err := buildMCPHandler(ctx, conn, cfg, logger, repoPath, explicitScope, defaultRepoID, reg)
 				if err != nil {
 					return err
 				}
@@ -191,11 +182,6 @@ repository id. An explicit --repo/--workspace scopes to that tree instead.`,
 				Addr:        bind,
 				StartedAt:   time.Now().UTC(),
 				DatabaseURL: cfg.DatabaseURL,
-			}
-			if workspaceMode {
-				if root, err := filepath.Abs(repoPath); err == nil {
-					daemonInfo.WorkspaceRoot = root
-				}
 			}
 			if err := userconfig.SaveDaemon(daemonInfo); err != nil {
 				logger.Warn("could not record daemon state", "err", err)
@@ -224,25 +210,23 @@ repository id. An explicit --repo/--workspace scopes to that tree instead.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path (or workspace root with --workspace)")
+	cmd.Flags().StringVar(&repoPath, "repo", ".", "scope the daemon to a single repository path")
 	cmd.Flags().StringVar(&addr, "addr", "", "host:port to bind (overrides VOR_HOST/PORT)")
 	cmd.Flags().BoolVar(&mcpEnabled, "mcp", true, "mount the MCP server at /mcp (default true)")
-	cmd.Flags().BoolVar(&workspaceMode, "workspace", false, "serve every repo registered in the workspace")
-	cmd.Flags().StringVar(&workspaceRootIn, "workspace-root", "", "workspace root (defaults to --repo when --workspace is set)")
 	cmd.Flags().BoolVar(&watchEnabled, "watch", true, "auto-reindex on startup and on source changes; overrides config `watch.enabled` (default true)")
 	return cmd
 }
 
 // buildMCPHandler wires an MCP server (LLM synthesis when configured) and
 // returns its Streamable-HTTP handler for mounting at /mcp.
-func buildMCPHandler(ctx context.Context, conn *sql.DB, cfg config.Config, logger *slog.Logger, repoPath, workspaceRootIn string, workspaceMode, explicitScope bool, defaultRepoID string, reg *registry.Registrar) (http.Handler, error) {
+func buildMCPHandler(ctx context.Context, conn *sql.DB, cfg config.Config, logger *slog.Logger, repoPath string, explicitScope bool, defaultRepoID string, reg *registry.Registrar) (http.Handler, error) {
 	provider, model := buildOptionalProvider(cfg)
 	embedder, _ := buildEmbedder(cfg)
 	mcpOpts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model, Embedder: embedder, Registrar: reg}
 	if provider != nil {
 		logger.Info("serve: LLM synthesis enabled", "provider", cfg.Provider)
 	}
-	if err := configureMCPScope(ctx, conn, logger, &mcpOpts, repoPath, workspaceRootIn, workspaceMode, explicitScope, defaultRepoID); err != nil {
+	if err := configureMCPScope(ctx, conn, logger, &mcpOpts, repoPath, explicitScope, defaultRepoID); err != nil {
 		return nil, err
 	}
 	mcpSrv, err := mcp.New(mcpOpts)
@@ -253,37 +237,11 @@ func buildMCPHandler(ctx context.Context, conn *sql.DB, cfg config.Config, logge
 	return mcpSrv.HTTPHandler(), nil
 }
 
-// configureMCPScope sets the repo/workspace targeting on mcpOpts for the
-// selected serve mode: --workspace (one workspace), explicit --repo
-// (single), or the bare daemon (no default unless exactly one repo is
-// tracked — clients address repos by the `repo` argument).
-func configureMCPScope(ctx context.Context, conn *sql.DB, logger *slog.Logger, mcpOpts *mcp.Options, repoPath, workspaceRootIn string, workspaceMode, explicitScope bool, defaultRepoID string) error {
+// configureMCPScope sets the MCP default repo: explicit --repo scopes to one
+// repo; the bare daemon has no default unless exactly one repo is tracked
+// (clients address repos by the `repo` argument).
+func configureMCPScope(ctx context.Context, conn *sql.DB, logger *slog.Logger, mcpOpts *mcp.Options, repoPath string, explicitScope bool, defaultRepoID string) error {
 	switch {
-	case workspaceMode:
-		root := workspaceRootIn
-		if root == "" {
-			root = repoPath
-		}
-		abs, err := filepath.Abs(root)
-		if err != nil {
-			return fmt.Errorf("resolve workspace root: %w", err)
-		}
-		state, err := workspace.Load(abs)
-		if err != nil {
-			return fmt.Errorf("load workspace.json: %w", err)
-		}
-		if len(state.Repos) == 0 {
-			return fmt.Errorf("no repos registered at %s — add some with `vor workspace add`", abs)
-		}
-		mcpOpts.WorkspaceRoot = abs
-		if state.DefaultAlias != "" {
-			if e, ok := state.Lookup(state.DefaultAlias); ok {
-				if id, err := mcp.ResolveRepositoryID(ctx, conn, e.Path); err == nil {
-					mcpOpts.RepositoryID = id
-				}
-			}
-		}
-		logger.Info("serve: workspace mode", "root", abs, "repos", len(state.Repos))
 	case explicitScope:
 		// Explicit --repo: scope MCP to that single repo.
 		abs, err := filepath.Abs(repoPath)
@@ -337,8 +295,8 @@ Connect an AI coding agent to this daemon:
       }
     }
 
-The daemon serves every indexed repo in its database; MCP tools accept a
-`+"`repo`"+` argument to target one (see vor_workspace_repos).
+The daemon serves every registered repo in its database; MCP tools accept a
+`+"`repo`"+` argument (repository id or local path) to target one.
 
 `, url, url, url)
 }

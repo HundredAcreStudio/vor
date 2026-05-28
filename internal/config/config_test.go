@@ -41,8 +41,6 @@ model: gpt-4o
 languages:
   enabled: [go, rust]
 reasoning: true
-workspace:
-  primary: backend
 `)
 	if err := os.WriteFile(cfgPath, body, 0o644); err != nil {
 		t.Fatal(err)
@@ -60,9 +58,6 @@ workspace:
 	}
 	if !cfg.Reasoning {
 		t.Errorf("Reasoning = false, want true")
-	}
-	if cfg.Workspace.Primary != "backend" {
-		t.Errorf("Workspace.Primary = %q", cfg.Workspace.Primary)
 	}
 	if got, want := cfg.Languages.Enabled, []string{"go", "rust"}; !equalSlice(got, want) {
 		t.Errorf("Languages.Enabled = %v, want %v", got, want)

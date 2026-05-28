@@ -48,9 +48,9 @@ func TestStateDir_RespectsXDG(t *testing.T) {
 func TestSaveLoadDaemon_Roundtrip(t *testing.T) {
 	withXDGOverrides(t)
 	info := &userconfig.DaemonInfo{
-		PID:           os.Getpid(),
-		Addr:          "127.0.0.1:7337",
-		WorkspaceRoot: "/home/user/work",
+		PID:         os.Getpid(),
+		Addr:        "127.0.0.1:7337",
+		DatabaseURL: "sqlite:/tmp/x.db",
 	}
 	if err := userconfig.SaveDaemon(info); err != nil {
 		t.Fatal(err)
