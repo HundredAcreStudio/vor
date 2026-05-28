@@ -182,6 +182,11 @@ type Analyzer struct {
 	// the duplication biomarker. Zero -> default. Values <3 are
 	// clamped up to 3 — below that the signal/noise ratio is hostile.
 	DuplicationWindow int
+
+	// DuplicationMaxCluster suppresses duplicate clusters appearing at
+	// more than this many locations (idiomatic/boilerplate blocks).
+	// Zero -> default (8).
+	DuplicationMaxCluster int
 }
 
 // Result is the bundle returned by Analyze.

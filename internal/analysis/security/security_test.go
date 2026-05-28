@@ -59,6 +59,35 @@ func TestScan_InjectionRequiresConcat(t *testing.T) {
 	}
 }
 
+func TestScan_SkipsDocFiles(t *testing.T) {
+	// Markdown prose mentioning SQL keywords + backticks must not be
+	// scanned at all (the README false-positive class).
+	md := "Run `repowise update` to refresh. The `SELECT` below is just docs:\n`SELECT * FROM x` + more text\n"
+	if got := security.Scan("README.md", []byte(md)); len(got) != 0 {
+		t.Errorf("doc file should yield no findings, got %d: %+v", len(got), got)
+	}
+	// Same content in a code file with concatenation does fire.
+	code := `q := "SELECT * FROM x WHERE a='" + a + "'"`
+	if got := kinds(security.Scan("q.go", []byte(code))); len(got) == 0 {
+		t.Errorf("code file with built query should still fire")
+	}
+}
+
+func TestScan_SqlRequiresQueryShape(t *testing.T) {
+	// A bare "update" keyword next to a quote/concat is NOT a SQL injection.
+	bare := `label := "update" + suffix`
+	for _, f := range security.Scan("a.go", []byte(bare)) {
+		if f.Kind == "sql_injection" {
+			t.Errorf("bare keyword should not trip sql_injection: %q", f.Snippet)
+		}
+	}
+	// A real UPDATE … SET built by concatenation does.
+	real := `db.Exec("UPDATE users SET name='" + name + "' WHERE id=" + id)`
+	if _, ok := kinds(security.Scan("b.go", []byte(real)))["sql_injection"]; !ok {
+		t.Errorf("UPDATE ... SET concatenation should fire")
+	}
+}
+
 func TestScan_CommandInjection(t *testing.T) {
 	dirty := security.Scan("c.py", []byte(`os.system("rm -rf " + user_path)`))
 	if _, ok := kinds(dirty)["command_injection"]; !ok {

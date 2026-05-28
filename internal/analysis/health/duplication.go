@@ -34,6 +34,15 @@ const (
 	defaultDuplicationWindow = 6
 	maxDuplicationFileSize   = 1 << 20 // 1 MiB
 
+	// defaultDuplicationMaxCluster suppresses clusters whose block appears
+	// at more than this many locations. A block duplicated that widely is
+	// almost always an idiomatic/framework pattern (e.g. the repeated
+	// cobra flag-registration stanza across every command file), not an
+	// actionable clone. Bias is precision over recall, so we'd rather miss
+	// a genuinely widespread copy-paste than flood the report with
+	// boilerplate.
+	defaultDuplicationMaxCluster = 8
+
 	// Rabin-Karp constants. rkPrime is the largest prime under 2^63
 	// to leave headroom for the polynomial multiplication.
 	rkPrime uint64 = 1_000_000_007
@@ -89,14 +98,21 @@ func (a *Analyzer) computeDuplication(files []models.ParsedFile) []Finding {
 		})
 	}
 
-	// Phase 2: emit findings. A cluster needs ≥2 sites — intra-file
-	// duplication is still a refactor signal, so we don't require
-	// distinct files. Each site gets a Finding pointing at the other
-	// sites in its cluster.
+	maxCluster := a.DuplicationMaxCluster
+	if maxCluster <= 0 {
+		maxCluster = defaultDuplicationMaxCluster
+	}
+
+	// Phase 2: emit ONE finding per duplicate cluster (clone class), not
+	// one per site — a cluster of N occurrences is a single refactor
+	// signal, not N. A cluster needs ≥2 sites (intra-file dup counts);
+	// clusters spanning more than maxCluster sites are dropped as
+	// boilerplate. The finding is attributed to the canonical (first,
+	// sorted) site, with every occurrence listed in Details.
 	findings := []Finding{}
 	clusters := make([]uint64, 0, len(buckets))
 	for fp, sites := range buckets {
-		if len(sites) >= 2 {
+		if len(sites) >= 2 && len(sites) <= maxCluster {
 			clusters = append(clusters, fp)
 		}
 	}
@@ -113,41 +129,143 @@ func (a *Analyzer) computeDuplication(files []models.ParsedFile) []Finding {
 			return sites[i].StartLine < sites[j].StartLine
 		})
 		clusterSize := len(sites)
-		severity := dupSeverity(clusterSize)
-		impact := dupImpact(clusterSize, window)
+		canonical := sites[0]
 
-		for i, s := range sites {
-			// Others = every other site in the cluster.
-			others := make([]map[string]any, 0, clusterSize-1)
-			for j, o := range sites {
-				if i == j {
-					continue
+		// duplicate_sites lists the other occurrences (everything but the
+		// canonical one the finding is attributed to).
+		others := make([]map[string]any, 0, clusterSize-1)
+		for _, o := range sites[1:] {
+			others = append(others, map[string]any{
+				"file_path":  o.FilePath,
+				"line_start": o.StartLine,
+				"line_end":   o.EndLine,
+			})
+		}
+		findings = append(findings, Finding{
+			FilePath:      canonical.FilePath,
+			BiomarkerType: BiomarkerDuplication,
+			Severity:      dupSeverity(clusterSize),
+			LineStart:     canonical.StartLine,
+			LineEnd:       canonical.EndLine,
+			HealthImpact:  dupImpact(clusterSize, window),
+			Reason: fmt.Sprintf("%d-line block duplicated across %d locations",
+				window, clusterSize),
+			Details: map[string]any{
+				"window_lines":    window,
+				"cluster_size":    clusterSize,
+				"fingerprint_hex": fmt.Sprintf("%x", fp),
+				"duplicate_sites": others,
+			},
+		})
+	}
+	// A duplicated region longer than the window spans several overlapping
+	// windows, each its own cluster. Coalesce those into one finding per
+	// contiguous region so a single copy-paste reads as a single signal.
+	return coalesceDuplications(findings, window)
+}
+
+// coalesceDuplications merges per-window cluster findings that overlap or
+// abut within the same canonical file into one finding per duplicated
+// region, coalescing the partner occurrence ranges the same way.
+func coalesceDuplications(raw []Finding, window int) []Finding {
+	byFile := map[string][]Finding{}
+	order := []string{}
+	for _, f := range raw {
+		if _, seen := byFile[f.FilePath]; !seen {
+			order = append(order, f.FilePath)
+		}
+		byFile[f.FilePath] = append(byFile[f.FilePath], f)
+	}
+
+	out := []Finding{}
+	for _, file := range order {
+		fs := byFile[file]
+		sort.Slice(fs, func(i, j int) bool { return fs[i].LineStart < fs[j].LineStart })
+
+		for i := 0; i < len(fs); {
+			start, end := fs[i].LineStart, fs[i].LineEnd
+			fpHex, _ := fs[i].Details["fingerprint_hex"].(string)
+			partners := sitesFromDetails(fs[i])
+			j := i + 1
+			for j < len(fs) && fs[j].LineStart <= end+1 { // overlap or abut
+				if fs[j].LineEnd > end {
+					end = fs[j].LineEnd
 				}
-				others = append(others, map[string]any{
-					"file_path":  o.FilePath,
-					"line_start": o.StartLine,
-					"line_end":   o.EndLine,
-				})
+				partners = append(partners, sitesFromDetails(fs[j])...)
+				j++
 			}
-			findings = append(findings, Finding{
-				FilePath:      s.FilePath,
+			partners = coalesceSites(partners)
+			clusterSize := len(partners) + 1
+			out = append(out, Finding{
+				FilePath:      file,
 				BiomarkerType: BiomarkerDuplication,
-				Severity:      severity,
-				LineStart:     s.StartLine,
-				LineEnd:       s.EndLine,
-				HealthImpact:  impact,
-				Reason: fmt.Sprintf("%d-line block duplicated at %d other location(s)",
-					window, clusterSize-1),
+				Severity:      dupSeverity(clusterSize),
+				LineStart:     start,
+				LineEnd:       end,
+				HealthImpact:  dupImpact(clusterSize, window),
+				Reason: fmt.Sprintf("%d-line block duplicated across %d locations",
+					window, clusterSize),
 				Details: map[string]any{
 					"window_lines":    window,
 					"cluster_size":    clusterSize,
-					"fingerprint_hex": fmt.Sprintf("%x", fp),
-					"duplicate_sites": others,
+					"fingerprint_hex": fpHex,
+					"duplicate_sites": sitesToMaps(partners),
 				},
 			})
+			i = j
 		}
 	}
-	return findings
+	return out
+}
+
+// sitesFromDetails reads the duplicate_sites slice off a finding's Details.
+func sitesFromDetails(f Finding) []dupSite {
+	raw, _ := f.Details["duplicate_sites"].([]map[string]any)
+	out := make([]dupSite, 0, len(raw))
+	for _, m := range raw {
+		fp, _ := m["file_path"].(string)
+		ls, _ := m["line_start"].(int)
+		le, _ := m["line_end"].(int)
+		out = append(out, dupSite{FilePath: fp, StartLine: ls, EndLine: le})
+	}
+	return out
+}
+
+// coalesceSites merges overlapping/adjacent occurrence ranges per file.
+func coalesceSites(sites []dupSite) []dupSite {
+	if len(sites) == 0 {
+		return nil
+	}
+	sort.Slice(sites, func(i, j int) bool {
+		if sites[i].FilePath != sites[j].FilePath {
+			return sites[i].FilePath < sites[j].FilePath
+		}
+		return sites[i].StartLine < sites[j].StartLine
+	})
+	out := []dupSite{sites[0]}
+	for _, s := range sites[1:] {
+		last := &out[len(out)-1]
+		if s.FilePath == last.FilePath && s.StartLine <= last.EndLine+1 {
+			if s.EndLine > last.EndLine {
+				last.EndLine = s.EndLine
+			}
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+func sitesToMaps(sites []dupSite) []map[string]any {
+	out := make([]map[string]any, 0, len(sites))
+	for _, s := range sites {
+		out = append(out, map[string]any{
+			"file_path":  s.FilePath,
+			"line_start": s.StartLine,
+			"line_end":   s.EndLine,
+		})
+	}
+	return out
 }
 
 // hashFileLines returns one hash per source line and a parallel bool

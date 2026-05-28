@@ -64,21 +64,19 @@ func TestDuplication_DetectsObviousCopyPaste(t *testing.T) {
 	})
 
 	dups := findDuplications(res.Findings)
-	if len(dups) == 0 {
-		t.Fatalf("expected duplication findings, got none")
+	// One finding per clone CLUSTER, not per site: two copies of one block
+	// is a single duplication signal.
+	if len(dups) != 1 {
+		t.Fatalf("expected exactly 1 cluster finding, got %d", len(dups))
 	}
-	// Each duplicate cluster should produce one Finding per site.
-	// With 2 sites we expect at least 2 findings.
-	if len(dups) < 2 {
-		t.Errorf("expected ≥2 findings (one per site), got %d", len(dups))
-	}
-	// Both files should appear among the FilePath fields.
-	paths := map[string]bool{}
-	for _, d := range dups {
-		paths[d.FilePath] = true
+	// Both files should be represented: the canonical FilePath plus the
+	// other occurrence in Details.duplicate_sites.
+	paths := map[string]bool{dups[0].FilePath: true}
+	for _, s := range dups[0].Details["duplicate_sites"].([]map[string]any) {
+		paths[s["file_path"].(string)] = true
 	}
 	if !paths["a.go"] || !paths["b.go"] {
-		t.Errorf("expected both files in findings, got %v", paths)
+		t.Errorf("expected both files represented, got %v", paths)
 	}
 }
 
@@ -152,14 +150,16 @@ return final`
 	}).Analyze([]models.ParsedFile{makeFile("a.go", "go")})
 
 	dups := findDuplications(res.Findings)
-	if len(dups) < 2 {
-		t.Errorf("expected ≥2 findings for intra-file dup, got %d", len(dups))
+	// One cluster finding for the intra-file dup, attributed to a.go, with
+	// the second occurrence listed in Details.
+	if len(dups) != 1 {
+		t.Fatalf("expected 1 cluster finding for intra-file dup, got %d", len(dups))
 	}
-	// All entries must point at "a.go".
-	for _, d := range dups {
-		if d.FilePath != "a.go" {
-			t.Errorf("unexpected FilePath = %q", d.FilePath)
-		}
+	if dups[0].FilePath != "a.go" {
+		t.Errorf("unexpected FilePath = %q", dups[0].FilePath)
+	}
+	if len(dups[0].Details["duplicate_sites"].([]map[string]any)) == 0 {
+		t.Error("intra-file dup should list the other occurrence in duplicate_sites")
 	}
 }
 
@@ -259,6 +259,55 @@ return final`
 	}
 	if _, ok := first.Details["fingerprint_hex"].(string); !ok {
 		t.Errorf("fingerprint_hex missing or wrong type: %v", first.Details["fingerprint_hex"])
+	}
+}
+
+func TestDuplication_SuppressesBoilerplate(t *testing.T) {
+	// The same block in 12 files (> default maxCluster of 8) is treated as
+	// an idiomatic/boilerplate pattern and not reported.
+	block := `result := compute(x, y)
+processed := result * 2
+final := wrap(processed)
+report(final)
+log("done", final)
+return final`
+	sources := map[string]string{}
+	files := []models.ParsedFile{}
+	for _, n := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"} {
+		sources[n+".go"] = "package x\n" + block + "\n"
+		files = append(files, makeFile(n+".go", "go"))
+	}
+	res := (&health.Analyzer{SourceLoader: loaderFor(sources)}).Analyze(files)
+	if dups := findDuplications(res.Findings); len(dups) != 0 {
+		t.Errorf("widespread boilerplate (12 sites) should be suppressed, got %d findings", len(dups))
+	}
+}
+
+func TestDuplication_OneFindingPerCluster(t *testing.T) {
+	// Same block in 3 files -> a single cluster finding listing 2 others.
+	block := `result := compute(x, y)
+processed := result * 2
+final := wrap(processed)
+report(final)
+log("done", final)
+return final`
+	res := (&health.Analyzer{
+		SourceLoader: loaderFor(map[string]string{
+			"a.go": "package a\n" + block + "\n",
+			"b.go": "package b\n" + block + "\n",
+			"c.go": "package c\n" + block + "\n",
+		}),
+	}).Analyze([]models.ParsedFile{makeFile("a.go", "go"), makeFile("b.go", "go"), makeFile("c.go", "go")})
+
+	dups := findDuplications(res.Findings)
+	if len(dups) != 1 {
+		t.Fatalf("3-site cluster should yield exactly 1 finding, got %d", len(dups))
+	}
+	if dups[0].Details["cluster_size"] != 3 {
+		t.Errorf("cluster_size = %v, want 3", dups[0].Details["cluster_size"])
+	}
+	if n := len(dups[0].Details["duplicate_sites"].([]map[string]any)); n != 2 {
+		t.Errorf("duplicate_sites = %d, want 2 (the non-canonical occurrences)", n)
 	}
 }
 

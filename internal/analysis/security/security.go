@@ -12,6 +12,7 @@ package security
 import (
 	"bufio"
 	"bytes"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -71,8 +72,12 @@ var rules = []rule{
 		re: regexp.MustCompile(`(?i)Cipher\.getInstance\(\s*["'](?:DES|RC4|[A-Z0-9/]*ECB)|\bcrypto/des\b`),
 	},
 	{
+		// Require real query shape (SELECT … FROM, INSERT INTO <t>, UPDATE
+		// <t> SET, DELETE FROM <t>) rather than a bare keyword, so prose
+		// like a Markdown `update` doesn't match. Paired with requireConcat
+		// below, this targets string-built queries.
 		kind: "sql_injection", severity: SeverityHigh, requireConcat: true,
-		re: regexp.MustCompile(`(?i)\b(?:SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b.*["'\x60]`),
+		re: regexp.MustCompile(`(?i)\b(?:SELECT\s+[\w*]|INSERT\s+INTO\s+\w|UPDATE\s+\w+\s+SET\b|DELETE\s+FROM\s+\w)`),
 	},
 	{
 		kind: "command_injection", severity: SeverityHigh, requireConcat: true,
@@ -86,9 +91,27 @@ var concatIndicator = regexp.MustCompile(`\+\s*\w|\$\{|%s|%d|\bformat\b|f["']|\.
 
 const maxSnippet = 160
 
-// Scan applies every rule to source and returns findings for path. Lines
-// over a generous length cap are still scanned but snippets are truncated.
+// docExtensions are prose/documentation files. The rules target source
+// and config, not prose — a Markdown `update` or a quoted SQL keyword in
+// docs is not a vulnerability — so these are skipped entirely.
+var docExtensions = map[string]struct{}{
+	".md": {}, ".markdown": {}, ".mdx": {}, ".txt": {},
+	".rst": {}, ".adoc": {}, ".org": {},
+}
+
+// scannable reports whether path is a file the scanner should inspect.
+func scannable(path string) bool {
+	_, isDoc := docExtensions[strings.ToLower(filepath.Ext(path))]
+	return !isDoc
+}
+
+// Scan applies every rule to source and returns findings for path. Prose/
+// documentation files are skipped. Lines over a generous length cap are
+// still scanned but snippets are truncated.
 func Scan(path string, source []byte) []Finding {
+	if !scannable(path) {
+		return nil
+	}
 	var out []Finding
 	sc := bufio.NewScanner(bytes.NewReader(source))
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
