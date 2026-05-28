@@ -14,6 +14,7 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 	"github.com/HundredAcreStudio/vor/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/userconfig"
 
 	// Side-effect imports: ingest's registry hooks need to fire here too.
 	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/cargo"
@@ -45,8 +46,9 @@ import (
 // lands in pipeline_jobs for observability + future resume.
 func newInitCmd() *cobra.Command {
 	var (
-		repoPath      string
-		gitMaxCommits int
+		repoPath        string
+		gitMaxCommits   int
+		useGlobalConfig bool
 	)
 	cmd := &cobra.Command{
 		Use:   "init [PATH]",
@@ -83,10 +85,21 @@ inspect the most recent runs.`,
 				return fmt.Errorf("ensure repo: %w", err)
 			}
 
-			// Scaffold a commented repo-local config on first init so the
-			// available knobs (incl. health_rules exclusions) are discoverable.
-			// Never clobbers an existing file.
-			if created, path := scaffoldRepoConfig(absRoot); created {
+			// Scaffold a commented config on first init so the available
+			// knobs are discoverable. --use-global-config targets the
+			// machine-wide ~/.config/vor/config.yaml (for a daemon serving
+			// many repos); otherwise the repo-local .vor/config.yaml. Either
+			// way, an existing file is never clobbered.
+			if useGlobalConfig {
+				switch created, path, err := scaffoldGlobalConfig(); {
+				case err != nil:
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not scaffold global config: %v\n", err)
+				case created:
+					fmt.Fprintf(cmd.OutOrStdout(), "wrote starter global config at %s\n", path)
+				default:
+					fmt.Fprintf(cmd.OutOrStdout(), "global config already exists at %s (left unchanged)\n", path)
+				}
+			} else if created, path := scaffoldRepoConfig(absRoot); created {
 				fmt.Fprintf(cmd.OutOrStdout(), "wrote starter config at %s\n", path)
 			}
 
@@ -126,6 +139,7 @@ inspect the most recent runs.`,
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "(deprecated; pass PATH positionally instead)")
 	cmd.Flags().IntVar(&gitMaxCommits, "git-max-commits", 0, "cap commits walked by the git phase (0 = default 10000)")
+	cmd.Flags().BoolVar(&useGlobalConfig, "use-global-config", false, "scaffold the machine-wide ~/.config/vor/config.yaml instead of the repo-local .vor/config.yaml")
 	return cmd
 }
 
@@ -153,6 +167,47 @@ const repoConfigTemplate = `# vor configuration (repo-local).
 #     overrides:
 #       "*": disabled
 `
+
+// globalConfigTemplate is the commented starter written to the machine-wide
+// ~/.config/vor/config.yaml by `vor init --use-global-config`. It uses the
+// same key shape the global layer is parsed with (config.Config), so the
+// documented knobs take effect once uncommented. Geared toward a daemon
+// serving many repos: set defaults here, override per-repo locally.
+const globalConfigTemplate = `# vor user-global configuration.
+# Lives at ~/.config/vor/config.yaml (or $XDG_CONFIG_HOME/vor/config.yaml).
+# Applies to every repo on this machine, merged UNDER each repo's
+# .vor/config.yaml and VOR_* env vars (repo-local + env take precedence).
+# Everything here is optional — uncomment what you need.
+
+# provider: anthropic        # anthropic | openai | google | ollama | litellm | mock
+# model: claude-sonnet-4-6
+
+# Auto-reindex behaviour for 'vor serve'. Useful for a daemon tracking
+# multiple repos: set the machine-wide default here, then override it in an
+# individual repo's .vor/config.yaml (watch.enabled / watch.debounce).
+# watch:
+#   enabled: true            # set false to disable auto-reindex by default
+#   debounce: 1.5s           # quiet period after edits before a reindex fires
+`
+
+// scaffoldGlobalConfig writes globalConfigTemplate to the user-global
+// config path when that file does not yet exist. Returns whether it created
+// the file, the path, and any error. Never clobbers an existing file.
+func scaffoldGlobalConfig() (bool, string, error) {
+	path, err := userconfig.ConfigPath() // creates the config dir as a side effect
+	if err != nil {
+		return false, "", err
+	}
+	if _, err := os.Stat(path); err == nil {
+		return false, path, nil // already exists — never clobber
+	} else if !os.IsNotExist(err) {
+		return false, path, err
+	}
+	if err := os.WriteFile(path, []byte(globalConfigTemplate), 0o644); err != nil {
+		return false, path, err
+	}
+	return true, path, nil
+}
 
 // scaffoldRepoConfig writes repoConfigTemplate to <root>/.vor/config.yaml
 // when that file does not yet exist. Returns whether it created the file and
