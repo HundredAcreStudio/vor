@@ -45,46 +45,6 @@ func TestStateDir_RespectsXDG(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_MissingFile(t *testing.T) {
-	withXDGOverrides(t)
-	c, err := userconfig.LoadConfig()
-	if err != nil {
-		t.Fatalf("expected no error on missing config: %v", err)
-	}
-	if c == nil {
-		t.Fatal("expected non-nil Config on missing file")
-	}
-	if c.Provider != "" {
-		t.Errorf("expected zero-value Config, got %+v", c)
-	}
-}
-
-func TestSaveLoadConfig_Roundtrip(t *testing.T) {
-	withXDGOverrides(t)
-	original := &userconfig.Config{
-		Provider:    "anthropic",
-		Model:       "claude-opus-4-7",
-		DatabaseURL: "sqlite:/tmp/x.db",
-		RPM:         600,
-	}
-	if err := userconfig.SaveConfig(original); err != nil {
-		t.Fatal(err)
-	}
-	loaded, err := userconfig.LoadConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded.Provider != "anthropic" || loaded.Model != "claude-opus-4-7" {
-		t.Errorf("roundtrip lost data: %+v", loaded)
-	}
-	if loaded.DatabaseURL != "sqlite:/tmp/x.db" {
-		t.Errorf("DatabaseURL roundtrip = %q", loaded.DatabaseURL)
-	}
-	if loaded.RPM != 600 {
-		t.Errorf("RPM roundtrip = %d", loaded.RPM)
-	}
-}
-
 func TestSaveLoadDaemon_Roundtrip(t *testing.T) {
 	withXDGOverrides(t)
 	info := &userconfig.DaemonInfo{

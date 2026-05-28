@@ -114,7 +114,9 @@ func New(opts Options) (*Server, error) {
 	if opts.DB == nil {
 		return nil, fmt.Errorf("Options.DB is required")
 	}
-	if opts.RepositoryID == "" && len(opts.workspaceRoots()) == 0 {
+	// A registrar-backed daemon may run with no default repo (registry
+	// mode): clients address repos per-call via the `repo` argument.
+	if opts.RepositoryID == "" && len(opts.workspaceRoots()) == 0 && opts.Registrar == nil {
 		return nil, fmt.Errorf("Options.RepositoryID, WorkspaceRoot, or WorkspaceRoots is required")
 	}
 	if opts.Logger == nil {

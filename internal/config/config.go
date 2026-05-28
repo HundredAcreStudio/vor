@@ -36,14 +36,6 @@ type Config struct {
 	// Watch controls `vor serve` auto-reindex behaviour.
 	Watch WatchConfig `yaml:"watch"`
 
-	// Repos is a machine-wide list of repository roots a single `vor serve`
-	// daemon should track. Meaningful only in the user-global
-	// ~/.config/vor/config.yaml — it's a membership list, not a per-repo
-	// setting. Paths may use ~ for the home dir. When set (and no explicit
-	// --repo/--workspace/--auto is given), serve indexes and watches all of
-	// them from one shared database.
-	Repos []string `yaml:"repos"`
-
 	// Reasoning enables LLM-assisted decision mining.
 	Reasoning bool `yaml:"reasoning"`
 
@@ -265,12 +257,6 @@ func mergeFile(base, file Config) Config {
 	}
 	if file.Watch.Debounce != "" {
 		base.Watch.Debounce = file.Watch.Debounce
-	}
-	// Repos is membership, not a mergeable setting — a layer that lists
-	// repos replaces the set rather than appending (repo-local files don't
-	// meaningfully contribute their own membership list).
-	if len(file.Repos) > 0 {
-		base.Repos = file.Repos
 	}
 	// bool is intentionally always overlaid — a file `reasoning: false` should
 	// take effect against the default of false anyway, and an explicit `true`
