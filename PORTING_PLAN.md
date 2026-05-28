@@ -297,7 +297,7 @@ Integration tests on real fixture repos (`testdata/`). Parity tests comparing Go
 
 - Module path: `github.com/HundredAcreStudio/vor` (may change to vanity import later — internal imports go through Go module path either way).
 - Go version: 1.24+.
-- License: AGPL-3.0-only, matching upstream.
+- License: AGPL-3.0-or-later, matching upstream.
 - No `pkg/` exports until a plugin surface is needed.
 - Migrations: single consolidated `0001_init.sql` reflecting Python's end state, no replay.
 - CLI: single binary `vor` + auxiliary `vor-augment` for the Claude Code hook.

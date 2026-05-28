@@ -2,7 +2,7 @@
 
 **vor** is a Go port of [**repowise**](https://github.com/repowise-dev/repowise) — the codebase intelligence layer for your AI coding agent. Indexes a codebase into a typed dependency graph, mines git history for hotspots and ownership, runs deterministic code-health biomarkers, extracts architectural decisions, generates wiki documentation, and exposes everything over HTTP and MCP.
 
-> A derivative work of repowise (Python), re-implemented in Go. Not affiliated with or endorsed by the upstream project. Licensed under AGPL-3.0-only, the same license as repowise — see [Attribution & license](#attribution--license).
+> A derivative work of repowise (Python), re-implemented in Go. Not affiliated with or endorsed by the upstream project. Licensed under AGPL-3.0-or-later, the same license as repowise — see [Attribution & license](#attribution--license).
 
 > Work in progress. See [PORTING_PLAN.md](./PORTING_PLAN.md) for the phased roadmap, library choices, and risk register.
 
@@ -212,7 +212,7 @@ the MCP tool surface all derive from that original work. It is **not**
 affiliated with or endorsed by the upstream project.
 
 Because it is a derivative of AGPL-licensed software, vor is released
-under the **same license: AGPL-3.0-only**. See [`LICENSE`](./LICENSE) for
+under the **same license: AGPL-3.0-or-later**. See [`LICENSE`](./LICENSE) for
 the full text and [`NOTICE`](./NOTICE) for the attribution and
 copyright notices.
 
