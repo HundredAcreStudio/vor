@@ -80,19 +80,29 @@ func TestUp_SQLite(t *testing.T) {
 		t.Errorf("foreign_keys pragma = %d, want 1", fk)
 	}
 
-	// Down rolls back the most-recent migration only (goose semantics),
-	// so the latest table (parse_cache, from 0003) should disappear while
-	// the earlier tables remain.
+	// Down rolls back the most-recent migration only (goose semantics), so
+	// the latest change (the tracked columns from 0004) should disappear
+	// while the earlier tables remain.
 	if err := Down(ctx, conn, dialect); err != nil {
 		t.Fatalf("Down: %v", err)
 	}
+	var trackedCols int
+	if err := conn.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM pragma_table_info('repositories') WHERE name = 'tracked'`).Scan(&trackedCols); err != nil {
+		t.Fatalf("probe tracked column: %v", err)
+	}
+	if trackedCols != 0 {
+		t.Errorf("repositories.tracked still present after one Down")
+	}
+	// The previous migration's table (parse_cache, 0003) should survive a
+	// single-step Down.
 	var probe string
 	row := conn.QueryRowContext(ctx,
 		`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`, "parse_cache")
-	if err := row.Scan(&probe); err == nil {
-		t.Errorf("parse_cache table still present after one Down")
+	if err := row.Scan(&probe); err != nil {
+		t.Errorf("parse_cache should survive a single-step Down: %v", err)
 	}
-	// A 0001 table should survive a single-step Down.
+	// A 0001 table should survive too.
 	row = conn.QueryRowContext(ctx,
 		`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`, "repositories")
 	if err := row.Scan(&probe); err != nil {

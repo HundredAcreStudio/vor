@@ -24,8 +24,39 @@ type Repository struct {
 	DefaultBranch string
 	HeadCommit    string
 	SettingsJSON  string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	// Tracked marks a repo the serve daemon watches (toggled by
+	// register/unregister). Ephemeral marks a disposable repo whose indexed
+	// data is purged on unregister. TrackedAt is set when first tracked.
+	Tracked   bool
+	Ephemeral bool
+	TrackedAt sql.NullTime
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// repoColumns is the canonical SELECT list, kept in one place so every
+// query and scanRepo stay in lockstep.
+const repoColumns = `id, name, url, local_path, default_branch, COALESCE(head_commit,''), settings_json, tracked, ephemeral, tracked_at, created_at, updated_at`
+
+// rowScanner is satisfied by both *sql.Row and *sql.Rows.
+type rowScanner interface{ Scan(...any) error }
+
+// scanRepo reads one row in repoColumns order.
+func scanRepo(sc rowScanner) (*Repository, error) {
+	r := &Repository{}
+	if err := sc.Scan(&r.ID, &r.Name, &r.URL, &r.LocalPath, &r.DefaultBranch,
+		&r.HeadCommit, &r.SettingsJSON, &r.Tracked, &r.Ephemeral, &r.TrackedAt,
+		&r.CreatedAt, &r.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // Store is the CRUD surface for repositories.
@@ -48,10 +79,8 @@ func (s *Store) EnsureByLocalPath(ctx context.Context, localPath, name string) (
 	}
 
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, url, local_path, default_branch, COALESCE(head_commit,''), settings_json, created_at, updated_at
-		 FROM repositories WHERE local_path = ?`, localPath)
-	r := &Repository{}
-	switch err := row.Scan(&r.ID, &r.Name, &r.URL, &r.LocalPath, &r.DefaultBranch, &r.HeadCommit, &r.SettingsJSON, &r.CreatedAt, &r.UpdatedAt); {
+		`SELECT `+repoColumns+` FROM repositories WHERE local_path = ?`, localPath)
+	switch r, err := scanRepo(row); {
 	case err == nil:
 		return r, nil
 	case errors.Is(err, sql.ErrNoRows):
@@ -87,10 +116,9 @@ func (s *Store) UpdateHeadCommit(ctx context.Context, repoID, sha string) error 
 // Get returns the repository row with id, or nil + sql.ErrNoRows.
 func (s *Store) Get(ctx context.Context, id string) (*Repository, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, url, local_path, default_branch, COALESCE(head_commit,''), settings_json, created_at, updated_at
-		 FROM repositories WHERE id = ?`, id)
-	r := &Repository{}
-	if err := row.Scan(&r.ID, &r.Name, &r.URL, &r.LocalPath, &r.DefaultBranch, &r.HeadCommit, &r.SettingsJSON, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		`SELECT `+repoColumns+` FROM repositories WHERE id = ?`, id)
+	r, err := scanRepo(row)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
@@ -101,22 +129,47 @@ func (s *Store) Get(ctx context.Context, id string) (*Repository, error) {
 
 // List returns every repository row, ordered by name.
 func (s *Store) List(ctx context.Context) ([]Repository, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, url, local_path, default_branch, COALESCE(head_commit,''), settings_json, created_at, updated_at
-		 FROM repositories ORDER BY name`)
+	return s.queryRepos(ctx, `SELECT `+repoColumns+` FROM repositories ORDER BY name`)
+}
+
+// ListTracked returns only the repositories the daemon watches
+// (tracked = 1), ordered by name.
+func (s *Store) ListTracked(ctx context.Context) ([]Repository, error) {
+	return s.queryRepos(ctx, `SELECT `+repoColumns+` FROM repositories WHERE tracked = 1 ORDER BY name`)
+}
+
+func (s *Store) queryRepos(ctx context.Context, query string, args ...any) ([]Repository, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list repositories: %w", err)
 	}
 	defer rows.Close()
 	var out []Repository
 	for rows.Next() {
-		var r Repository
-		if err := rows.Scan(&r.ID, &r.Name, &r.URL, &r.LocalPath, &r.DefaultBranch, &r.HeadCommit, &r.SettingsJSON, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		r, err := scanRepo(rows)
+		if err != nil {
 			return nil, err
 		}
-		out = append(out, r)
+		out = append(out, *r)
 	}
 	return out, rows.Err()
+}
+
+// SetTracked flips a repo's daemon-tracking state. tracked_at is stamped
+// the first time it becomes tracked. ephemeral is recorded alongside so
+// unregister knows whether to purge the repo's indexed data.
+func (s *Store) SetTracked(ctx context.Context, id string, tracked, ephemeral bool) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE repositories
+		    SET tracked = ?, ephemeral = ?,
+		        tracked_at = CASE WHEN ? = 1 AND tracked_at IS NULL THEN CURRENT_TIMESTAMP ELSE tracked_at END,
+		        updated_at = CURRENT_TIMESTAMP
+		  WHERE id = ?`,
+		b2i(tracked), b2i(ephemeral), b2i(tracked), id)
+	if err != nil {
+		return fmt.Errorf("set tracked: %w", err)
+	}
+	return nil
 }
 
 // Delete removes a repository row. CASCADE handles the dependent rows.

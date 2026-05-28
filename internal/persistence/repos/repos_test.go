@@ -131,3 +131,50 @@ func TestDelete(t *testing.T) {
 		t.Errorf("Get after Delete: err = %v, want sql.ErrNoRows", err)
 	}
 }
+
+func TestSetTracked_AndListTracked(t *testing.T) {
+	conn := freshDB(t)
+	store := repos.New(conn)
+	ctx := context.Background()
+
+	a, err := store.EnsureByLocalPath(ctx, "/repo/a", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := store.EnsureByLocalPath(ctx, "/repo/b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// New repos are untracked by default and absent from ListTracked.
+	if a.Tracked {
+		t.Errorf("new repo should be untracked")
+	}
+	if got, _ := store.ListTracked(ctx); len(got) != 0 {
+		t.Errorf("ListTracked on fresh DB = %d, want 0", len(got))
+	}
+
+	// Track a (ephemeral), leave b untracked.
+	if err := store.SetTracked(ctx, a.ID, true, true); err != nil {
+		t.Fatal(err)
+	}
+	tracked, err := store.ListTracked(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tracked) != 1 || tracked[0].ID != a.ID {
+		t.Fatalf("ListTracked = %+v, want only %s", tracked, a.ID)
+	}
+	if !tracked[0].Ephemeral || !tracked[0].TrackedAt.Valid {
+		t.Errorf("tracked repo should be ephemeral with tracked_at set: %+v", tracked[0])
+	}
+
+	// Untrack a; ListTracked empties again.
+	if err := store.SetTracked(ctx, a.ID, false, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.ListTracked(ctx); len(got) != 0 {
+		t.Errorf("ListTracked after untrack = %d, want 0", len(got))
+	}
+	_ = b
+}
