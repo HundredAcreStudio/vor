@@ -221,230 +221,171 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 	findings = append(findings, a.computeDuplication(files)...)
 
 	for _, pf := range files {
-		fm := FileMetric{
-			FilePath:    pf.FileInfo.Path,
-			Score:       10.0,
-			HasTestFile: testPairs[pf.FileInfo.Path],
-		}
+		findings = append(findings, a.fileFindings(pf, testPairs, thresholds)...)
 
-		// untested_hotspot: a known git hotspot that is under-tested. When
-		// imported coverage exists it is authoritative (coverage below the
-		// threshold = untested); otherwise fall back to the paired-test-file
-		// heuristic. One finding per file, not per symbol.
-		if _, isHot := a.HotspotPaths[pf.FileInfo.Path]; isHot && !pf.FileInfo.IsTest {
-			if untested, reason, impact := a.untestedHotspot(pf.FileInfo.Path, testPairs, thresholds); untested {
-				findings = append(findings, Finding{
-					FilePath:      pf.FileInfo.Path,
-					BiomarkerType: BiomarkerUntestedHotspot,
-					Severity:      SeverityHigh,
-					HealthImpact:  impact,
-					Reason:        reason,
-				})
-			}
-		}
-
-		// shotgun_surgery: this file historically co-changes with many
-		// others, so edits here ripple widely. One finding per file.
-		if partners := distinctCount(a.CoChangePairs[pf.FileInfo.Path]); partners >= thresholds.ShotgunSurgeryFiles && thresholds.ShotgunSurgeryFiles > 0 {
-			findings = append(findings, Finding{
-				FilePath:      pf.FileInfo.Path,
-				BiomarkerType: BiomarkerShotgunSurgery,
-				Severity:      SeverityMedium,
-				HealthImpact:  clamp(1.0+float64(partners-thresholds.ShotgunSurgeryFiles)*0.25, 1.0, 3.0),
-				Reason:        fmt.Sprintf("co-changes with %d other files", partners),
-				Details:       map[string]any{"coChangePartners": partners},
-			})
-		}
-
-		// Count methods per parent class for the god_class biomarker.
-		// One pre-pass keeps the per-symbol loop O(n).
-		methodsByParent := map[string]int{}
+		methodsByParent := methodCounts(pf)
+		callsByCaller := groupCallsByCaller(pf)
 		for _, sym := range pf.Symbols {
-			if sym.ParentName != nil && (sym.Kind == models.KindMethod || sym.Kind == models.KindFunction) {
-				methodsByParent[*sym.ParentName]++
-			}
+			findings = append(findings, a.symbolFindings(pf, sym, methodsByParent, callsByCaller, thresholds)...)
 		}
 
-		// feature_envy: group this file's calls by the enclosing symbol so
-		// each symbol can be checked against the receivers it leans on.
-		callsByCaller := map[string][]models.CallSite{}
-		for _, c := range pf.Calls {
-			if c.CallerSymbolID != nil {
-				callsByCaller[*c.CallerSymbolID] = append(callsByCaller[*c.CallerSymbolID], c)
-			}
-		}
-
-		// Per-symbol biomarkers + file metric accumulation.
-		for _, sym := range pf.Symbols {
-			lines := sym.EndLine - sym.StartLine + 1
-			if lines < 0 {
-				lines = 0
-			}
-			if sym.ComplexityEstimate > fm.MaxCCN {
-				fm.MaxCCN = sym.ComplexityEstimate
-			}
-			if sym.NestingDepth > fm.MaxNesting {
-				fm.MaxNesting = sym.NestingDepth
-			}
-
-			if hit, sev := complexityHit(sym.ComplexityEstimate, thresholds); hit {
-				findings = append(findings, Finding{
-					FilePath:      pf.FileInfo.Path,
-					BiomarkerType: BiomarkerHighComplexity,
-					Severity:      sev,
-					FunctionName:  sym.Name,
-					LineStart:     sym.StartLine,
-					LineEnd:       sym.EndLine,
-					HealthImpact:  complexityImpact(sym.ComplexityEstimate, thresholds),
-					Reason:        fmt.Sprintf("cyclomatic complexity = %d", sym.ComplexityEstimate),
-					Details: map[string]any{
-						"complexity": sym.ComplexityEstimate,
-					},
-				})
-			}
-
-			if hit, sev := longFunctionHit(lines, thresholds); hit {
-				findings = append(findings, Finding{
-					FilePath:      pf.FileInfo.Path,
-					BiomarkerType: BiomarkerLongFunction,
-					Severity:      sev,
-					FunctionName:  sym.Name,
-					LineStart:     sym.StartLine,
-					LineEnd:       sym.EndLine,
-					HealthImpact:  longFunctionImpact(lines, thresholds),
-					Reason:        fmt.Sprintf("function length = %d lines", lines),
-					Details: map[string]any{
-						"lines": lines,
-					},
-				})
-			}
-
-			if hit, sev := deepNestingHit(sym.NestingDepth, thresholds); hit {
-				findings = append(findings, Finding{
-					FilePath:      pf.FileInfo.Path,
-					BiomarkerType: BiomarkerDeepNesting,
-					Severity:      sev,
-					FunctionName:  sym.Name,
-					LineStart:     sym.StartLine,
-					LineEnd:       sym.EndLine,
-					HealthImpact:  deepNestingImpact(sym.NestingDepth, thresholds),
-					Reason:        fmt.Sprintf("max nesting depth = %d", sym.NestingDepth),
-					Details: map[string]any{
-						"nesting": sym.NestingDepth,
-					},
-				})
-			}
-
-			// brain_method: bad on all three axes simultaneously (CCN +
-			// nesting + length). High severity always — these are the
-			// most refactor-worthy functions in any codebase.
-			if isBrainMethod(sym.ComplexityEstimate, sym.NestingDepth, lines, thresholds) {
-				findings = append(findings, Finding{
-					FilePath:      pf.FileInfo.Path,
-					BiomarkerType: BiomarkerBrainMethod,
-					Severity:      SeverityHigh,
-					FunctionName:  sym.Name,
-					LineStart:     sym.StartLine,
-					LineEnd:       sym.EndLine,
-					HealthImpact:  4.0,
-					Reason: fmt.Sprintf("complexity=%d, nesting=%d, lines=%d (all above brain-method thresholds)",
-						sym.ComplexityEstimate, sym.NestingDepth, lines),
-					Details: map[string]any{
-						"complexity": sym.ComplexityEstimate,
-						"nesting":    sym.NestingDepth,
-						"lines":      lines,
-					},
-				})
-			}
-
-			// god_class fires once per class-like symbol whose method count
-			// exceeds the threshold.
-			if classKind(sym.Kind) {
-				methodCount := methodsByParent[sym.Name]
-				if hit, sev := godClassHit(methodCount, thresholds); hit {
-					findings = append(findings, Finding{
-						FilePath:      pf.FileInfo.Path,
-						BiomarkerType: BiomarkerGodClass,
-						Severity:      sev,
-						FunctionName:  sym.Name,
-						LineStart:     sym.StartLine,
-						LineEnd:       sym.EndLine,
-						HealthImpact:  godClassImpact(methodCount, thresholds),
-						Reason:        fmt.Sprintf("%s has %d methods", sym.Name, methodCount),
-						Details: map[string]any{
-							"methodCount": methodCount,
-						},
-					})
-				}
-			}
-
-			// long_parameter_list: many parameters hint at primitive
-			// obsession / a missing parameter object. Functions/methods only.
-			if sym.Kind == models.KindFunction || sym.Kind == models.KindMethod {
-				if n := countSignatureParams(sym.Signature); n >= thresholds.LongParameterList && thresholds.LongParameterList > 0 {
-					sev := SeverityMedium
-					if n >= thresholds.LongParameterListHigh {
-						sev = SeverityHigh
-					}
-					findings = append(findings, Finding{
-						FilePath:      pf.FileInfo.Path,
-						BiomarkerType: BiomarkerLongParameterList,
-						Severity:      sev,
-						FunctionName:  sym.Name,
-						LineStart:     sym.StartLine,
-						LineEnd:       sym.EndLine,
-						HealthImpact:  clamp(0.5+float64(n-thresholds.LongParameterList)*0.4, 0.5, 3.0),
-						Reason:        fmt.Sprintf("%d parameters", n),
-						Details:       map[string]any{"parameters": n},
-					})
-				}
-
-				// feature_envy is an OO smell: a METHOD more interested in
-				// another class than its own. Only applies to methods of a
-				// type, and not in test files (test bodies legitimately
-				// drive other objects — t.Errorf, mock.On, …).
-				if sym.Kind == models.KindMethod && sym.ParentName != nil && !pf.FileInfo.IsTest {
-					if envied, recv, n := featureEnvy(sym, callsByCaller[sym.ID], thresholds); envied {
-						findings = append(findings, Finding{
-							FilePath:      pf.FileInfo.Path,
-							BiomarkerType: BiomarkerFeatureEnvy,
-							Severity:      SeverityMedium,
-							FunctionName:  sym.Name,
-							LineStart:     sym.StartLine,
-							LineEnd:       sym.EndLine,
-							HealthImpact:  clamp(1.0+float64(n-thresholds.FeatureEnvyCalls)*0.3, 1.0, 3.0),
-							Reason:        fmt.Sprintf("%d calls to %q (more than to its own type)", n, recv),
-							Details:       map[string]any{"externalCalls": n, "receiver": recv},
-						})
-					}
-				}
-			}
-		}
-
-		// File NLOC: use the max EndLine across symbols as a coarse proxy.
-		// A better estimate would count non-empty non-comment lines from
-		// source; phase-out the proxy when the parser surfaces NLOC.
-		for _, sym := range pf.Symbols {
-			if sym.EndLine > fm.NLOC {
-				fm.NLOC = sym.EndLine
-			}
-		}
-
-		// Compute composite file score: subtract each finding's
-		// HealthImpact, capped at zero.
-		var impact float64
-		for _, f := range findings {
-			if f.FilePath != pf.FileInfo.Path {
-				continue
-			}
-			impact += f.HealthImpact
-		}
-		fm.Score = clamp(10.0-impact, 1.0, 10.0)
-
-		metrics = append(metrics, fm)
+		metrics = append(metrics, fileMetric(pf, testPairs[pf.FileInfo.Path], findings))
 	}
 
 	return Result{Findings: findings, FileMetrics: metrics}
+}
+
+// fileFindings runs the per-file biomarkers (untested_hotspot, shotgun_surgery).
+func (a *Analyzer) fileFindings(pf models.ParsedFile, testPairs map[string]bool, t Thresholds) []Finding {
+	var out []Finding
+	path := pf.FileInfo.Path
+
+	// untested_hotspot: a known git hotspot that is under-tested. Imported
+	// coverage is authoritative when present; else the paired-test heuristic.
+	if _, isHot := a.HotspotPaths[path]; isHot && !pf.FileInfo.IsTest {
+		if untested, reason, impact := a.untestedHotspot(path, testPairs, t); untested {
+			out = append(out, Finding{
+				FilePath: path, BiomarkerType: BiomarkerUntestedHotspot,
+				Severity: SeverityHigh, HealthImpact: impact, Reason: reason,
+			})
+		}
+	}
+
+	// shotgun_surgery: edits to this file historically ripple to many others.
+	if partners := distinctCount(a.CoChangePairs[path]); t.ShotgunSurgeryFiles > 0 && partners >= t.ShotgunSurgeryFiles {
+		out = append(out, Finding{
+			FilePath: path, BiomarkerType: BiomarkerShotgunSurgery, Severity: SeverityMedium,
+			HealthImpact: clamp(1.0+float64(partners-t.ShotgunSurgeryFiles)*0.25, 1.0, 3.0),
+			Reason:       fmt.Sprintf("co-changes with %d other files", partners),
+			Details:      map[string]any{"coChangePartners": partners},
+		})
+	}
+	return out
+}
+
+// methodCounts tallies methods per parent type for the god_class biomarker.
+func methodCounts(pf models.ParsedFile) map[string]int {
+	out := map[string]int{}
+	for _, sym := range pf.Symbols {
+		if sym.ParentName != nil && (sym.Kind == models.KindMethod || sym.Kind == models.KindFunction) {
+			out[*sym.ParentName]++
+		}
+	}
+	return out
+}
+
+// groupCallsByCaller indexes a file's call sites by enclosing symbol id.
+func groupCallsByCaller(pf models.ParsedFile) map[string][]models.CallSite {
+	out := map[string][]models.CallSite{}
+	for _, c := range pf.Calls {
+		if c.CallerSymbolID != nil {
+			out[*c.CallerSymbolID] = append(out[*c.CallerSymbolID], c)
+		}
+	}
+	return out
+}
+
+// symbolFindings runs the per-symbol biomarkers for one symbol.
+func (a *Analyzer) symbolFindings(pf models.ParsedFile, sym models.Symbol, methodsByParent map[string]int, callsByCaller map[string][]models.CallSite, t Thresholds) []Finding {
+	path := pf.FileInfo.Path
+	lines := sym.EndLine - sym.StartLine + 1
+	if lines < 0 {
+		lines = 0
+	}
+	var out []Finding
+
+	if hit, sev := complexityHit(sym.ComplexityEstimate, t); hit {
+		out = append(out, Finding{FilePath: path, BiomarkerType: BiomarkerHighComplexity, Severity: sev,
+			FunctionName: sym.Name, LineStart: sym.StartLine, LineEnd: sym.EndLine,
+			HealthImpact: complexityImpact(sym.ComplexityEstimate, t),
+			Reason:       fmt.Sprintf("cyclomatic complexity = %d", sym.ComplexityEstimate),
+			Details:      map[string]any{"complexity": sym.ComplexityEstimate}})
+	}
+	if hit, sev := longFunctionHit(lines, t); hit {
+		out = append(out, Finding{FilePath: path, BiomarkerType: BiomarkerLongFunction, Severity: sev,
+			FunctionName: sym.Name, LineStart: sym.StartLine, LineEnd: sym.EndLine,
+			HealthImpact: longFunctionImpact(lines, t),
+			Reason:       fmt.Sprintf("function length = %d lines", lines),
+			Details:      map[string]any{"lines": lines}})
+	}
+	if hit, sev := deepNestingHit(sym.NestingDepth, t); hit {
+		out = append(out, Finding{FilePath: path, BiomarkerType: BiomarkerDeepNesting, Severity: sev,
+			FunctionName: sym.Name, LineStart: sym.StartLine, LineEnd: sym.EndLine,
+			HealthImpact: deepNestingImpact(sym.NestingDepth, t),
+			Reason:       fmt.Sprintf("max nesting depth = %d", sym.NestingDepth),
+			Details:      map[string]any{"nesting": sym.NestingDepth}})
+	}
+	// brain_method: bad on all three axes at once — the most refactor-worthy.
+	if isBrainMethod(sym.ComplexityEstimate, sym.NestingDepth, lines, t) {
+		out = append(out, Finding{FilePath: path, BiomarkerType: BiomarkerBrainMethod, Severity: SeverityHigh,
+			FunctionName: sym.Name, LineStart: sym.StartLine, LineEnd: sym.EndLine, HealthImpact: 4.0,
+			Reason: fmt.Sprintf("complexity=%d, nesting=%d, lines=%d (all above brain-method thresholds)",
+				sym.ComplexityEstimate, sym.NestingDepth, lines),
+			Details: map[string]any{"complexity": sym.ComplexityEstimate, "nesting": sym.NestingDepth, "lines": lines}})
+	}
+	if classKind(sym.Kind) {
+		methodCount := methodsByParent[sym.Name]
+		if hit, sev := godClassHit(methodCount, t); hit {
+			out = append(out, Finding{FilePath: path, BiomarkerType: BiomarkerGodClass, Severity: sev,
+				FunctionName: sym.Name, LineStart: sym.StartLine, LineEnd: sym.EndLine,
+				HealthImpact: godClassImpact(methodCount, t),
+				Reason:       fmt.Sprintf("%s has %d methods", sym.Name, methodCount),
+				Details:      map[string]any{"methodCount": methodCount}})
+		}
+	}
+	if sym.Kind != models.KindFunction && sym.Kind != models.KindMethod {
+		return out
+	}
+
+	// long_parameter_list: many parameters hint at primitive obsession.
+	if n := countSignatureParams(sym.Signature); t.LongParameterList > 0 && n >= t.LongParameterList {
+		sev := SeverityMedium
+		if n >= t.LongParameterListHigh {
+			sev = SeverityHigh
+		}
+		out = append(out, Finding{FilePath: path, BiomarkerType: BiomarkerLongParameterList, Severity: sev,
+			FunctionName: sym.Name, LineStart: sym.StartLine, LineEnd: sym.EndLine,
+			HealthImpact: clamp(0.5+float64(n-t.LongParameterList)*0.4, 0.5, 3.0),
+			Reason:       fmt.Sprintf("%d parameters", n),
+			Details:      map[string]any{"parameters": n}})
+	}
+
+	// feature_envy: a method more interested in another class than its own.
+	if sym.Kind == models.KindMethod && sym.ParentName != nil && !pf.FileInfo.IsTest {
+		if envied, recv, n := featureEnvy(sym, callsByCaller[sym.ID], t); envied {
+			out = append(out, Finding{FilePath: path, BiomarkerType: BiomarkerFeatureEnvy, Severity: SeverityMedium,
+				FunctionName: sym.Name, LineStart: sym.StartLine, LineEnd: sym.EndLine,
+				HealthImpact: clamp(1.0+float64(n-t.FeatureEnvyCalls)*0.3, 1.0, 3.0),
+				Reason:       fmt.Sprintf("%d calls to %q (more than to its own type)", n, recv),
+				Details:      map[string]any{"externalCalls": n, "receiver": recv}})
+		}
+	}
+	return out
+}
+
+// fileMetric computes the per-file aggregate: max CCN/nesting, NLOC proxy,
+// and the composite score (10 minus this file's summed finding impacts).
+func fileMetric(pf models.ParsedFile, hasTest bool, findings []Finding) FileMetric {
+	fm := FileMetric{FilePath: pf.FileInfo.Path, Score: 10.0, HasTestFile: hasTest}
+	for _, sym := range pf.Symbols {
+		if sym.ComplexityEstimate > fm.MaxCCN {
+			fm.MaxCCN = sym.ComplexityEstimate
+		}
+		if sym.NestingDepth > fm.MaxNesting {
+			fm.MaxNesting = sym.NestingDepth
+		}
+		if sym.EndLine > fm.NLOC {
+			fm.NLOC = sym.EndLine
+		}
+	}
+	var impact float64
+	for _, f := range findings {
+		if f.FilePath == pf.FileInfo.Path {
+			impact += f.HealthImpact
+		}
+	}
+	fm.Score = clamp(10.0-impact, 1.0, 10.0)
+	return fm
 }
 
 // computeHiddenCoupling returns one Finding per unique (a, b) pair where:

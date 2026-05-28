@@ -235,253 +235,283 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 	}
 	res := &Result{RunID: runID}
 
-	// Phase: traverse.
-	if err := runPhase(ctx, opts, store, PhaseTraverse, res, func() error {
-		tr, err := traverser.New(traverser.Options{RepoRoot: opts.RepoPath})
-		if err != nil {
-			return err
-		}
-		files, stats, err := tr.Collect(ctx)
-		if err != nil {
-			return err
-		}
-		res.Files = files
-		res.TraversalStats = stats
-		return nil
-	}); err != nil {
-		return res, err
+	// Each phase runs in order through runPhase, which records its
+	// start/complete/fail in pipeline_jobs. The git phase is best-effort:
+	// a failure degrades gracefully rather than aborting the run.
+	phases := []struct {
+		name  string
+		run   func() error
+		fatal bool
+	}{
+		{PhaseTraverse, func() error { return phaseTraverse(ctx, opts, res) }, true},
+		{PhaseParse, func() error { return phaseParse(ctx, opts, res) }, true},
+		{PhaseGit, func() error { return phaseGit(ctx, opts, res) }, false},
+		{PhaseGraph, func() error { return phaseGraph(ctx, opts, res) }, true},
+		{PhaseDeadCode, func() error { return phaseDeadCode(res) }, true},
+		{PhaseHealth, func() error { return phaseHealth(ctx, opts, res) }, true},
+		{PhaseExternals, func() error { return phaseExternals(ctx, opts, res) }, true},
+		{PhaseDecisions, func() error { return phaseDecisions(ctx, opts, res) }, true},
+		{PhasePersist, func() error { return phasePersist(ctx, opts, res) }, true},
 	}
-
-	// Phase: parse. Incremental: files whose content hash + parser version
-	// match a cached entry skip the (expensive, cgo) tree-sitter parse and
-	// reuse the stored result. Changed/new files are re-parsed and cached;
-	// deleted files are pruned from the cache.
-	if err := runPhase(ctx, opts, store, PhaseParse, res, func() error {
-		ap := parser.New()
-		useCache := opts.DB != nil && opts.RepositoryID != ""
-		pstore := parsestore.New(opts.DB)
-
-		var cache map[string]parsestore.Cached
-		if useCache {
-			if c, err := pstore.LoadAll(ctx, opts.RepositoryID, parserVersion); err == nil {
-				cache = c
-			}
+	for _, p := range phases {
+		if err := runPhase(ctx, opts, store, p.name, res, p.run); err != nil && p.fatal {
+			return res, err
 		}
-
-		var dirty []parsestore.Entry
-		var keep []string
-		var stats ParseStats
-		for _, fi := range res.Files {
-			if parser.LookupParser(fi.Language) == nil {
-				continue
-			}
-			data, err := readFile(fi.AbsPath)
-			if err != nil {
-				continue
-			}
-			stats.Total++
-			keep = append(keep, fi.Path)
-			h := sha256Hex(data)
-
-			if c, ok := cache[fi.Path]; ok && c.ContentHash == h {
-				var pf models.ParsedFile
-				if json.Unmarshal(c.ParsedJSON, &pf) == nil {
-					pf.FileInfo = fi // re-attach the live FileInfo
-					res.Parsed = append(res.Parsed, pf)
-					stats.Reused++
-					continue
-				}
-			}
-
-			pf, err := ap.Parse(ctx, fi, data)
-			if err != nil {
-				continue // tolerate per-file parse errors
-			}
-			res.Parsed = append(res.Parsed, pf)
-			stats.Parsed++
-			// Cache without the volatile FileInfo (paths/mtimes come from the
-			// live traversal on reload).
-			cp := pf
-			cp.FileInfo = models.FileInfo{}
-			if b, mErr := json.Marshal(cp); mErr == nil {
-				dirty = append(dirty, parsestore.Entry{Path: fi.Path, ContentHash: h, ParsedJSON: b})
-			}
-		}
-
-		if useCache {
-			if err := pstore.Upsert(ctx, opts.RepositoryID, parserVersion, dirty); err != nil {
-				opts.Logger.Warn("parse cache upsert failed", "err", err)
-			}
-			if n, err := pstore.Prune(ctx, opts.RepositoryID, keep); err != nil {
-				opts.Logger.Warn("parse cache prune failed", "err", err)
-			} else {
-				stats.Pruned = n
-			}
-		}
-		res.ParseStats = stats
-		opts.Logger.Info("parse phase", "parsed", stats.Parsed, "reused", stats.Reused,
-			"pruned", stats.Pruned, "total", stats.Total)
-		return nil
-	}); err != nil {
-		return res, err
 	}
-
-	// Phase: git (best-effort — not all dirs are git repos).
-	_ = runPhase(ctx, opts, store, PhaseGit, res, func() error {
-		ix := &git.Indexer{MaxCommits: opts.GitMaxCommits}
-		recs, err := ix.Index(ctx, opts.RepoPath)
-		if err != nil {
-			// Non-fatal; degrade gracefully.
-			opts.Logger.Warn("git intelligence skipped", "err", err)
-			return nil
-		}
-		res.GitRecords = recs
-		return nil
-	})
-
-	// Phase: graph. Builds the dependency graph using the per-language
-	// resolver registry. Reads go.mod (and similar per-language config
-	// files in future) so resolvers have the cross-cutting data they
-	// need to translate module-path imports into file paths.
-	if err := runPhase(ctx, opts, store, PhaseGraph, res, func() error {
-		rctx := resolver.Context{}
-		if modPath, err := gomod.ParseModulePath(opts.RepoPath); err == nil && modPath != "" {
-			rctx.GoModulePath = modPath
-			opts.Logger.Info("pipeline: detected Go module", "module", modPath)
-		}
-		if crate, err := cargo.ParseCrateName(opts.RepoPath); err == nil && crate != "" {
-			rctx.RustCrateName = crate
-			opts.Logger.Info("pipeline: detected Rust crate", "crate", crate)
-		}
-		b := graph.NewBuilder(nil, graph.Options{ResolverContext: rctx})
-		for _, p := range res.Parsed {
-			b.AddFile(p)
-		}
-		g := b.Build()
-		g.ComputeMetrics()
-		res.Graph = g
-		return nil
-	}); err != nil {
-		return res, err
-	}
-
-	// Phase: deadcode.
-	if err := runPhase(ctx, opts, store, PhaseDeadCode, res, func() error {
-		res.DeadCode = (&deadcode.Analyzer{MinConfidence: 0.5}).Analyze(res.Graph)
-		return nil
-	}); err != nil {
-		return res, err
-	}
-
-	// Phase: health. Weave hotspot paths + co-change partners + graph
-	// edges into the analyzer so cross-cutting biomarkers (untested_hotspot,
-	// hidden_coupling) fire.
-	if err := runPhase(ctx, opts, store, PhaseHealth, res, func() error {
-		analyzer := &health.Analyzer{
-			// Duplication biomarker reads source bytes lazily under
-			// the repo root. Closing over opts.RepoPath keeps the
-			// analyzer agnostic of the pipeline's I/O strategy.
-			SourceLoader: func(rel string) ([]byte, error) {
-				return readFile(filepath.Join(opts.RepoPath, rel))
-			},
-		}
-		if len(res.GitRecords) > 0 {
-			hot := make(map[string]struct{}, len(res.GitRecords))
-			coChange := make(map[string][]string, len(res.GitRecords))
-			const minCoChange = 3
-			for _, gr := range res.GitRecords {
-				if gr.IsHotspot {
-					hot[gr.Path] = struct{}{}
-				}
-				for _, p := range gr.CoChangePartners {
-					if p.Count >= minCoChange {
-						coChange[gr.Path] = append(coChange[gr.Path], p.Path)
-					}
-				}
-			}
-			analyzer.HotspotPaths = hot
-			if len(coChange) > 0 {
-				analyzer.CoChangePairs = coChange
-			}
-		}
-		if res.Graph != nil {
-			edges := map[string]map[string]bool{}
-			for _, e := range res.Graph.Edges() {
-				if edges[e.F.StringID] == nil {
-					edges[e.F.StringID] = map[string]bool{}
-				}
-				edges[e.F.StringID][e.T.StringID] = true
-			}
-			analyzer.GraphEdges = edges
-		}
-		// Imported coverage (if any) makes untested_hotspot authoritative.
-		if opts.DB != nil && opts.RepositoryID != "" {
-			if cov, err := coveragestore.New(opts.DB).CoverageMap(ctx, opts.RepositoryID); err == nil && len(cov) > 0 {
-				analyzer.Coverage = cov
-			}
-		}
-		res.HealthResult = analyzer.Analyze(res.Parsed)
-		return nil
-	}); err != nil {
-		return res, err
-	}
-
-	// Phase: externals.
-	if err := runPhase(ctx, opts, store, PhaseExternals, res, func() error {
-		recs, err := external.ScanRoot(ctx, opts.RepoPath)
-		if err != nil {
-			return err
-		}
-		res.Externals = recs
-		return nil
-	}); err != nil {
-		return res, err
-	}
-
-	// Phase: decisions. Runs every registered Extractor (inline_marker
-	// in Pass A; ADR / CHANGELOG / commits in Pass B+) and collects
-	// records de-duplicated by source + evidence location.
-	if err := runPhase(ctx, opts, store, PhaseDecisions, res, func() error {
-		res.Decisions = decisions.Engine{}.Run(ctx, decisions.Input{
-			RepoRoot:    opts.RepoPath,
-			ParsedFiles: res.Parsed,
-		})
-		return nil
-	}); err != nil {
-		return res, err
-	}
-
-	// Phase: persist (writes all stores in one tx-per-table). Reuses the
-	// existing per-store ReplaceAll APIs.
-	if err := runPhase(ctx, opts, store, PhasePersist, res, func() error {
-		repoStore := repos.New(opts.DB)
-		if head, err := git.ResolveHeadCommit(opts.RepoPath); err == nil {
-			_ = repoStore.UpdateHeadCommit(ctx, opts.RepositoryID, head.String())
-		}
-		if err := graphstore.New(opts.DB).ReplaceGraph(ctx, opts.RepositoryID, res.Graph); err != nil {
-			return fmt.Errorf("graph: %w", err)
-		}
-		if err := gitstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.GitRecords); err != nil {
-			return fmt.Errorf("git_metadata: %w", err)
-		}
-		if err := deadstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.DeadCode); err != nil {
-			return fmt.Errorf("dead_code: %w", err)
-		}
-		if err := healthstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.HealthResult); err != nil {
-			return fmt.Errorf("health: %w", err)
-		}
-		if err := externalstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.Externals); err != nil {
-			return fmt.Errorf("externals: %w", err)
-		}
-		if err := decisionstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.Decisions); err != nil {
-			return fmt.Errorf("decisions: %w", err)
-		}
-		return nil
-	}); err != nil {
-		return res, err
-	}
-
 	return res, nil
+}
+
+// ---- Phases ---------------------------------------------------------------
+// Each phase function performs one stage of the pipeline, reading/writing
+// the shared *Result. They are invoked through runPhase (above), which
+// owns the pipeline_jobs bookkeeping.
+
+func phaseTraverse(ctx context.Context, opts Options, res *Result) error {
+	tr, err := traverser.New(traverser.Options{RepoRoot: opts.RepoPath})
+	if err != nil {
+		return err
+	}
+	files, stats, err := tr.Collect(ctx)
+	if err != nil {
+		return err
+	}
+	res.Files = files
+	res.TraversalStats = stats
+	return nil
+}
+
+// phaseParse is incremental: files whose content hash + parser version
+// match a cached entry skip the (expensive, cgo) tree-sitter parse and
+// reuse the stored result. Changed/new files are re-parsed and cached;
+// deleted files are pruned from the cache.
+func phaseParse(ctx context.Context, opts Options, res *Result) error {
+	ap := parser.New()
+	useCache := opts.DB != nil && opts.RepositoryID != ""
+	pstore := parsestore.New(opts.DB)
+
+	var cache map[string]parsestore.Cached
+	if useCache {
+		cache, _ = pstore.LoadAll(ctx, opts.RepositoryID, parserVersion)
+	}
+
+	var dirty []parsestore.Entry
+	var keep []string
+	var stats ParseStats
+	for _, fi := range res.Files {
+		if parser.LookupParser(fi.Language) == nil {
+			continue
+		}
+		data, err := readFile(fi.AbsPath)
+		if err != nil {
+			continue
+		}
+		stats.Total++
+		keep = append(keep, fi.Path)
+		h := sha256Hex(data)
+
+		if pf, ok := reuseCachedParse(cache, fi, h); ok {
+			res.Parsed = append(res.Parsed, pf)
+			stats.Reused++
+			continue
+		}
+
+		pf, err := ap.Parse(ctx, fi, data)
+		if err != nil {
+			continue // tolerate per-file parse errors
+		}
+		res.Parsed = append(res.Parsed, pf)
+		stats.Parsed++
+		if e, ok := newCacheEntry(fi, h, pf); ok {
+			dirty = append(dirty, e)
+		}
+	}
+
+	if useCache {
+		if err := pstore.Upsert(ctx, opts.RepositoryID, parserVersion, dirty); err != nil {
+			opts.Logger.Warn("parse cache upsert failed", "err", err)
+		}
+		if n, err := pstore.Prune(ctx, opts.RepositoryID, keep); err != nil {
+			opts.Logger.Warn("parse cache prune failed", "err", err)
+		} else {
+			stats.Pruned = n
+		}
+	}
+	res.ParseStats = stats
+	opts.Logger.Info("parse phase", "parsed", stats.Parsed, "reused", stats.Reused,
+		"pruned", stats.Pruned, "total", stats.Total)
+	return nil
+}
+
+// reuseCachedParse returns the cached ParsedFile for fi when its hash
+// matches, re-attaching the live FileInfo. ok=false on miss or decode error.
+func reuseCachedParse(cache map[string]parsestore.Cached, fi models.FileInfo, hash string) (models.ParsedFile, bool) {
+	c, ok := cache[fi.Path]
+	if !ok || c.ContentHash != hash {
+		return models.ParsedFile{}, false
+	}
+	var pf models.ParsedFile
+	if json.Unmarshal(c.ParsedJSON, &pf) != nil {
+		return models.ParsedFile{}, false
+	}
+	pf.FileInfo = fi
+	return pf, true
+}
+
+// newCacheEntry serialises a freshly-parsed file for the cache, dropping
+// the volatile FileInfo (paths/mtimes come from the live traversal on reload).
+func newCacheEntry(fi models.FileInfo, hash string, pf models.ParsedFile) (parsestore.Entry, bool) {
+	cp := pf
+	cp.FileInfo = models.FileInfo{}
+	b, err := json.Marshal(cp)
+	if err != nil {
+		return parsestore.Entry{}, false
+	}
+	return parsestore.Entry{Path: fi.Path, ContentHash: hash, ParsedJSON: b}, true
+}
+
+// phaseGit is best-effort — not all dirs are git repos. A failure logs and
+// returns nil so the run continues.
+func phaseGit(ctx context.Context, opts Options, res *Result) error {
+	ix := &git.Indexer{MaxCommits: opts.GitMaxCommits}
+	recs, err := ix.Index(ctx, opts.RepoPath)
+	if err != nil {
+		opts.Logger.Warn("git intelligence skipped", "err", err)
+		return nil
+	}
+	res.GitRecords = recs
+	return nil
+}
+
+// phaseGraph builds the dependency graph using the per-language resolver
+// registry, reading go.mod / Cargo.toml so resolvers can translate
+// module-path imports into file paths.
+func phaseGraph(_ context.Context, opts Options, res *Result) error {
+	rctx := resolver.Context{}
+	if modPath, err := gomod.ParseModulePath(opts.RepoPath); err == nil && modPath != "" {
+		rctx.GoModulePath = modPath
+		opts.Logger.Info("pipeline: detected Go module", "module", modPath)
+	}
+	if crate, err := cargo.ParseCrateName(opts.RepoPath); err == nil && crate != "" {
+		rctx.RustCrateName = crate
+		opts.Logger.Info("pipeline: detected Rust crate", "crate", crate)
+	}
+	b := graph.NewBuilder(nil, graph.Options{ResolverContext: rctx})
+	for _, pf := range res.Parsed {
+		b.AddFile(pf)
+	}
+	g := b.Build()
+	g.ComputeMetrics()
+	res.Graph = g
+	return nil
+}
+
+func phaseDeadCode(res *Result) error {
+	res.DeadCode = (&deadcode.Analyzer{MinConfidence: 0.5}).Analyze(res.Graph)
+	return nil
+}
+
+// phaseHealth weaves hotspot paths + co-change partners + graph edges +
+// imported coverage into the analyzer so cross-cutting biomarkers fire.
+func phaseHealth(ctx context.Context, opts Options, res *Result) error {
+	analyzer := &health.Analyzer{
+		SourceLoader: func(rel string) ([]byte, error) {
+			return readFile(filepath.Join(opts.RepoPath, rel))
+		},
+	}
+	if len(res.GitRecords) > 0 {
+		analyzer.HotspotPaths, analyzer.CoChangePairs = hotspotsAndCoChanges(res.GitRecords)
+	}
+	if res.Graph != nil {
+		analyzer.GraphEdges = graphEdgeSet(res.Graph)
+	}
+	if opts.DB != nil && opts.RepositoryID != "" {
+		if cov, err := coveragestore.New(opts.DB).CoverageMap(ctx, opts.RepositoryID); err == nil && len(cov) > 0 {
+			analyzer.Coverage = cov
+		}
+	}
+	res.HealthResult = analyzer.Analyze(res.Parsed)
+	return nil
+}
+
+// hotspotsAndCoChanges derives the hotspot set and the co-change adjacency
+// (filtered to a minimum co-change count) from git records.
+func hotspotsAndCoChanges(records []git.PerFile) (map[string]struct{}, map[string][]string) {
+	const minCoChange = 3
+	hat := make(map[string]struct{}, len(records))
+	coChange := map[string][]string{}
+	for _, gr := range records {
+		if gr.IsHotspot {
+			hat[gr.Path] = struct{}{}
+		}
+		for _, pr := range gr.CoChangePartners {
+			if pr.Count >= minCoChange {
+				coChange[gr.Path] = append(coChange[gr.Path], pr.Path)
+			}
+		}
+	}
+	if len(coChange) == 0 {
+		return hat, nil
+	}
+	return hat, coChange
+}
+
+// graphEdgeSet flattens the graph's edges into a source→target adjacency
+// set for the hidden_coupling biomarker.
+func graphEdgeSet(g *graph.Graph) map[string]map[string]bool {
+	edges := map[string]map[string]bool{}
+	for _, e := range g.Edges() {
+		if edges[e.F.StringID] == nil {
+			edges[e.F.StringID] = map[string]bool{}
+		}
+		edges[e.F.StringID][e.T.StringID] = true
+	}
+	return edges
+}
+
+func phaseExternals(ctx context.Context, opts Options, res *Result) error {
+	recs, err := external.ScanRoot(ctx, opts.RepoPath)
+	if err != nil {
+		return err
+	}
+	res.Externals = recs
+	return nil
+}
+
+// phaseDecisions runs every registered decision-source Extractor and
+// collects records de-duplicated by source + evidence location.
+func phaseDecisions(ctx context.Context, opts Options, res *Result) error {
+	res.Decisions = decisions.Engine{}.Run(ctx, decisions.Input{
+		RepoRoot:    opts.RepoPath,
+		ParsedFiles: res.Parsed,
+	})
+	return nil
+}
+
+// phasePersist writes every store (one ReplaceAll per table).
+func phasePersist(ctx context.Context, opts Options, res *Result) error {
+	repoStore := repos.New(opts.DB)
+	if head, err := git.ResolveHeadCommit(opts.RepoPath); err == nil {
+		_ = repoStore.UpdateHeadCommit(ctx, opts.RepositoryID, head.String())
+	}
+	if err := graphstore.New(opts.DB).ReplaceGraph(ctx, opts.RepositoryID, res.Graph); err != nil {
+		return fmt.Errorf("graph: %w", err)
+	}
+	if err := gitstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.GitRecords); err != nil {
+		return fmt.Errorf("git_metadata: %w", err)
+	}
+	if err := deadstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.DeadCode); err != nil {
+		return fmt.Errorf("dead_code: %w", err)
+	}
+	if err := healthstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.HealthResult); err != nil {
+		return fmt.Errorf("health: %w", err)
+	}
+	if err := externalstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.Externals); err != nil {
+		return fmt.Errorf("externals: %w", err)
+	}
+	if err := decisionstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.Decisions); err != nil {
+		return fmt.Errorf("decisions: %w", err)
+	}
+	return nil
 }
 
 // runPhase is the small helper that handles the start/complete/fail

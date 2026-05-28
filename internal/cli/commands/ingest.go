@@ -79,190 +79,196 @@ import (
 //   - --graph:   parse + build the dependency graph + metrics + summary
 //   - --persist: --graph plus write the graph to the configured DB
 func newIngestCmd() *cobra.Command {
-	var (
-		listFiles     bool
-		maxKB         int
-		extraExcl     []string
-		showStats     bool
-		parseAST      bool
-		buildGraph    bool
-		scanExternals bool
-		gitIndex      bool
-		gitMaxCommits int
-		persist       bool
-	)
+	o := &ingestOptions{}
 	cmd := &cobra.Command{
 		Use:   "ingest [PATH]",
 		Short: "Walk a repository, parse it, optionally build + persist the graph",
 		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			root := "."
-			if len(args) > 0 {
-				root = args[0]
-			}
-			absRoot, err := filepath.Abs(root)
-			if err != nil {
-				return fmt.Errorf("resolve path: %w", err)
-			}
-
-			tr, err := traverser.New(traverser.Options{
-				RepoRoot:             absRoot,
-				MaxFileSizeKB:        maxKB,
-				ExtraExcludePatterns: extraExcl,
-			})
-			if err != nil {
-				return err
-			}
-
-			files, stats, err := tr.Collect(ctx)
-			if err != nil && err != context.Canceled {
-				return fmt.Errorf("walk: %w", err)
-			}
-
-			// --persist implies --graph + --externals + --git; --graph
-			// implies --parse.
-			if persist {
-				buildGraph = true
-				scanExternals = true
-				gitIndex = true
-			}
-			if buildGraph {
-				parseAST = true
-			}
-
-			out := cmd.OutOrStdout()
-			ap := parser.New()
-			parseSummary := parseAggregate{}
-			var parsedFiles []models.ParsedFile
-
-			if listFiles || parseAST {
-				for _, f := range files {
-					line := fmt.Sprintf(" %-12s %s", f.Language, f.Path)
-					if f.IsEntryPoint {
-						line = "*" + line[1:]
-					}
-					if parseAST {
-						parsed, summary, err := parseOne(ctx, ap, f)
-						if err != nil {
-							fmt.Fprintf(out, "%s    [parse error: %v]\n", line, err)
-							continue
-						}
-						if !summary.Skipped {
-							parsedFiles = append(parsedFiles, parsed)
-						}
-						line += fmt.Sprintf("    [symbols=%d imports=%d calls=%d]",
-							summary.Symbols, summary.Imports, summary.Calls)
-						parseSummary.add(summary)
-					}
-					if listFiles {
-						fmt.Fprintln(out, line)
-					}
-				}
-			}
-
-			if showStats || (!listFiles && !parseAST) {
-				printStats(out, stats)
-			}
-
-			if parseAST {
-				fmt.Fprintf(out, "\nAST summary: symbols=%d imports=%d calls=%d (parsed %d / skipped %d / errored %d)\n",
-					parseSummary.Symbols, parseSummary.Imports, parseSummary.Calls,
-					parseSummary.Parsed, parseSummary.Skipped, parseSummary.Errored)
-			}
-
-			var (
-				g            *graph.Graph
-				extRecords   []external.Record
-				dcFindings   []deadcode.Finding
-				healthResult health.Result
-				gitRecords   []git.PerFile
-			)
-
-			// Git intelligence runs first so health.Analyzer can weave
-			// hotspot paths into the untested_hotspot biomarker.
-			if gitIndex {
-				ix := &git.Indexer{MaxCommits: gitMaxCommits}
-				recs, err := ix.Index(ctx, absRoot)
-				if err != nil {
-					// Treat "not a git repo" as a soft warning rather than
-					// a fatal error — many ingestion targets aren't tracked
-					// with git locally.
-					fmt.Fprintf(out, "\ngit intelligence skipped: %v\n", err)
-				} else {
-					gitRecords = recs
-					printGitSummary(out, recs)
-				}
-			}
-
-			if buildGraph {
-				// Resolver context: per-language config (Go module path,
-				// Rust crate name, etc.) flows into the per-language
-				// import resolvers.
-				rctx := resolver.Context{}
-				if modPath, err := gomod.ParseModulePath(absRoot); err == nil && modPath != "" {
-					rctx.GoModulePath = modPath
-				}
-				if crate, err := cargo.ParseCrateName(absRoot); err == nil && crate != "" {
-					rctx.RustCrateName = crate
-				}
-				b := graph.NewBuilder(nil, graph.Options{ResolverContext: rctx})
-				for _, p := range parsedFiles {
-					b.AddFile(p)
-				}
-				g = b.Build()
-				g.ComputeMetrics()
-				printGraphSummary(out, g)
-				// Dead code runs on the same graph; cheap, always informative.
-				dcFindings = (&deadcode.Analyzer{MinConfidence: 0.5}).Analyze(g)
-				printDeadCodeSummary(out, dcFindings)
-				// Health runs on the parser output. Hotspot paths come
-				// from git intelligence (above) so untested_hotspot fires.
-				healthOpts := &health.Analyzer{}
-				if len(gitRecords) > 0 {
-					hot := make(map[string]struct{}, len(gitRecords))
-					for _, gr := range gitRecords {
-						if gr.IsHotspot {
-							hot[gr.Path] = struct{}{}
-						}
-					}
-					healthOpts.HotspotPaths = hot
-				}
-				healthResult = healthOpts.Analyze(parsedFiles)
-				printHealthSummary(out, healthResult)
-			}
-
-			if scanExternals || persist {
-				records, err := external.ScanRoot(ctx, absRoot)
-				if err != nil {
-					return fmt.Errorf("scan externals: %w", err)
-				}
-				extRecords = records
-				if scanExternals {
-					printExternalsSummary(out, records)
-				}
-			}
-
-			if persist {
-				if err := persistAll(ctx, root, absRoot, g, extRecords, gitRecords, dcFindings, healthResult); err != nil {
-					return fmt.Errorf("persist: %w", err)
-				}
-				fmt.Fprintf(out, "\npersisted to %s\n", databaseTarget(root))
-			}
-			return nil
-		},
+		RunE:  o.run,
 	}
-	cmd.Flags().BoolVar(&listFiles, "list", false, "list each included file (default: stats only)")
-	cmd.Flags().BoolVar(&showStats, "stats", false, "also print summary stats when --list is set")
-	cmd.Flags().BoolVar(&parseAST, "parse", false, "parse each file's AST and report symbol/import/call counts")
-	cmd.Flags().BoolVar(&buildGraph, "graph", false, "build the dependency graph + metrics (implies --parse)")
-	cmd.Flags().BoolVar(&scanExternals, "externals", false, "scan manifest files for third-party dependencies")
-	cmd.Flags().BoolVar(&gitIndex, "git", false, "extract per-file git intelligence (hotspots, ownership, co-change)")
-	cmd.Flags().IntVar(&gitMaxCommits, "git-max-commits", 0, "cap commits walked by --git (0 = default 10000)")
-	cmd.Flags().BoolVar(&persist, "persist", false, "persist graph + externals + git intelligence (implies --graph --externals --git)")
-	cmd.Flags().IntVar(&maxKB, "max-kb", 0, "max file size in KB (0 = default 500)")
-	cmd.Flags().StringArrayVar(&extraExcl, "exclude", nil, "extra gitignore-syntax patterns to skip (repeatable)")
+	cmd.Flags().BoolVar(&o.listFiles, "list", false, "list each included file (default: stats only)")
+	cmd.Flags().BoolVar(&o.showStats, "stats", false, "also print summary stats when --list is set")
+	cmd.Flags().BoolVar(&o.parseAST, "parse", false, "parse each file's AST and report symbol/import/call counts")
+	cmd.Flags().BoolVar(&o.buildGraph, "graph", false, "build the dependency graph + metrics (implies --parse)")
+	cmd.Flags().BoolVar(&o.scanExternals, "externals", false, "scan manifest files for third-party dependencies")
+	cmd.Flags().BoolVar(&o.gitIndex, "git", false, "extract per-file git intelligence (hotspots, ownership, co-change)")
+	cmd.Flags().IntVar(&o.gitMaxCommits, "git-max-commits", 0, "cap commits walked by --git (0 = default 10000)")
+	cmd.Flags().BoolVar(&o.persist, "persist", false, "persist graph + externals + git intelligence (implies --graph --externals --git)")
+	cmd.Flags().IntVar(&o.maxKB, "max-kb", 0, "max file size in KB (0 = default 500)")
+	cmd.Flags().StringArrayVar(&o.extraExcl, "exclude", nil, "extra gitignore-syntax patterns to skip (repeatable)")
 	return cmd
+}
+
+// ingestOptions holds the ingest command's flags so the run logic can be
+// split into stage helpers instead of one large closure.
+type ingestOptions struct {
+	listFiles, showStats, parseAST, buildGraph, scanExternals, gitIndex, persist bool
+	maxKB, gitMaxCommits                                                         int
+	extraExcl                                                                    []string
+}
+
+func (o *ingestOptions) run(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+	root := "."
+	if len(args) > 0 {
+		root = args[0]
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("resolve path: %w", err)
+	}
+
+	tr, err := traverser.New(traverser.Options{
+		RepoRoot:             absRoot,
+		MaxFileSizeKB:        o.maxKB,
+		ExtraExcludePatterns: o.extraExcl,
+	})
+	if err != nil {
+		return err
+	}
+	files, stats, err := tr.Collect(ctx)
+	if err != nil && err != context.Canceled {
+		return fmt.Errorf("walk: %w", err)
+	}
+
+	// --persist implies --graph + --externals + --git; --graph implies --parse.
+	if o.persist {
+		o.buildGraph, o.scanExternals, o.gitIndex = true, true, true
+	}
+	if o.buildGraph {
+		o.parseAST = true
+	}
+
+	out := cmd.OutOrStdout()
+	parsedFiles, summary := o.parseFiles(ctx, out, files)
+
+	if o.showStats || (!o.listFiles && !o.parseAST) {
+		printStats(out, stats)
+	}
+	if o.parseAST {
+		fmt.Fprintf(out, "\nAST summary: symbols=%d imports=%d calls=%d (parsed %d / skipped %d / errored %d)\n",
+			summary.Symbols, summary.Imports, summary.Calls,
+			summary.Parsed, summary.Skipped, summary.Errored)
+	}
+
+	// Git intelligence runs first so health.Analyzer can weave hotspot paths
+	// into the untested_hotspot biomarker.
+	var gitRecords []git.PerFile
+	if o.gitIndex {
+		gitRecords = o.runGit(ctx, out, absRoot)
+	}
+
+	var (
+		g            *graph.Graph
+		dcFindings   []deadcode.Finding
+		healthResult health.Result
+	)
+	if o.buildGraph {
+		g, dcFindings, healthResult = buildIngestGraph(out, absRoot, parsedFiles, gitRecords)
+	}
+
+	var extRecords []external.Record
+	if o.scanExternals || o.persist {
+		records, err := external.ScanRoot(ctx, absRoot)
+		if err != nil {
+			return fmt.Errorf("scan externals: %w", err)
+		}
+		extRecords = records
+		if o.scanExternals {
+			printExternalsSummary(out, records)
+		}
+	}
+
+	if o.persist {
+		if err := persistAll(ctx, root, absRoot, g, extRecords, gitRecords, dcFindings, healthResult); err != nil {
+			return fmt.Errorf("persist: %w", err)
+		}
+		fmt.Fprintf(out, "\npersisted to %s\n", databaseTarget(root))
+	}
+	return nil
+}
+
+// parseFiles handles the --list / --parse loop, returning the parsed files
+// and the aggregate counts (empty when neither flag is set). The AST
+// summary line is printed by the caller so stats output stays ordered.
+func (o *ingestOptions) parseFiles(ctx context.Context, out io.Writer, files []models.FileInfo) ([]models.ParsedFile, parseAggregate) {
+	summary := parseAggregate{}
+	if !o.listFiles && !o.parseAST {
+		return nil, summary
+	}
+	ap := parser.New()
+	var parsedFiles []models.ParsedFile
+	for _, f := range files {
+		line := fmt.Sprintf(" %-12s %s", f.Language, f.Path)
+		if f.IsEntryPoint {
+			line = "*" + line[1:]
+		}
+		if o.parseAST {
+			parsed, s, err := parseOne(ctx, ap, f)
+			if err != nil {
+				fmt.Fprintf(out, "%s    [parse error: %v]\n", line, err)
+				continue
+			}
+			if !s.Skipped {
+				parsedFiles = append(parsedFiles, parsed)
+			}
+			line += fmt.Sprintf("    [symbols=%d imports=%d calls=%d]", s.Symbols, s.Imports, s.Calls)
+			summary.add(s)
+		}
+		if o.listFiles {
+			fmt.Fprintln(out, line)
+		}
+	}
+	return parsedFiles, summary
+}
+
+// runGit extracts per-file git intelligence, treating "not a git repo" as a
+// soft warning rather than a fatal error.
+func (o *ingestOptions) runGit(ctx context.Context, out io.Writer, absRoot string) []git.PerFile {
+	ix := &git.Indexer{MaxCommits: o.gitMaxCommits}
+	recs, err := ix.Index(ctx, absRoot)
+	if err != nil {
+		fmt.Fprintf(out, "\ngit intelligence skipped: %v\n", err)
+		return nil
+	}
+	printGitSummary(out, recs)
+	return recs
+}
+
+// buildIngestGraph builds the dependency graph + metrics, then runs dead-code
+// and health analysis over it, printing each summary.
+func buildIngestGraph(out io.Writer, absRoot string, parsedFiles []models.ParsedFile, gitRecords []git.PerFile) (*graph.Graph, []deadcode.Finding, health.Result) {
+	rctx := resolver.Context{}
+	if modPath, err := gomod.ParseModulePath(absRoot); err == nil && modPath != "" {
+		rctx.GoModulePath = modPath
+	}
+	if crate, err := cargo.ParseCrateName(absRoot); err == nil && crate != "" {
+		rctx.RustCrateName = crate
+	}
+	b := graph.NewBuilder(nil, graph.Options{ResolverContext: rctx})
+	for _, pf := range parsedFiles {
+		b.AddFile(pf)
+	}
+	g := b.Build()
+	g.ComputeMetrics()
+	printGraphSummary(out, g)
+
+	dcFindings := (&deadcode.Analyzer{MinConfidence: 0.5}).Analyze(g)
+	printDeadCodeSummary(out, dcFindings)
+
+	healthOpts := &health.Analyzer{}
+	if len(gitRecords) > 0 {
+		hat := make(map[string]struct{}, len(gitRecords))
+		for _, gr := range gitRecords {
+			if gr.IsHotspot {
+				hat[gr.Path] = struct{}{}
+			}
+		}
+		healthOpts.HotspotPaths = hat
+	}
+	healthResult := healthOpts.Analyze(parsedFiles)
+	printHealthSummary(out, healthResult)
+	return g, dcFindings, healthResult
 }
 
 type fileParseSummary struct {

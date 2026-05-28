@@ -20,12 +20,7 @@ import (
 // file), html (one .html per page; wrapped in basic <pre> tags — no
 // markdown-to-HTML conversion in this port).
 func newExportCmd() *cobra.Command {
-	var (
-		repoPath  string
-		format    string
-		outputDir string
-		full      bool
-	)
+	o := &exportOptions{}
 	cmd := &cobra.Command{
 		Use:   "export [PATH]",
 		Short: "Export persisted wiki pages to disk",
@@ -38,84 +33,104 @@ The HTML output is a bare wrapper around the raw markdown — no
 markdown-to-HTML conversion in this implementation to avoid pulling
 in a markdown library dependency.`,
 		Args: cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			root := repoPath
-			if len(args) > 0 {
-				root = args[0]
-			}
-			absRoot, err := filepath.Abs(root)
-			if err != nil {
-				return fmt.Errorf("resolve path: %w", err)
-			}
-			if format != "markdown" && format != "html" && format != "json" {
-				return fmt.Errorf("--format must be markdown | html | json (got %q)", format)
-			}
-
-			conn, _, err := openDB(ctx, root)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRoot, "")
-			if err != nil {
-				return fmt.Errorf("locate repo: %w", err)
-			}
-
-			outDir := outputDir
-			if outDir == "" {
-				outDir = filepath.Join(absRoot, ".repowise", "export")
-			} else {
-				outDir, err = filepath.Abs(outDir)
-				if err != nil {
-					return fmt.Errorf("resolve --output: %w", err)
-				}
-			}
-			if err := os.MkdirAll(outDir, 0o755); err != nil {
-				return fmt.Errorf("create output dir: %w", err)
-			}
-
-			pages, err := loadExportPages(ctx, conn, repoRow.ID)
-			if err != nil {
-				return fmt.Errorf("load pages: %w", err)
-			}
-			if len(pages) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(),
-					"no pages found. Run `repowise generate` first.")
-				return nil
-			}
-
-			switch format {
-			case "markdown":
-				if err := writeMarkdownExport(outDir, pages); err != nil {
-					return err
-				}
-			case "html":
-				if err := writeHTMLExport(outDir, pages); err != nil {
-					return err
-				}
-			case "json":
-				extras := map[string]any{}
-				if full {
-					ex, err := loadExportExtras(ctx, conn, repoRow.ID)
-					if err != nil {
-						return fmt.Errorf("load extras: %w", err)
-					}
-					extras = ex
-				}
-				if err := writeJSONExport(outDir, pages, extras, full); err != nil {
-					return err
-				}
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "exported %d pages to %s\n", len(pages), outDir)
-			return nil
-		},
+		RunE: o.run,
 	}
-	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path (overridden by positional PATH)")
-	cmd.Flags().StringVar(&format, "format", "markdown", "output format: markdown | html | json")
-	cmd.Flags().StringVarP(&outputDir, "output", "o", "", "output directory (default <repo>/.repowise/export)")
-	cmd.Flags().BoolVar(&full, "full", false, "include decisions/hotspots/dead-code in JSON export")
+	cmd.Flags().StringVar(&o.repoPath, "repo", ".", "repository path (overridden by positional PATH)")
+	cmd.Flags().StringVar(&o.format, "format", "markdown", "output format: markdown | html | json")
+	cmd.Flags().StringVarP(&o.outputDir, "output", "o", "", "output directory (default <repo>/.repowise/export)")
+	cmd.Flags().BoolVar(&o.full, "full", false, "include decisions/hotspots/dead-code in JSON export")
 	return cmd
+}
+
+// exportOptions holds the export command's flags.
+type exportOptions struct {
+	repoPath, format, outputDir string
+	full                        bool
+}
+
+func (o *exportOptions) run(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+	root := o.repoPath
+	if len(args) > 0 {
+		root = args[0]
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("resolve path: %w", err)
+	}
+	if o.format != "markdown" && o.format != "html" && o.format != "json" {
+		return fmt.Errorf("--format must be markdown | html | json (got %q)", o.format)
+	}
+
+	conn, _, err := openDB(ctx, root)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	repoRow, err := repos.New(conn).EnsureByLocalPath(ctx, absRoot, "")
+	if err != nil {
+		return fmt.Errorf("locate repo: %w", err)
+	}
+
+	outDir, err := resolveExportDir(absRoot, o.outputDir)
+	if err != nil {
+		return err
+	}
+
+	pages, err := loadExportPages(ctx, conn, repoRow.ID)
+	if err != nil {
+		return fmt.Errorf("load pages: %w", err)
+	}
+	if len(pages) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "no pages found. Run `repowise generate` first.")
+		return nil
+	}
+
+	if err := o.writeExport(ctx, conn, repoRow.ID, outDir, pages); err != nil {
+		return err
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "exported %d pages to %s\n", len(pages), outDir)
+	return nil
+}
+
+// resolveExportDir picks the output directory (default <repo>/.repowise/
+// export) and ensures it exists.
+func resolveExportDir(absRoot, outputDir string) (string, error) {
+	outDir := outputDir
+	if outDir == "" {
+		outDir = filepath.Join(absRoot, ".repowise", "export")
+	} else {
+		abs, err := filepath.Abs(outDir)
+		if err != nil {
+			return "", fmt.Errorf("resolve --output: %w", err)
+		}
+		outDir = abs
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return "", fmt.Errorf("create output dir: %w", err)
+	}
+	return outDir, nil
+}
+
+// writeExport dispatches to the per-format writer.
+func (o *exportOptions) writeExport(ctx context.Context, conn *sql.DB, repoID, outDir string, pages []exportPage) error {
+	switch o.format {
+	case "markdown":
+		return writeMarkdownExport(outDir, pages)
+	case "html":
+		return writeHTMLExport(outDir, pages)
+	case "json":
+		extras := map[string]any{}
+		if o.full {
+			ex, err := loadExportExtras(ctx, conn, repoID)
+			if err != nil {
+				return fmt.Errorf("load extras: %w", err)
+			}
+			extras = ex
+		}
+		return writeJSONExport(outDir, pages, extras, o.full)
+	}
+	return nil
 }
 
 type exportPage struct {

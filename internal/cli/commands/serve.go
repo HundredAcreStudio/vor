@@ -2,10 +2,13 @@ package commands
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -99,83 +102,11 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 			}
 
 			if mcpEnabled {
-				// Optionally wire an LLM provider so get_answer / get_why
-				// synthesise rather than returning raw context. Degrades
-				// to nil (raw context) when no key is configured.
-				provider, model := buildOptionalProvider(cfg)
-				embedder, _ := buildEmbedder(cfg)
-				mcpOpts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model, Embedder: embedder}
-				if provider != nil {
-					logger.Info("serve: LLM synthesis enabled", "provider", cfg.Provider)
-				}
-				switch {
-				case autoMode:
-					// Span every workspace registered in the user-global
-					// registry. The shared DB already holds all member
-					// repos; the MCP layer resolves `repo` aliases across
-					// all roots.
-					reg, err := userconfig.LoadWorkspaces()
-					if err != nil {
-						return fmt.Errorf("load workspaces registry: %w", err)
-					}
-					if len(reg.Workspaces) == 0 {
-						return fmt.Errorf("no workspaces registered — `repowise workspace register PATH`")
-					}
-					for _, w := range reg.Workspaces {
-						mcpOpts.WorkspaceRoots = append(mcpOpts.WorkspaceRoots, w.Path)
-					}
-					// Default repo: the default alias of the first
-					// registered workspace, so no-`repo` calls still work.
-					if first, err := workspace.Load(reg.Workspaces[0].Path); err == nil && first.DefaultAlias != "" {
-						if e, ok := first.Lookup(first.DefaultAlias); ok {
-							if id, err := mcp.ResolveRepositoryID(ctx, conn, e.Path); err == nil {
-								mcpOpts.RepositoryID = id
-							}
-						}
-					}
-					logger.Info("serve: auto mode", "workspaces", len(reg.Workspaces))
-				case workspaceMode:
-					root := workspaceRootIn
-					if root == "" {
-						root = repoPath
-					}
-					abs, err := filepath.Abs(root)
-					if err != nil {
-						return fmt.Errorf("resolve workspace root: %w", err)
-					}
-					state, err := workspace.Load(abs)
-					if err != nil {
-						return fmt.Errorf("load workspace.json: %w", err)
-					}
-					if len(state.Repos) == 0 {
-						return fmt.Errorf("no repos registered at %s — add some with `repowise workspace add`", abs)
-					}
-					mcpOpts.WorkspaceRoot = abs
-					if state.DefaultAlias != "" {
-						if e, ok := state.Lookup(state.DefaultAlias); ok {
-							if id, err := mcp.ResolveRepositoryID(ctx, conn, e.Path); err == nil {
-								mcpOpts.RepositoryID = id
-							}
-						}
-					}
-					logger.Info("serve: workspace mode", "root", abs, "repos", len(state.Repos))
-				default:
-					abs, err := filepath.Abs(repoPath)
-					if err != nil {
-						return fmt.Errorf("resolve --repo: %w", err)
-					}
-					repoID, err := mcp.ResolveRepositoryID(ctx, conn, abs)
-					if err != nil {
-						return fmt.Errorf("resolve repo: %w", err)
-					}
-					mcpOpts.RepositoryID = repoID
-				}
-				mcpSrv, err := mcp.New(mcpOpts)
+				handler, err := buildMCPHandler(ctx, conn, cfg, logger, repoPath, workspaceRootIn, autoMode, workspaceMode)
 				if err != nil {
-					return fmt.Errorf("init MCP: %w", err)
+					return err
 				}
-				httpOpts.MCPHandler = mcpSrv.HTTPHandler()
-				logger.Info("serve: MCP mounted at /mcp")
+				httpOpts.MCPHandler = handler
 			}
 
 			srv, err := rhttp.New(httpOpts)
@@ -220,6 +151,91 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 	cmd.Flags().StringVar(&workspaceRootIn, "workspace-root", "", "workspace root (defaults to --repo when --workspace is set)")
 	cmd.Flags().BoolVar(&autoMode, "auto", false, "serve every workspace in the user-global registry (`repowise workspace register`)")
 	return cmd
+}
+
+// buildMCPHandler wires an MCP server (LLM synthesis when configured) and
+// returns its Streamable-HTTP handler for mounting at /mcp.
+func buildMCPHandler(ctx context.Context, conn *sql.DB, cfg config.Config, logger *slog.Logger, repoPath, workspaceRootIn string, autoMode, workspaceMode bool) (http.Handler, error) {
+	provider, model := buildOptionalProvider(cfg)
+	embedder, _ := buildEmbedder(cfg)
+	mcpOpts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model, Embedder: embedder}
+	if provider != nil {
+		logger.Info("serve: LLM synthesis enabled", "provider", cfg.Provider)
+	}
+	if err := configureMCPScope(ctx, conn, logger, &mcpOpts, repoPath, workspaceRootIn, autoMode, workspaceMode); err != nil {
+		return nil, err
+	}
+	mcpSrv, err := mcp.New(mcpOpts)
+	if err != nil {
+		return nil, fmt.Errorf("init MCP: %w", err)
+	}
+	logger.Info("serve: MCP mounted at /mcp")
+	return mcpSrv.HTTPHandler(), nil
+}
+
+// configureMCPScope sets the repo/workspace targeting on mcpOpts for the
+// selected serve mode: --auto (every registered workspace), --workspace
+// (one workspace), or single-repo (default).
+func configureMCPScope(ctx context.Context, conn *sql.DB, logger *slog.Logger, mcpOpts *mcp.Options, repoPath, workspaceRootIn string, autoMode, workspaceMode bool) error {
+	switch {
+	case autoMode:
+		reg, err := userconfig.LoadWorkspaces()
+		if err != nil {
+			return fmt.Errorf("load workspaces registry: %w", err)
+		}
+		if len(reg.Workspaces) == 0 {
+			return fmt.Errorf("no workspaces registered — `repowise workspace register PATH`")
+		}
+		for _, w := range reg.Workspaces {
+			mcpOpts.WorkspaceRoots = append(mcpOpts.WorkspaceRoots, w.Path)
+		}
+		// Default repo: the default alias of the first registered workspace,
+		// so no-`repo` calls still work.
+		if first, err := workspace.Load(reg.Workspaces[0].Path); err == nil && first.DefaultAlias != "" {
+			if e, ok := first.Lookup(first.DefaultAlias); ok {
+				if id, err := mcp.ResolveRepositoryID(ctx, conn, e.Path); err == nil {
+					mcpOpts.RepositoryID = id
+				}
+			}
+		}
+		logger.Info("serve: auto mode", "workspaces", len(reg.Workspaces))
+	case workspaceMode:
+		root := workspaceRootIn
+		if root == "" {
+			root = repoPath
+		}
+		abs, err := filepath.Abs(root)
+		if err != nil {
+			return fmt.Errorf("resolve workspace root: %w", err)
+		}
+		state, err := workspace.Load(abs)
+		if err != nil {
+			return fmt.Errorf("load workspace.json: %w", err)
+		}
+		if len(state.Repos) == 0 {
+			return fmt.Errorf("no repos registered at %s — add some with `repowise workspace add`", abs)
+		}
+		mcpOpts.WorkspaceRoot = abs
+		if state.DefaultAlias != "" {
+			if e, ok := state.Lookup(state.DefaultAlias); ok {
+				if id, err := mcp.ResolveRepositoryID(ctx, conn, e.Path); err == nil {
+					mcpOpts.RepositoryID = id
+				}
+			}
+		}
+		logger.Info("serve: workspace mode", "root", abs, "repos", len(state.Repos))
+	default:
+		abs, err := filepath.Abs(repoPath)
+		if err != nil {
+			return fmt.Errorf("resolve --repo: %w", err)
+		}
+		repoID, err := mcp.ResolveRepositoryID(ctx, conn, abs)
+		if err != nil {
+			return fmt.Errorf("resolve repo: %w", err)
+		}
+		mcpOpts.RepositoryID = repoID
+	}
+	return nil
 }
 
 // printMCPInstructions writes copy-paste instructions for attaching an MCP
