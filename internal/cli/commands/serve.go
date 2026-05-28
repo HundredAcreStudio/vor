@@ -40,6 +40,7 @@ func newServeCmd() *cobra.Command {
 		mcpEnabled      bool
 		workspaceMode   bool
 		workspaceRootIn string
+		autoMode        bool
 	)
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -96,7 +97,33 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 
 			if mcpEnabled {
 				mcpOpts := mcp.Options{DB: conn, Logger: logger}
-				if workspaceMode {
+				switch {
+				case autoMode:
+					// Span every workspace registered in the user-global
+					// registry. The shared DB already holds all member
+					// repos; the MCP layer resolves `repo` aliases across
+					// all roots.
+					reg, err := userconfig.LoadWorkspaces()
+					if err != nil {
+						return fmt.Errorf("load workspaces registry: %w", err)
+					}
+					if len(reg.Workspaces) == 0 {
+						return fmt.Errorf("no workspaces registered — `repowise workspace register PATH`")
+					}
+					for _, w := range reg.Workspaces {
+						mcpOpts.WorkspaceRoots = append(mcpOpts.WorkspaceRoots, w.Path)
+					}
+					// Default repo: the default alias of the first
+					// registered workspace, so no-`repo` calls still work.
+					if first, err := workspace.Load(reg.Workspaces[0].Path); err == nil && first.DefaultAlias != "" {
+						if e, ok := first.Lookup(first.DefaultAlias); ok {
+							if id, err := mcp.ResolveRepositoryID(ctx, conn, e.Path); err == nil {
+								mcpOpts.RepositoryID = id
+							}
+						}
+					}
+					logger.Info("serve: auto mode", "workspaces", len(reg.Workspaces))
+				case workspaceMode:
 					root := workspaceRootIn
 					if root == "" {
 						root = repoPath
@@ -121,7 +148,7 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 						}
 					}
 					logger.Info("serve: workspace mode", "root", abs, "repos", len(state.Repos))
-				} else {
+				default:
 					abs, err := filepath.Abs(repoPath)
 					if err != nil {
 						return fmt.Errorf("resolve --repo: %w", err)
@@ -176,5 +203,6 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 	cmd.Flags().BoolVar(&mcpEnabled, "mcp", true, "mount the MCP server at /mcp (default true)")
 	cmd.Flags().BoolVar(&workspaceMode, "workspace", false, "serve every repo registered in the workspace")
 	cmd.Flags().StringVar(&workspaceRootIn, "workspace-root", "", "workspace root (defaults to --repo when --workspace is set)")
+	cmd.Flags().BoolVar(&autoMode, "auto", false, "serve every workspace in the user-global registry (`repowise workspace register`)")
 	return cmd
 }

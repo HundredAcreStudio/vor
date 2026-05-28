@@ -48,11 +48,36 @@ type Options struct {
 
 	// WorkspaceRoot enables multi-repo mode when non-empty. The path
 	// holds .repowise/workspace.json; tool calls can pass `repo` as
-	// an alias from that workspace.
+	// an alias from that workspace. Convenience for the single-
+	// workspace case — appended to WorkspaceRoots at construction.
 	WorkspaceRoot string
+
+	// WorkspaceRoots is the multi-workspace form, used by
+	// `repowise serve --auto` to span every registered workspace.
+	// Alias resolution searches each root in order; the first match
+	// wins. repowise_workspace_repos unions members across all roots.
+	WorkspaceRoots []string
 
 	// Logger receives structured tool-call logs. Defaults to slog.Default().
 	Logger *slog.Logger
+}
+
+// workspaceRoots returns the effective list of workspace roots: the
+// plural slice plus the singular convenience field, de-duplicated.
+func (o Options) workspaceRoots() []string {
+	seen := map[string]bool{}
+	out := []string{}
+	add := func(p string) {
+		if p != "" && !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	add(o.WorkspaceRoot)
+	for _, r := range o.WorkspaceRoots {
+		add(r)
+	}
+	return out
 }
 
 // Server wraps mark3labs/mcp-go's MCPServer with repowise's tool surface.
@@ -67,8 +92,8 @@ func New(opts Options) (*Server, error) {
 	if opts.DB == nil {
 		return nil, fmt.Errorf("Options.DB is required")
 	}
-	if opts.RepositoryID == "" && opts.WorkspaceRoot == "" {
-		return nil, fmt.Errorf("Options.RepositoryID or Options.WorkspaceRoot is required")
+	if opts.RepositoryID == "" && len(opts.workspaceRoots()) == 0 {
+		return nil, fmt.Errorf("Options.RepositoryID, WorkspaceRoot, or WorkspaceRoots is required")
 	}
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
@@ -137,16 +162,17 @@ func (s *Server) resolveRepoID(ctx context.Context, req mcp.CallToolRequest) (st
 }
 
 // resolveRepoSpec interprets one repo-pointing string in the order:
-// alias from the workspace registry, full repository id, local
+// alias from any registered workspace, full repository id, local
 // filesystem path. Read-only — does not create new repository rows.
 func (s *Server) resolveRepoSpec(ctx context.Context, spec string) (string, error) {
-	// Alias from workspace registry.
-	if s.opts.WorkspaceRoot != "" {
-		state, err := workspace.Load(s.opts.WorkspaceRoot)
-		if err == nil {
-			if entry, ok := state.Lookup(spec); ok {
-				return s.repoIDForPath(ctx, entry.Path)
-			}
+	// Alias from any registered workspace — first match wins.
+	for _, root := range s.opts.workspaceRoots() {
+		state, err := workspace.Load(root)
+		if err != nil {
+			continue
+		}
+		if entry, ok := state.Lookup(spec); ok {
+			return s.repoIDForPath(ctx, entry.Path)
 		}
 	}
 	// Full repository id.
