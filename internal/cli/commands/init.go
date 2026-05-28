@@ -182,6 +182,14 @@ const globalConfigTemplate = `# vor user-global configuration.
 # provider: anthropic        # anthropic | openai | google | ollama | litellm | mock
 # model: claude-sonnet-4-6
 
+# Repositories this machine's 'vor serve' daemon should track. With this
+# set, a bare 'vor serve' (no --repo/--workspace/--auto) indexes, serves,
+# and watches every listed repo from one shared database. Each repo's own
+# .vor/config.yaml supplies its settings; paths may use ~.
+# repos:
+#   - ~/projects/vor
+#   - ~/projects/api
+
 # Auto-reindex behaviour for 'vor serve'. Useful for a daemon tracking
 # multiple repos: set the machine-wide default here, then override it in an
 # individual repo's .vor/config.yaml (watch.enabled / watch.debounce).

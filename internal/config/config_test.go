@@ -167,6 +167,25 @@ func TestLoad_WatchConfig(t *testing.T) {
 	}
 }
 
+func TestLoad_ReposList(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".vor"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("repos:\n  - ~/projects/vor\n  - /abs/api\n")
+	if err := os.WriteFile(filepath.Join(dir, ".vor", "config.yaml"), body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"~/projects/vor", "/abs/api"}
+	if !equalSlice(cfg.Repos, want) {
+		t.Errorf("Repos = %v, want %v", cfg.Repos, want)
+	}
+}
+
 func TestLoadRepoFile(t *testing.T) {
 	// Missing file: ok=false, no error.
 	if _, ok, err := LoadRepoFile(t.TempDir()); err != nil || ok {

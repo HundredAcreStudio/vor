@@ -20,6 +20,9 @@ import (
 
 	"github.com/HundredAcreStudio/vor/internal/config"
 	"github.com/HundredAcreStudio/vor/internal/logging"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 	"github.com/HundredAcreStudio/vor/internal/server/autoindex"
 	rhttp "github.com/HundredAcreStudio/vor/internal/server/http"
 	"github.com/HundredAcreStudio/vor/internal/server/mcp"
@@ -65,7 +68,13 @@ output. Two surfaces live on one port:
 Configuration comes from VOR_DB_URL / .vor/config.yaml.
 Use --workspace to serve every repo in the workspace from one
 daemon (one DB holds N repos; MCP tools route per-call by the
-'repo' argument).`,
+'repo' argument).
+
+With a 'repos:' list in ~/.config/vor/config.yaml and no explicit
+--repo/--workspace/--auto, a bare 'vor serve' tracks that whole set
+from one shared database (the state-dir DB unless VOR_DB_URL pins one),
+indexing and watching each. Address them per-call by local path or
+repository id.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(repoPath)
 			if err != nil {
@@ -75,17 +84,62 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 			ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 
-			conn, _, err := openDB(ctx, repoPath)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-
 			logger := logging.New(logging.Options{
 				Level:  logging.ParseLevel(cfg.LogLevel),
 				Format: logging.FormatAuto,
 				Out:    os.Stderr,
 			})
+
+			// repos-list mode: when the user hasn't pinned a single --repo
+			// (or a workspace) and the config carries a `repos:` list, this
+			// daemon tracks that whole set from one shared DB — the same
+			// "N repos, one database" model as --workspace/--auto.
+			reposMode := !workspaceMode && !autoMode &&
+				!cmd.Flags().Changed("repo") && len(cfg.Repos) > 0
+
+			// In repos-list mode the DB can't default to a single repo's
+			// .vor/wiki.db — fall back to a machine-wide DB in the state dir
+			// (unless VOR_DB_URL pins one explicitly).
+			dbURL := cfg.DatabaseURL
+			if reposMode && dbURL == "" {
+				dir, derr := userconfig.StateDir()
+				if derr != nil {
+					return fmt.Errorf("resolve state dir for shared db: %w", derr)
+				}
+				dbURL = "sqlite:" + filepath.Join(dir, "wiki.db")
+			}
+
+			var (
+				conn    *sql.DB
+				dialect db.Dialect
+			)
+			if dbURL != "" {
+				conn, dialect, err = db.Open(ctx, db.OpenOptions{URL: dbURL})
+			} else {
+				conn, dialect, err = openDB(ctx, repoPath)
+			}
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			// Idempotent — also lets a fresh shared DB come up without a
+			// prior `vor init`.
+			if err := migrations.Up(ctx, conn, dialect); err != nil {
+				return fmt.Errorf("apply migrations: %w", err)
+			}
+
+			var reposDefaultID string
+			if reposMode {
+				ids, rerr := registerGlobalRepos(ctx, conn, cfg.Repos, logger)
+				if rerr != nil {
+					return rerr
+				}
+				if len(ids) == 0 {
+					return fmt.Errorf("repos: configured list resolved to no usable repositories")
+				}
+				reposDefaultID = ids[0]
+				logger.Info("serve: tracking repos from config", "count", len(ids))
+			}
 
 			bind := addr
 			if bind == "" {
@@ -104,7 +158,7 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 			}
 
 			if mcpEnabled {
-				handler, err := buildMCPHandler(ctx, conn, cfg, logger, repoPath, workspaceRootIn, autoMode, workspaceMode)
+				handler, err := buildMCPHandler(ctx, conn, cfg, logger, repoPath, workspaceRootIn, autoMode, workspaceMode, reposDefaultID)
 				if err != nil {
 					return err
 				}
@@ -186,14 +240,14 @@ daemon (one DB holds N repos; MCP tools route per-call by the
 
 // buildMCPHandler wires an MCP server (LLM synthesis when configured) and
 // returns its Streamable-HTTP handler for mounting at /mcp.
-func buildMCPHandler(ctx context.Context, conn *sql.DB, cfg config.Config, logger *slog.Logger, repoPath, workspaceRootIn string, autoMode, workspaceMode bool) (http.Handler, error) {
+func buildMCPHandler(ctx context.Context, conn *sql.DB, cfg config.Config, logger *slog.Logger, repoPath, workspaceRootIn string, autoMode, workspaceMode bool, reposDefaultID string) (http.Handler, error) {
 	provider, model := buildOptionalProvider(cfg)
 	embedder, _ := buildEmbedder(cfg)
 	mcpOpts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model, Embedder: embedder}
 	if provider != nil {
 		logger.Info("serve: LLM synthesis enabled", "provider", cfg.Provider)
 	}
-	if err := configureMCPScope(ctx, conn, logger, &mcpOpts, repoPath, workspaceRootIn, autoMode, workspaceMode); err != nil {
+	if err := configureMCPScope(ctx, conn, logger, &mcpOpts, repoPath, workspaceRootIn, autoMode, workspaceMode, reposDefaultID); err != nil {
 		return nil, err
 	}
 	mcpSrv, err := mcp.New(mcpOpts)
@@ -207,8 +261,14 @@ func buildMCPHandler(ctx context.Context, conn *sql.DB, cfg config.Config, logge
 // configureMCPScope sets the repo/workspace targeting on mcpOpts for the
 // selected serve mode: --auto (every registered workspace), --workspace
 // (one workspace), or single-repo (default).
-func configureMCPScope(ctx context.Context, conn *sql.DB, logger *slog.Logger, mcpOpts *mcp.Options, repoPath, workspaceRootIn string, autoMode, workspaceMode bool) error {
+func configureMCPScope(ctx context.Context, conn *sql.DB, logger *slog.Logger, mcpOpts *mcp.Options, repoPath, workspaceRootIn string, autoMode, workspaceMode bool, reposDefaultID string) error {
 	switch {
+	case reposDefaultID != "":
+		// repos-list mode: repos are already registered in the DB; default
+		// no-`repo` calls to the first, and let clients address the rest by
+		// local path or repository id (see resolveRepoSpec).
+		mcpOpts.RepositoryID = reposDefaultID
+		logger.Info("serve: repos-list mode", "default_repo", reposDefaultID)
 	case autoMode:
 		reg, err := userconfig.LoadWorkspaces()
 		if err != nil {
@@ -267,6 +327,52 @@ func configureMCPScope(ctx context.Context, conn *sql.DB, logger *slog.Logger, m
 		mcpOpts.RepositoryID = repoID
 	}
 	return nil
+}
+
+// registerGlobalRepos ensures every path in the config `repos:` list has a
+// row in the shared DB so the watcher (repos.List) and MCP scope can see
+// them. Paths support ~; non-directories and duplicates are skipped with a
+// warning. Returns the resolved repository ids in input order.
+func registerGlobalRepos(ctx context.Context, conn *sql.DB, paths []string, logger *slog.Logger) ([]string, error) {
+	store := repos.New(conn)
+	seen := map[string]bool{}
+	var ids []string
+	for _, raw := range paths {
+		abs, err := filepath.Abs(expandUser(raw))
+		if err != nil {
+			logger.Warn("repos: cannot resolve path, skipping", "path", raw, "err", err)
+			continue
+		}
+		if seen[abs] {
+			continue
+		}
+		if fi, err := os.Stat(abs); err != nil || !fi.IsDir() {
+			logger.Warn("repos: not a directory, skipping", "path", abs)
+			continue
+		}
+		r, err := store.EnsureByLocalPath(ctx, abs, "")
+		if err != nil {
+			logger.Warn("repos: could not register, skipping", "path", abs, "err", err)
+			continue
+		}
+		seen[abs] = true
+		ids = append(ids, r.ID)
+	}
+	return ids, nil
+}
+
+// expandUser expands a leading ~ (or ~/) to the user's home directory.
+// Other forms are returned unchanged.
+func expandUser(p string) string {
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			if p == "~" {
+				return home
+			}
+			return filepath.Join(home, p[2:])
+		}
+	}
+	return p
 }
 
 // printMCPInstructions writes copy-paste instructions for attaching an MCP
