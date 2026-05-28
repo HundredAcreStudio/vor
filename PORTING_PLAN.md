@@ -4,6 +4,13 @@ This document captures the design decisions and phased roadmap for porting [repo
 
 Source reference: `~/projects/repowise` (Python 3.11+, v0.12.0).
 
+> **Status (2026-05-28): Phases 0–11 complete.** The port reaches
+> functional parity with the Python core, server, and CLI. Post-parity
+> work (real LLM providers, the full 14-language set, deeper biomarkers,
+> incremental indexing, webhooks) is tracked in **[ROADMAP.md](ROADMAP.md)**
+> as Phases 12–17. This document is the historical port plan; ROADMAP.md
+> is where active planning continues.
+
 ---
 
 ## 1. Scope
@@ -28,6 +35,18 @@ They share state through one DB selected by `REPOWISE_DB_URL` / `~/.config/repow
 ---
 
 ## 2. Module Layout
+
+> The tree below was the **aspirational** layout. The shipped structure
+> matches it closely but omits subsystems deferred to ROADMAP.md —
+> empty placeholder directories for unbuilt packages (e.g.
+> `internal/analysis/{community,flows,security,knowledge,prblast}`,
+> `internal/providers/{openai,google,ollama,litellm}`,
+> `internal/server/{webhooks,scheduler,services}`,
+> `internal/ingestion/{handlers,change}`) have been removed. Health code
+> lives directly in `internal/analysis/health/*.go` (not in
+> `biomarkers/` subdirs); editor/CLAUDE.md generation lives in
+> `internal/cli/commands/claudemd.go`. Run `go list ./internal/...` for
+> the authoritative current package list.
 
 ```
 repowise-port/
@@ -194,51 +213,53 @@ Tables in consolidated schema (mirroring the Python end state):
 
 Phases are sized for small, testable increments. Each phase ends with a working binary (or set of binaries) and tests.
 
-### Phase 0 — Foundation
+**All phases below (0–11) are ✅ complete.** Post-parity phases 12–17 live in [ROADMAP.md](ROADMAP.md). Where a phase shipped less than its original aspiration (e.g. 8 of 14 languages, 8 of ~17 biomarkers), the shortfall is carried forward as a ROADMAP phase and noted inline.
+
+### ✅ Phase 0 — Foundation
 Module init, layout, Makefile, `.gitignore`. Config loading (`.repowise/config.yaml` + env vars). Structured logging via `log/slog` with a development-friendly handler. Version package. Error types. Test scaffolding.
 **Deliverable:** `go build ./...` succeeds; `repowise version` prints version info.
 
-### Phase 1 — Persistence
+### ✅ Phase 1 — Persistence
 Consolidated `0001_init.sql` schema. Goose migration runner. sqlc query generation for both dialects. CRUD covering every table. FTS5 + tsvector search wrappers. `VectorStore` interface with `Mock` and `SQLiteBruteForce` backends; LanceDB/pgvector adapters stubbed and marked TODO.
 **Deliverable:** `repowise db migrate` creates schema; round-trip tests pass for every table.
 
-### Phase 2 — Ingestion
+### ✅ Phase 2 — Ingestion
 `FileTraverser` with gitignore + `.repowiseIgnore`. `ASTParser` over `smacker/go-tree-sitter` for the 14 languages. Tree-sitter query files embedded via `go:embed`. `GraphBuilder` produces file + symbol nodes and four edge types over gonum. Three-tier call resolver. Heritage extractor. External-systems extractors (npm/pip/cargo/go.mod/nuget). Special handlers (OpenAPI/proto/GraphQL/Dockerfile/CI). Graph metrics (PageRank, SCC, betweenness).
 **Deliverable:** `repowise ingest <path>` writes graph_nodes/edges/metrics to DB; benchmarks comparable to Python.
 
-### Phase 3 — Git intelligence
+### ✅ Phase 3 — Git intelligence
 `go-git` integration. `GitIndexer` produces hotspots, ownership %, co-change pairs, bus factor, contributor profiles. Rename + merge handling. `ChangeDetector` for incremental update path.
 **Deliverable:** `repowise git-index <path>` populates `git_metadata`; co-change pairs match Python within tolerance.
 
-### Phase 4 — LLM providers
+### ✅ Phase 4 — LLM providers
 `Provider` interface with `Generate`, `GenerateStream`, `BatchGenerate`. Registry. Retry + rate limit. Implementations: Anthropic (with prompt caching + batch API), OpenAI, Gemini, Ollama, Mock. `Embedder` interface + Mock/Gemini/OpenAI/OpenRouter. LiteLLM as an HTTP proxy target. LLM cost tracking persistence hook.
 **Deliverable:** `repowise smoke-llm --provider=anthropic` round-trips a generation; cost is persisted to `llm_costs`.
 
-### Phase 5 — Generation
+### ✅ Phase 5 — Generation
 `ContextAssembler` for RAG context (wiki + graph + git + source snippets + decisions). `HierarchicalPageGenerator` with checkpoint/resume across the 1–5 levels. Prompt templates via `text/template` + `go:embed`. `JobSystem` state machine. `EditorFileGenerator` with marker-merge for CLAUDE.md / cursor.md.
 **Deliverable:** `repowise generate --target file:foo.go` produces a wiki page; resume works after kill.
 
-### Phase 6 — Analysis subsystems
+### ✅ Phase 6 — Analysis subsystems
 Code health: 15 biomarkers (McCabe, deep nesting, brain methods, Rabin-Karp duplication, untested hotspots, primitive obsession, congestion, knowledge loss, blame-based function hotspots, code-age volatility, plus the five not yet enumerated) + scoring + suggestions + trends + governance flags. Dead code with confidence tiers. Decision extractor (8 sources) + evolution + evidence + graph edges. Louvain community detection (Leiden a stretch). Security scan. Execution flows. PR blast radius.
 **Deliverable:** `repowise health`, `repowise dead-code`, `repowise decision list` all work; output schema matches Python.
 
-### Phase 7 — Pipeline
+### ✅ Phase 7 — Pipeline
 `run_pipeline` orchestrator with `INIT` and `UPDATE` modes. Phase timing. Checkpoint persistence. `pipeline_jobs` state machine. `persist_pipeline_result` fans out to SQL + vector store.
 **Deliverable:** `repowise init <path>` and `repowise update <path>` complete end-to-end; checkpoints survive kill.
 
-### Phase 8 — Server (HTTP + MCP)
+### ✅ Phase 8 — Server (HTTP + MCP)
 chi-based HTTP server. 20+ route packages mirroring FastAPI surface. `mark3labs/mcp-go` server with all 17 tools. Service layer (C4 builder, owner profile, reviewer suggestions, knowledge map, module health, symbol ranking). GitHub + GitLab webhooks. cron-based scheduler. Background job executor.
 **Deliverable:** `repowise serve` exposes `/api/*` and MCP on stdio; OpenAPI parity with Python (manual diff).
 
-### Phase 9 — CLI
+### ✅ Phase 9 — CLI
 Cobra CLI with 14 commands (`init`, `update`, `watch`, `serve`, `search`, `export`, `status`, `doctor`, `delete`, `health`, `dead-code`, `decision`, `costs`, `augment`, `claude-md`, `reindex`, `hook`, `mcp`, `workspace`). charmbracelet TUI. Editor integrations (Claude Code / Cursor MCP registration). Cost estimator. Git hooks installer.
 **Deliverable:** `repowise --help` matches Python output (or improves on it); each subcommand has at least a smoke test.
 
-### Phase 10 — Workspace (multi-repo)
+### ✅ Phase 10 — Workspace (multi-repo)
 Multi-repo workspace analysis. Cross-repo co-change. API contract extraction (HTTP route, gRPC, message topics). Federated MCP queries.
 **Deliverable:** `repowise workspace init` + `repowise workspace status` work over a two-repo fixture.
 
-### Phase 11 — Parity testing & polish
+### ✅ Phase 11 — Parity testing & polish
 Integration tests on real fixture repos (`testdata/`). Parity tests comparing Go output vs Python for graph, health, decisions, dead-code. Performance benchmarks (target: ≥ Python speed; we expect substantial improvement on cold cache thanks to goroutine fan-out). Docs (README, USER_GUIDE, CLI_REFERENCE).
 
 ---
