@@ -16,6 +16,15 @@ Source reference: `~/projects/repowise` (Python 3.11+, v0.12.0).
 | `packages/types` | N/A — Go has its own types in `internal/...` | Out of scope |
 | `packages/ui` + `packages/web` | Separate `repowise-dashboard` repo (Next.js) | Out of scope |
 
+### Two runtime components
+
+The port ships as two cooperating binaries-of-one-binary that share a database:
+
+- **CLI** (`repowise <subcommand>`) — indexing + inspection, run interactively / from scripts / git hooks. Cheap deterministic work (parse → graph → git → health → decisions) plus on-demand LLM generation.
+- **Server** (`repowise serve`) — a long-running daemon exposing the indexed data over HTTP (`/api/repos/{id}/*`, `/api/workspace*`) and MCP (`/mcp`, Streamable HTTP). Editor clients and dashboards attach to it.
+
+They share state through one DB selected by `REPOWISE_DB_URL` / `~/.config/repowise/config.yaml` / per-repo `.repowise/config.yaml`. Every table is keyed by `repository_id`, so one SQLite file (workstation) or Postgres instance (central host) holds N repos and a single daemon serves them all. `serve --auto` reads the user-global workspace registry and serves every registered workspace. See the README "Two components" section for deployment shapes.
+
 ---
 
 ## 2. Module Layout
