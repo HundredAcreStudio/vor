@@ -1,0 +1,36 @@
+vor
+===
+
+vor is a Go port (independent re-implementation) of repowise.
+
+Upstream / original work
+------------------------
+repowise — https://github.com/repowise-dev/repowise
+Copyright (C) 2024-2026 Raghav Chamadiya and contributors
+Licensed under the GNU Affero General Public License, version 3.
+
+vor derives its design and feature set from repowise: the dependency-graph
+model, the code-health biomarkers, decision mining, the generation/wiki
+pipeline, and the MCP tool surface all originate in that project. No
+upstream source code was copied verbatim — vor is a fresh implementation in
+Go — but it is unmistakably a derivative work, and it is distributed under
+the same license out of both obligation and respect for the original.
+
+This port
+---------
+vor (the Go port) — https://github.com/HundredAcreStudio/vor
+Copyright (C) 2026 Jonathan Chauncey / Hundred Acre Studio
+Licensed under the GNU Affero General Public License, version 3.
+
+vor is not affiliated with, sponsored by, or endorsed by the upstream
+repowise project or its authors.
+
+License
+-------
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU Affero General Public License as published by the
+Free Software Foundation, version 3. The full text is in the LICENSE file.
+
+Because this is AGPL-licensed, the network-use provision (section 13)
+applies: if you run a modified version to provide a service over a network,
+you must make the corresponding source available to its users.

@@ -1,7 +1,7 @@
 # Parity with the Python implementation
 
-Tracks how the Go port (`vor-go`) compares to upstream
-[vor](https://github.com/HundredAcreStudio/vor) (Python, v0.12.x).
+Tracks how the Go port (**vor**) compares to upstream
+[repowise](https://github.com/repowise-dev/repowise) (Python, v0.12.x).
 Phase 11 reference — updated as gaps close.
 
 Legend: ✅ full parity · 🟡 partial / behavioural difference · ⏳ not yet · ➕ Go-only addition

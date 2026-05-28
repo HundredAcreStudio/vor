@@ -1,8 +1,8 @@
 # vor-go — Porting Plan
 
-This document captures the design decisions and phased roadmap for porting [vor](https://github.com/HundredAcreStudio/vor) from Python to Go. The Go port targets **full feature parity** with the Python implementation across `packages/core`, `packages/server`, and `packages/cli`. The Next.js dashboard is out of scope for this repository — it will live in a separate `vor-dashboard` repo and communicate with this backend over HTTP.
+This document captures the design decisions and phased roadmap for porting [repowise](https://github.com/repowise-dev/repowise) from Python to Go. The Go port (**vor**) targets **full feature parity** with the upstream Python implementation across `packages/core`, `packages/server`, and `packages/cli`. The Next.js dashboard is out of scope for this repository — it will live in a separate dashboard repo and communicate with this backend over HTTP.
 
-Source reference: `~/projects/vor` (Python 3.11+, v0.12.0).
+Source reference: `~/projects/repowise` (the upstream Python project, 3.11+, v0.12.0).
 
 > **Status (2026-05-28): Phases 0–11 complete.** The port reaches
 > functional parity with the Python core, server, and CLI. Post-parity
