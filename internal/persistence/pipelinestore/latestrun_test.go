@@ -3,6 +3,7 @@ package pipelinestore_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/repowise-dev/repowise-go/internal/persistence/pipelinestore"
 )
@@ -32,6 +33,11 @@ func TestLatestRun_GroupsByRunID(t *testing.T) {
 		_ = store.Start(ctx, j.ID)
 		_ = store.Complete(ctx, j.ID)
 	}
+	// SQLite's CURRENT_TIMESTAMP has 1-second resolution. Without a gap,
+	// run-A and run-B's rows can share a timestamp and LatestRun's
+	// "most-recent UpdatedAt" tiebreak becomes UUID-order-dependent.
+	// Real runs are always seconds apart; the sleep models that.
+	time.Sleep(1100 * time.Millisecond)
 	for _, p := range []string{"parse", "graph"} {
 		j, _ := store.Begin(ctx, repoID, p, "run-B")
 		_ = store.Start(ctx, j.ID)

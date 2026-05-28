@@ -80,15 +80,23 @@ func TestUp_SQLite(t *testing.T) {
 		t.Errorf("foreign_keys pragma = %d, want 1", fk)
 	}
 
+	// Down rolls back the most-recent migration only (goose semantics),
+	// so the latest table (embeddings, from 0002) should disappear while
+	// the 0001 tables remain.
 	if err := Down(ctx, conn, dialect); err != nil {
 		t.Fatalf("Down: %v", err)
 	}
-	// After Down, one of the early tables should be gone.
 	var probe string
 	row := conn.QueryRowContext(ctx,
-		`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`, "repositories")
+		`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`, "embeddings")
 	if err := row.Scan(&probe); err == nil {
-		t.Errorf("repositories table still present after Down")
+		t.Errorf("embeddings table still present after one Down")
+	}
+	// A 0001 table should survive a single-step Down.
+	row = conn.QueryRowContext(ctx,
+		`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`, "repositories")
+	if err := row.Scan(&probe); err != nil {
+		t.Errorf("repositories should survive a single-step Down: %v", err)
 	}
 }
 
