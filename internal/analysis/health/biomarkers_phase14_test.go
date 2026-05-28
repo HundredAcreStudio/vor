@@ -70,6 +70,66 @@ func TestFeatureEnvy(t *testing.T) {
 	}
 }
 
+func TestFeatureEnvy_SkipsNoise(t *testing.T) {
+	billing := "billing"
+	self := "s"
+	fmtRecv := "fmt"
+
+	calls := func(recv, caller string) []models.CallSite {
+		out := make([]models.CallSite, 4)
+		for i := range out {
+			out[i] = models.CallSite{TargetName: "x", ReceiverName: &recv, CallerSymbolID: ptr(caller), Line: i + 2}
+		}
+		return out
+	}
+
+	cases := []struct {
+		name string
+		pf   models.ParsedFile
+	}{
+		{
+			name: "free function is not a method, so not envy",
+			pf: models.ParsedFile{
+				FileInfo: models.FileInfo{Path: "f.go", Language: "go"},
+				Symbols:  []models.Symbol{{ID: "f.go::run", Name: "run", Kind: models.KindFunction, StartLine: 1, EndLine: 9}},
+				Calls:    calls(billing, "f.go::run"),
+			},
+		},
+		{
+			name: "test files are exempt",
+			pf: models.ParsedFile{
+				FileInfo: models.FileInfo{Path: "f_test.go", Language: "go", IsTest: true},
+				Symbols:  []models.Symbol{{ID: "f_test.go::Order::total", Name: "total", Kind: models.KindMethod, ParentName: ptr("Order"), StartLine: 1, EndLine: 9}},
+				Calls:    calls(billing, "f_test.go::Order::total"),
+			},
+		},
+		{
+			name: "own receiver var (s for Server) is self, not envy",
+			pf: models.ParsedFile{
+				FileInfo: models.FileInfo{Path: "s.go", Language: "go"},
+				Symbols:  []models.Symbol{{ID: "s.go::Server::handle", Name: "handle", Kind: models.KindMethod, ParentName: ptr("Server"), StartLine: 1, EndLine: 9}},
+				Calls:    calls(self, "s.go::Server::handle"),
+			},
+		},
+		{
+			name: "stdlib package receiver is not a domain object",
+			pf: models.ParsedFile{
+				FileInfo: models.FileInfo{Path: "p.go", Language: "go"},
+				Symbols:  []models.Symbol{{ID: "p.go::Printer::emit", Name: "emit", Kind: models.KindMethod, ParentName: ptr("Printer"), StartLine: 1, EndLine: 9}},
+				Calls:    calls(fmtRecv, "p.go::Printer::emit"),
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := (&health.Analyzer{}).Analyze([]models.ParsedFile{tc.pf})
+			if n := countBiomarker(res, health.BiomarkerFeatureEnvy); n != 0 {
+				t.Errorf("expected no feature_envy, got %d", n)
+			}
+		})
+	}
+}
+
 func TestShotgunSurgery(t *testing.T) {
 	partners := []string{"a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go", "h.go"}
 	a := &health.Analyzer{CoChangePairs: map[string][]string{"core.go": partners}}

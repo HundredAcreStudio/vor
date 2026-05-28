@@ -399,19 +399,24 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 					})
 				}
 
-				// feature_envy: leans on one external receiver more than its own class.
-				if envied, n := featureEnvy(sym, callsByCaller[sym.ID], thresholds); envied {
-					findings = append(findings, Finding{
-						FilePath:      pf.FileInfo.Path,
-						BiomarkerType: BiomarkerFeatureEnvy,
-						Severity:      SeverityMedium,
-						FunctionName:  sym.Name,
-						LineStart:     sym.StartLine,
-						LineEnd:       sym.EndLine,
-						HealthImpact:  clamp(1.0+float64(n-thresholds.FeatureEnvyCalls)*0.3, 1.0, 3.0),
-						Reason:        fmt.Sprintf("%d calls to a single external receiver", n),
-						Details:       map[string]any{"externalCalls": n},
-					})
+				// feature_envy is an OO smell: a METHOD more interested in
+				// another class than its own. Only applies to methods of a
+				// type, and not in test files (test bodies legitimately
+				// drive other objects — t.Errorf, mock.On, …).
+				if sym.Kind == models.KindMethod && sym.ParentName != nil && !pf.FileInfo.IsTest {
+					if envied, recv, n := featureEnvy(sym, callsByCaller[sym.ID], thresholds); envied {
+						findings = append(findings, Finding{
+							FilePath:      pf.FileInfo.Path,
+							BiomarkerType: BiomarkerFeatureEnvy,
+							Severity:      SeverityMedium,
+							FunctionName:  sym.Name,
+							LineStart:     sym.StartLine,
+							LineEnd:       sym.EndLine,
+							HealthImpact:  clamp(1.0+float64(n-thresholds.FeatureEnvyCalls)*0.3, 1.0, 3.0),
+							Reason:        fmt.Sprintf("%d calls to %q (more than to its own type)", n, recv),
+							Details:       map[string]any{"externalCalls": n, "receiver": recv},
+						})
+					}
 				}
 			}
 		}
@@ -681,16 +686,36 @@ func countSignatureParams(sig string) int {
 	return commas + 1
 }
 
-// featureEnvy reports whether sym makes more calls to a single external
-// receiver than the FeatureEnvyCalls threshold. "External" means a named
-// receiver that is neither self/this nor the symbol's own parent class.
-func featureEnvy(sym models.Symbol, calls []models.CallSite, t Thresholds) (bool, int) {
+// nonDomainReceivers are receiver names that represent standard-library
+// packages, test harnesses, or generic builders — calling them many times
+// is normal usage, not envy of another domain object. Matching is exact on
+// the receiver token the parser captured.
+var nonDomainReceivers = map[string]struct{}{
+	// stdlib / common packages (receiver == package name)
+	"fmt": {}, "strings": {}, "strconv": {}, "errors": {}, "bytes": {},
+	"bufio": {}, "io": {}, "os": {}, "filepath": {}, "path": {}, "time": {},
+	"sort": {}, "slices": {}, "maps": {}, "regexp": {}, "sync": {}, "math": {},
+	"json": {}, "context": {}, "log": {}, "http": {}, "sql": {}, "rand": {},
+	"utf8": {}, "unicode": {}, "reflect": {}, "exec": {}, "uuid": {},
+	// test harnesses / assertion + mock libraries
+	"t": {}, "b": {}, "require": {}, "assert": {}, "mock": {}, "expect": {},
+}
+
+// featureEnvy reports whether a method leans on a single external domain
+// object more than on its own type. Returns (envied, receiverName, count).
+//
+// "External" excludes: self/this, the method's own receiver variable (Go
+// idiom: the receiver var is the lowercased initial of the type, e.g. `s`
+// for *Server), and non-domain receivers (stdlib packages, test harnesses,
+// builders). The remaining dominant receiver, if it clears the threshold
+// and accounts for the majority of qualifying calls, is the envied object.
+func featureEnvy(sym models.Symbol, calls []models.CallSite, t Thresholds) (bool, string, int) {
 	if t.FeatureEnvyCalls <= 0 || len(calls) == 0 {
-		return false, 0
+		return false, "", 0
 	}
 	own := ""
 	if sym.ParentName != nil {
-		own = *sym.ParentName
+		own = strings.ToLower(*sym.ParentName)
 	}
 	byReceiver := map[string]int{}
 	total := 0
@@ -699,25 +724,46 @@ func featureEnvy(sym models.Symbol, calls []models.CallSite, t Thresholds) (bool
 			continue
 		}
 		r := *c.ReceiverName
-		switch r {
-		case "", "self", "this", "Self", own:
+		if isSelfReceiver(r, own) {
+			continue
+		}
+		if _, skip := nonDomainReceivers[r]; skip {
 			continue
 		}
 		byReceiver[r]++
 		total++
 	}
-	bestN := 0
-	for _, n := range byReceiver {
+	bestReceiver, bestN := "", 0
+	for r, n := range byReceiver {
 		if n > bestN {
-			bestN = n
+			bestReceiver, bestN = r, n
 		}
 	}
-	// Envy requires a dominant external receiver: above threshold AND the
-	// majority of the symbol's external calls go to it.
+	// Envy requires a dominant external domain receiver: above threshold
+	// AND the majority of the method's qualifying calls go to it.
 	if bestN >= t.FeatureEnvyCalls && bestN*2 >= total {
-		return true, bestN
+		return true, bestReceiver, bestN
 	}
-	return false, 0
+	return false, "", 0
+}
+
+// isSelfReceiver reports whether r refers to the method's own object: the
+// literal self/this, or — by Go convention — a 1–2 char receiver variable
+// that is the initial of the lowercased owning type name (s↔server, p↔provider).
+func isSelfReceiver(r, ownLower string) bool {
+	switch r {
+	case "", "self", "this", "Self":
+		return true
+	}
+	if ownLower != "" {
+		if strings.EqualFold(r, ownLower) {
+			return true
+		}
+		if len(r) <= 2 && strings.HasPrefix(ownLower, strings.ToLower(r)) {
+			return true
+		}
+	}
+	return false
 }
 
 func complexityHit(ccn int, t Thresholds) (bool, Severity) {
