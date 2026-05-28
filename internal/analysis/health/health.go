@@ -12,6 +12,7 @@ package health
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/repowise-dev/repowise-go/internal/ingestion/models"
 )
@@ -30,13 +31,16 @@ const (
 // BiomarkerDuplication is declared in duplication.go (lives next to
 // its implementation).
 const (
-	BiomarkerHighComplexity  = "high_complexity"
-	BiomarkerLongFunction    = "long_function"
-	BiomarkerDeepNesting     = "deep_nesting"
-	BiomarkerGodClass        = "god_class"
-	BiomarkerUntestedHotspot = "untested_hotspot"
-	BiomarkerBrainMethod     = "brain_method"
-	BiomarkerHiddenCoupling  = "hidden_coupling"
+	BiomarkerHighComplexity    = "high_complexity"
+	BiomarkerLongFunction      = "long_function"
+	BiomarkerDeepNesting       = "deep_nesting"
+	BiomarkerGodClass          = "god_class"
+	BiomarkerUntestedHotspot   = "untested_hotspot"
+	BiomarkerBrainMethod       = "brain_method"
+	BiomarkerHiddenCoupling    = "hidden_coupling"
+	BiomarkerLongParameterList = "long_parameter_list"
+	BiomarkerFeatureEnvy       = "feature_envy"
+	BiomarkerShotgunSurgery    = "shotgun_surgery"
 )
 
 // Finding is one biomarker hit. Persisted into health_findings.
@@ -96,6 +100,24 @@ type Thresholds struct {
 	BrainMethodCCN     int
 	BrainMethodNesting int
 	BrainMethodLines   int
+
+	// UntestedCoveragePct: when imported coverage is available, a hotspot
+	// with line coverage below this percentage is flagged untested.
+	UntestedCoveragePct float64
+
+	// LongParameterList / LongParameterListHigh: a function with ≥ this
+	// many parameters is flagged medium / high. A primitive-obsession and
+	// data-clump proxy.
+	LongParameterList     int
+	LongParameterListHigh int
+
+	// FeatureEnvyCalls: a method making ≥ this many calls to a single
+	// external receiver (more than to its own class) is flagged.
+	FeatureEnvyCalls int
+
+	// ShotgunSurgeryFiles: a file that co-changes with ≥ this many distinct
+	// other files is flagged — a change here tends to ripple widely.
+	ShotgunSurgeryFiles int
 }
 
 // DefaultThresholds returns the recommended values.
@@ -113,6 +135,11 @@ func DefaultThresholds() Thresholds {
 		BrainMethodCCN:        10,
 		BrainMethodNesting:    3,
 		BrainMethodLines:      50,
+		UntestedCoveragePct:   50,
+		LongParameterList:     5,
+		LongParameterListHigh: 8,
+		FeatureEnvyCalls:      4,
+		ShotgunSurgeryFiles:   8,
 	}
 }
 
@@ -125,6 +152,13 @@ type Analyzer struct {
 	// intelligence here. Optional — when empty, the biomarker won't
 	// fire.
 	HotspotPaths map[string]struct{}
+
+	// Coverage maps a file path to its line-coverage percentage (0..100)
+	// from an imported report. When present it makes untested_hotspot
+	// authoritative: a hotspot is "untested" when its coverage is below
+	// Thresholds.UntestedCoveragePct, regardless of paired-test-file
+	// heuristics. Optional — nil falls back to the paired-test heuristic.
+	Coverage map[string]float64
 
 	// CoChangePairs maps a file path to the paths it has historically
 	// co-changed with. Caller is expected to pre-filter by minimum
@@ -188,15 +222,32 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 			HasTestFile: testPairs[pf.FileInfo.Path],
 		}
 
-		// untested_hotspot: file is a known git hotspot AND has no paired
-		// test file. One finding per file, not per symbol.
-		if _, isHot := a.HotspotPaths[pf.FileInfo.Path]; isHot && !pf.FileInfo.IsTest && !testPairs[pf.FileInfo.Path] {
+		// untested_hotspot: a known git hotspot that is under-tested. When
+		// imported coverage exists it is authoritative (coverage below the
+		// threshold = untested); otherwise fall back to the paired-test-file
+		// heuristic. One finding per file, not per symbol.
+		if _, isHot := a.HotspotPaths[pf.FileInfo.Path]; isHot && !pf.FileInfo.IsTest {
+			if untested, reason, impact := a.untestedHotspot(pf.FileInfo.Path, testPairs, thresholds); untested {
+				findings = append(findings, Finding{
+					FilePath:      pf.FileInfo.Path,
+					BiomarkerType: BiomarkerUntestedHotspot,
+					Severity:      SeverityHigh,
+					HealthImpact:  impact,
+					Reason:        reason,
+				})
+			}
+		}
+
+		// shotgun_surgery: this file historically co-changes with many
+		// others, so edits here ripple widely. One finding per file.
+		if partners := distinctCount(a.CoChangePairs[pf.FileInfo.Path]); partners >= thresholds.ShotgunSurgeryFiles && thresholds.ShotgunSurgeryFiles > 0 {
 			findings = append(findings, Finding{
 				FilePath:      pf.FileInfo.Path,
-				BiomarkerType: BiomarkerUntestedHotspot,
-				Severity:      SeverityHigh,
-				HealthImpact:  3.0,
-				Reason:        "high-churn file with no paired test file",
+				BiomarkerType: BiomarkerShotgunSurgery,
+				Severity:      SeverityMedium,
+				HealthImpact:  clamp(1.0+float64(partners-thresholds.ShotgunSurgeryFiles)*0.25, 1.0, 3.0),
+				Reason:        fmt.Sprintf("co-changes with %d other files", partners),
+				Details:       map[string]any{"coChangePartners": partners},
 			})
 		}
 
@@ -206,6 +257,15 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 		for _, sym := range pf.Symbols {
 			if sym.ParentName != nil && (sym.Kind == models.KindMethod || sym.Kind == models.KindFunction) {
 				methodsByParent[*sym.ParentName]++
+			}
+		}
+
+		// feature_envy: group this file's calls by the enclosing symbol so
+		// each symbol can be checked against the receivers it leans on.
+		callsByCaller := map[string][]models.CallSite{}
+		for _, c := range pf.Calls {
+			if c.CallerSymbolID != nil {
+				callsByCaller[*c.CallerSymbolID] = append(callsByCaller[*c.CallerSymbolID], c)
 			}
 		}
 
@@ -309,6 +369,43 @@ func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
 						Details: map[string]any{
 							"methodCount": methodCount,
 						},
+					})
+				}
+			}
+
+			// long_parameter_list: many parameters hint at primitive
+			// obsession / a missing parameter object. Functions/methods only.
+			if sym.Kind == models.KindFunction || sym.Kind == models.KindMethod {
+				if n := countSignatureParams(sym.Signature); n >= thresholds.LongParameterList && thresholds.LongParameterList > 0 {
+					sev := SeverityMedium
+					if n >= thresholds.LongParameterListHigh {
+						sev = SeverityHigh
+					}
+					findings = append(findings, Finding{
+						FilePath:      pf.FileInfo.Path,
+						BiomarkerType: BiomarkerLongParameterList,
+						Severity:      sev,
+						FunctionName:  sym.Name,
+						LineStart:     sym.StartLine,
+						LineEnd:       sym.EndLine,
+						HealthImpact:  clamp(0.5+float64(n-thresholds.LongParameterList)*0.4, 0.5, 3.0),
+						Reason:        fmt.Sprintf("%d parameters", n),
+						Details:       map[string]any{"parameters": n},
+					})
+				}
+
+				// feature_envy: leans on one external receiver more than its own class.
+				if envied, n := featureEnvy(sym, callsByCaller[sym.ID], thresholds); envied {
+					findings = append(findings, Finding{
+						FilePath:      pf.FileInfo.Path,
+						BiomarkerType: BiomarkerFeatureEnvy,
+						Severity:      SeverityMedium,
+						FunctionName:  sym.Name,
+						LineStart:     sym.StartLine,
+						LineEnd:       sym.EndLine,
+						HealthImpact:  clamp(1.0+float64(n-thresholds.FeatureEnvyCalls)*0.3, 1.0, 3.0),
+						Reason:        fmt.Sprintf("%d calls to a single external receiver", n),
+						Details:       map[string]any{"externalCalls": n},
 					})
 				}
 			}
@@ -503,6 +600,119 @@ func joinDir(dir, base string) string {
 		return base
 	}
 	return dir + base
+}
+
+// untestedHotspot decides whether a hotspot file counts as untested.
+// Imported coverage wins when present for the file; otherwise the
+// paired-test-file heuristic is used. Returns (untested, reason, impact).
+func (a *Analyzer) untestedHotspot(path string, testPairs map[string]bool, t Thresholds) (bool, string, float64) {
+	if a.Coverage != nil {
+		if pct, ok := a.Coverage[path]; ok {
+			if pct >= t.UntestedCoveragePct {
+				return false, "", 0
+			}
+			// Impact grows as coverage drops: 2.0 at the threshold, up to
+			// ~4.0 at zero coverage.
+			impact := 2.0 + (t.UntestedCoveragePct-pct)/t.UntestedCoveragePct*2.0
+			return true, fmt.Sprintf("high-churn file with %.0f%% line coverage (below %.0f%%)", pct, t.UntestedCoveragePct), clamp(impact, 2.0, 4.0)
+		}
+	}
+	// No coverage data for this file: fall back to the heuristic.
+	if testPairs[path] {
+		return false, "", 0
+	}
+	return true, "high-churn file with no paired test file", 3.0
+}
+
+// distinctCount returns the number of unique entries in xs.
+func distinctCount(xs []string) int {
+	if len(xs) == 0 {
+		return 0
+	}
+	seen := make(map[string]struct{}, len(xs))
+	for _, x := range xs {
+		seen[x] = struct{}{}
+	}
+	return len(seen)
+}
+
+// countSignatureParams counts parameters in the first balanced parenthesis
+// group of a signature line, commas counted at the group's top level only
+// (so nested generics/tuples don't inflate the count). Returns 0 when there
+// is no paren group or it is empty.
+func countSignatureParams(sig string) int {
+	start := strings.IndexByte(sig, '(')
+	if start < 0 {
+		return 0
+	}
+	depth := 0
+	commas := 0
+	hasContent := false
+	for i := start; i < len(sig); i++ {
+		switch sig[i] {
+		case '(', '[', '{', '<':
+			depth++
+		case ')', ']', '}', '>':
+			depth--
+			if depth == 0 {
+				if !hasContent {
+					return 0
+				}
+				return commas + 1
+			}
+		case ',':
+			if depth == 1 {
+				commas++
+			}
+		default:
+			if depth >= 1 && sig[i] != ' ' && sig[i] != '\t' {
+				hasContent = true
+			}
+		}
+	}
+	if !hasContent {
+		return 0
+	}
+	return commas + 1
+}
+
+// featureEnvy reports whether sym makes more calls to a single external
+// receiver than the FeatureEnvyCalls threshold. "External" means a named
+// receiver that is neither self/this nor the symbol's own parent class.
+func featureEnvy(sym models.Symbol, calls []models.CallSite, t Thresholds) (bool, int) {
+	if t.FeatureEnvyCalls <= 0 || len(calls) == 0 {
+		return false, 0
+	}
+	own := ""
+	if sym.ParentName != nil {
+		own = *sym.ParentName
+	}
+	byReceiver := map[string]int{}
+	total := 0
+	for _, c := range calls {
+		if c.ReceiverName == nil {
+			continue
+		}
+		r := *c.ReceiverName
+		switch r {
+		case "", "self", "this", "Self", own:
+			continue
+		}
+		byReceiver[r]++
+		total++
+	}
+	bestN := 0
+	for _, n := range byReceiver {
+		if n > bestN {
+			bestN = n
+		}
+	}
+	// Envy requires a dominant external receiver: above threshold AND the
+	// majority of the symbol's external calls go to it.
+	if bestN >= t.FeatureEnvyCalls && bestN*2 >= total {
+		return true, bestN
+	}
+	return false, 0
 }
 
 func complexityHit(ccn int, t Thresholds) (bool, Severity) {

@@ -18,6 +18,8 @@ repowise update <path>            # re-index (incremental intent); auto-regenera
 repowise generate --provider anthropic   # LLM wiki pages (file / directory / symbol overviews)
 repowise embed <path>             # index wiki pages into the vector store for semantic search
 repowise status | health | hotspots | dead-code | decisions | externals | costs | pages   # read views
+repowise coverage import <file>   # ingest LCOV/Cobertura → untested_hotspot
+repowise security scan            # secrets / weak crypto / injection sinks
 repowise search <query>           # substring search; add --semantic to rank pages by embedding
 repowise watch <path>             # debounced auto-update on file change
 repowise hook install             # post-commit auto-sync
@@ -98,14 +100,17 @@ For a feature-by-feature comparison against the Python implementation
 | Graph build + PageRank + SCC + multi-edge persistence | ✅ |
 | Git intelligence — hotspots, ownership, co-change, bus factor | ✅ |
 | Dead code detection | ✅ |
-| Code health biomarkers (8: complexity, long_function, deep_nesting, god_class, untested_hotspot, brain_method, hidden_coupling, duplication) | ✅ |
+| Code health biomarkers (11: complexity, long_function, deep_nesting, god_class, untested_hotspot, brain_method, hidden_coupling, duplication, long_parameter_list, feature_envy, shotgun_surgery) | ✅ |
+| Community detection — Louvain modularity (gonum) | ✅ |
+| Coverage ingest — LCOV / Cobertura → untested_hotspot (`repowise coverage import`) | ✅ |
+| Security scan — secrets / weak crypto / injection sinks (`repowise security`) | ✅ |
 | LLM providers — Mock + **Anthropic / OpenAI / Gemini / Ollama / LiteLLM** + cost/ratelimit/retry middleware | ✅ |
 | Embedders — Mock + OpenAI / Gemini / Ollama (real semantic search) | ✅ |
 | Documentation generation — file / directory / symbol pages | ✅ |
 | Documentation generation — architecture page | ⏳ |
 | Decision intelligence — inline markers, ADR, CHANGELOG, commit archaeology | ✅ |
 | HTTP API (REST, `/api/repos/{id}/*` + `/api/workspace*`) | ✅ |
-| MCP server — stdio **and** Streamable HTTP, 22 tools (LLM-synthesis get_answer/get_why/get_context + graph-traversal community/dependency-path/flows/architecture), per-call repo routing | ✅ |
+| MCP server — stdio **and** Streamable HTTP, 23 tools (LLM-synthesis get_answer/get_why/get_context + graph-traversal community/dependency-path/flows/architecture + security), per-call repo routing | ✅ |
 | Workspace / multi-repo — bulk ops, cross-repo co-change, `serve --auto` | ✅ |
 | Pipeline orchestrator — phase tracking, run_id grouping, resume | ✅ |
 | Auto CLAUDE.md regeneration on init/update | ✅ |

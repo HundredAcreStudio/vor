@@ -23,7 +23,7 @@ working binary and tests, same as the original plan.
 | Git intelligence | hotspots, ownership, co-change, bus factor | — |
 | Providers | Mock + Anthropic + OpenAI/Gemini/Ollama/LiteLLM, cost/retry/ratelimit middleware | — (Phase 12 ✅) |
 | Generation | pages (file/dir/symbol), context (RAG), templates, resume | architecture page kind |
-| Analysis | 8 biomarkers, dead code, 4-source decisions | 9 more biomarkers; coverage ingest; Louvain/Leiden; security scan |
+| Analysis | 11 biomarkers, dead code, 4-source decisions, Louvain communities, coverage ingest, security scan | ~6 more biomarkers; Leiden; trends/governance (Phase 14 ✅) |
 | Pipeline | init/update, phase timing, checkpoint/resume | true incremental (update == full re-index today) |
 | Server | HTTP `/api`, MCP (22 tools, stdio + Streamable HTTP) | webhooks, scheduler |
 | CLI | full command set, `--repo`/`--repo-id`, semantic search | charmbracelet TUI, editor MCP registration |
@@ -80,28 +80,29 @@ Deferred (not blocking): per-language call resolvers — the three-tier
 resolver's common fallback handles these for now; bespoke resolvers can
 land if cross-file resolution quality demands it.
 
-## Phase 14 — Code-health & graph-analysis depth
+## ✅ Phase 14 — Code-health & graph-analysis depth (done)
 
-Eight biomarkers ship (brain_method, deep_nesting, high_complexity,
-long_function, duplication, hidden_coupling, god_class,
-untested_hotspot). Python has ~17, and community detection is currently
-just connected-components labelling.
+- ✅ **Louvain community detection** (gonum `community.Modularize` over an
+  undirected weighted view, deterministic seed) replaces the
+  connected-component placeholder in `graph/metrics.go`. Verified it
+  splits bridged clusters that the old labeller would have merged.
+- ✅ **Coverage ingest**: an LCOV + Cobertura parser
+  (`analysis/health/coverage`) → `coveragestore` → `repowise coverage
+  import|status`. When present, coverage makes `untested_hotspot`
+  authoritative (below-threshold line coverage = untested), with impact
+  scaling as coverage drops.
+- ✅ **Three new biomarkers** (8 → 11): `long_parameter_list`
+  (primitive-obsession proxy from signatures), `feature_envy` (a method
+  leaning on one external receiver more than its own class), and
+  `shotgun_surgery` (a file co-changing with many others).
+- ✅ **Security scanner** (`analysis/security`): pattern-based detection
+  of hardcoded secrets (redacted), private keys, weak crypto, and
+  concatenation-driven SQL/command-injection sinks → `securitystore` →
+  `repowise security scan|list` + the `repowise_security` MCP tool.
 
-- Remaining biomarkers: primitive obsession, congestion, knowledge
-  loss, blame-based function hotspots, code-age volatility, feature
-  envy, shotgun surgery, plus the rest to reach Python's set.
-- Coverage ingest (LCOV / Cobertura / Clover) so `untested_hotspot` is
-  driven by real coverage, not heuristics.
-- Health trends + governance flags + refactoring-impact scoring depth.
-- Real **Louvain** community detection (gonum), replacing the
-  connected-component placeholder in `graph/metrics.go`; evaluate
-  Leiden if quality demands it.
-- Security vulnerability scanner populating `security_findings`.
-
-**Acceptance:** `repowise health` reports the expanded biomarker set;
-coverage files are ingested and reflected in scores; `community_id` on
-graph nodes comes from modularity-based detection;
-`repowise_get_community` reflects real communities.
+Deferred (not blocking): the remaining ~6 biomarkers (congestion,
+knowledge loss, code-age volatility, …), Leiden, and health
+trends/governance depth — the framework is in place to add them.
 
 ## Phase 15 — Incremental indexing & API-contract extraction
 

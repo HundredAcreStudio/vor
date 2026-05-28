@@ -42,7 +42,7 @@ func TestComputeMetrics_Diamond(t *testing.T) {
 	}
 }
 
-func TestComputeMetrics_SCCsAssignCommunities(t *testing.T) {
+func TestComputeMetrics_DisconnectedComponentsSeparate(t *testing.T) {
 	// Two separate cycles: {a,b,c} and {d,e}.
 	g := New()
 	a := g.AddNode(&Node{StringID: "a", Kind: NodeFile})
@@ -68,6 +68,36 @@ func TestComputeMetrics_SCCsAssignCommunities(t *testing.T) {
 	}
 	if a.CommunityID == d.CommunityID {
 		t.Errorf("separate cycles got the same community ID: %d", a.CommunityID)
+	}
+}
+
+func TestComputeMetrics_LouvainSplitsBridgedClusters(t *testing.T) {
+	// Two dense triangles joined by a single bridge edge. A connected-
+	// component labeller would lump all six nodes into one community;
+	// Louvain modularity should keep the two clusters apart.
+	g := New()
+	mk := func(id string) *Node { return g.AddNode(&Node{StringID: id, Kind: NodeFile}) }
+	a1, a2, a3 := mk("a1"), mk("a2"), mk("a3")
+	b1, b2, b3 := mk("b1"), mk("b2"), mk("b3")
+	dense := func(x, y, z *Node) {
+		g.AddEdge(x, y, models.EdgeCalls, 1.0, nil)
+		g.AddEdge(y, z, models.EdgeCalls, 1.0, nil)
+		g.AddEdge(z, x, models.EdgeCalls, 1.0, nil)
+	}
+	dense(a1, a2, a3)
+	dense(b1, b2, b3)
+	g.AddEdge(a1, b1, models.EdgeImports, 1.0, nil) // single bridge
+
+	g.ComputeMetrics()
+
+	if a1.CommunityID != a2.CommunityID || a2.CommunityID != a3.CommunityID {
+		t.Errorf("cluster A split across communities: %d/%d/%d", a1.CommunityID, a2.CommunityID, a3.CommunityID)
+	}
+	if b1.CommunityID != b2.CommunityID || b2.CommunityID != b3.CommunityID {
+		t.Errorf("cluster B split across communities: %d/%d/%d", b1.CommunityID, b2.CommunityID, b3.CommunityID)
+	}
+	if a1.CommunityID == b1.CommunityID {
+		t.Errorf("bridged clusters collapsed into one community %d — Louvain should separate them", a1.CommunityID)
 	}
 }
 

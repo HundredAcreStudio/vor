@@ -71,6 +71,7 @@ yet the LLM-synthesis layer.
 | — | `repowise_pages` / `repowise_page` ➕ | ➕ generated docs |
 | — | `repowise_pipeline_log` ➕ | ➕ observability |
 | — | `repowise_workspace_repos` ➕ | ➕ multi-repo discovery |
+| — | `repowise_security` ➕ | ➕ pattern-based security findings |
 
 The LLM-synthesis tools (`get_answer`, `get_context`, `get_why`) and
 the graph-traversal tools (`get_community`, `get_dependency_path`,
@@ -91,7 +92,7 @@ block. Everything else has parity.
 
 ## Code-health biomarkers
 
-Go has 8 of Python's ~17. The mapping isn't 1:1 — some Go names
+Go has 11 of Python's ~17. The mapping isn't 1:1 — some Go names
 consolidate what Python splits.
 
 | Go biomarker | Python equivalent | Status |
@@ -100,19 +101,25 @@ consolidate what Python splits.
 | `long_function` | `large_method` | ✅ |
 | `deep_nesting` | `nested_complexity` | ✅ |
 | `god_class` | (≈ large-class heuristic) | 🟡 |
-| `untested_hotspot` | `untested_hotspot` | ✅ |
+| `untested_hotspot` | `untested_hotspot` | ✅ (real coverage via LCOV/Cobertura ingest) |
 | `brain_method` | `brain_method` | ✅ |
 | `hidden_coupling` | `hidden_coupling` | ✅ |
 | `duplication` | `dry_violation` | ✅ (Rabin-Karp) |
+| `long_parameter_list` | `primitive_obsession` | ✅ (signature proxy) |
+| `feature_envy` | `feature_envy` | ✅ |
+| `shotgun_surgery` | (co-change breadth) | ✅ |
 | — | `bumpy_road` | ⏳ |
 | — | `complex_conditional` | ⏳ |
 | — | `code_age_volatility` | ⏳ |
-| — | `coverage_gap` | ⏳ (needs lcov ingest) |
 | — | `developer_congestion` | ⏳ |
 | — | `function_hotspot` | ⏳ |
 | — | `knowledge_loss` | ⏳ |
-| — | `primitive_obsession` | ⏳ |
 | — | `contradictory_decision` / `stale_governance` / `ungoverned_hotspot` | ⏳ (governance biomarkers) |
+
+Community detection uses **Louvain** modularity (gonum), not a
+connected-component placeholder. A pattern-based **security scanner**
+(`repowise security`, `repowise_security` MCP tool) populates
+`security_findings`.
 
 ---
 

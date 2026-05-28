@@ -53,6 +53,7 @@ import (
 	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/commits"
 	_ "github.com/repowise-dev/repowise-go/internal/analysis/decisions/inline"
 
+	"github.com/repowise-dev/repowise-go/internal/persistence/coveragestore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/deadstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/decisionstore"
 	"github.com/repowise-dev/repowise-go/internal/persistence/externalstore"
@@ -335,6 +336,12 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 				edges[e.F.StringID][e.T.StringID] = true
 			}
 			analyzer.GraphEdges = edges
+		}
+		// Imported coverage (if any) makes untested_hotspot authoritative.
+		if opts.DB != nil && opts.RepositoryID != "" {
+			if cov, err := coveragestore.New(opts.DB).CoverageMap(ctx, opts.RepositoryID); err == nil && len(cov) > 0 {
+				analyzer.Coverage = cov
+			}
 		}
 		res.HealthResult = analyzer.Analyze(res.Parsed)
 		return nil

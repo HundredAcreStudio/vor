@@ -306,6 +306,55 @@ func (s *Server) toolHealthFindings(ctx context.Context, req mcp.CallToolRequest
 	return jsonResult(map[string]any{"findings": out, "limit": limit})
 }
 
+// ---- tool: repowise_security ---------------------------------------------
+
+type securityPayload struct {
+	FilePath string `json:"filePath"`
+	Kind     string `json:"kind"`
+	Severity string `json:"severity"`
+	Line     int    `json:"line,omitempty"`
+	Snippet  string `json:"snippet,omitempty"`
+}
+
+func (s *Server) toolSecurity(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	limit := clampInt(req.GetInt("limit", 100), 1, 500)
+	severity := req.GetString("severity", "")
+
+	query := `SELECT file_path, kind, severity, COALESCE(line_number,0), COALESCE(snippet,'')
+	          FROM security_findings WHERE repository_id = ?`
+	args := []any{rid}
+	if severity != "" {
+		query += " AND severity = ?"
+		args = append(args, severity)
+	}
+	query += ` ORDER BY CASE severity
+	                     WHEN 'critical' THEN 0
+	                     WHEN 'high'     THEN 1
+	                     WHEN 'medium'   THEN 2
+	                     ELSE 3 END, file_path, line_number LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.opts.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]securityPayload, 0, limit)
+	for rows.Next() {
+		var f securityPayload
+		if err := rows.Scan(&f.FilePath, &f.Kind, &f.Severity, &f.Line, &f.Snippet); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return jsonResult(map[string]any{"findings": out, "limit": limit})
+}
+
 // ---- tool: repowise_symbol -----------------------------------------------
 
 type symbolPayload struct {

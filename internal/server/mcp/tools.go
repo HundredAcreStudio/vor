@@ -125,6 +125,14 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolHealthFindings))
 
 	s.srv.AddTool(mcp.NewTool(
+		"repowise_security",
+		mcp.WithDescription("Security scan findings (hardcoded secrets, weak crypto, likely injection sinks), ordered by severity. Populated by `repowise security scan`. Secret values are redacted."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+		mcp.WithString("severity", mcp.Description("Filter to a severity: critical|high|medium|low.")),
+		mcp.WithNumber("limit", mcp.DefaultNumber(100), mcp.Description("Maximum findings to return (1–500, default 100).")),
+	), s.wrap(s.toolSecurity))
+
+	s.srv.AddTool(mcp.NewTool(
 		"repowise_symbol",
 		mcp.WithDescription("Detail for one symbol: kind, file path, line range, visibility, complexity, PageRank. Look up by the canonical symbol_id (e.g. 'src/foo.go::User::Save')."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),

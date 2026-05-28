@@ -28,6 +28,8 @@ func Root() *cobra.Command {
 	root.AddCommand(newDecisionCmd())
 	root.AddCommand(newGenerateCmd())
 	root.AddCommand(newEmbedCmd())
+	root.AddCommand(newCoverageCmd())
+	root.AddCommand(newSecurityCmd())
 	root.AddCommand(newPagesCmd())
 	root.AddCommand(newUpdateCmd())
 	root.AddCommand(newReindexCmd())
