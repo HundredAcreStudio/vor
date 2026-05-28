@@ -32,7 +32,7 @@ const claudeUserPlaceholder = `# CLAUDE.md
 <!-- Examples: coding style rules, test commands, workflow preferences, constraints -->
 `
 
-// newClaudeMdCmd writes .claude/CLAUDE.md with repowise-managed
+// newClaudeMdCmd writes <repo>/CLAUDE.md with repowise-managed
 // codebase context between marker comments. Content above the
 // REPOWISE:START marker is left untouched on update.
 func newClaudeMdCmd() *cobra.Command {
@@ -44,8 +44,8 @@ func newClaudeMdCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "claude-md [PATH]",
 		Aliases: []string{"generate-claude-md"},
-		Short:   "Generate or update .claude/CLAUDE.md with codebase intelligence context",
-		Long: `Writes <repo>/.claude/CLAUDE.md with a managed section that
+		Short:   "Generate or update <repo>/CLAUDE.md with codebase intelligence context",
+		Long: `Writes <repo>/CLAUDE.md with a managed section that
 summarises this repo's indexed state — file counts, top hotspots,
 decision records, health verdict, and the MCP tools reference. Content
 above the REPOWISE:START marker is preserved across re-runs.
@@ -87,7 +87,7 @@ Use --stdout to preview the rendered output without writing.`,
 
 			dest := outputPath
 			if dest == "" {
-				dest = filepath.Join(absRoot, ".claude", "CLAUDE.md")
+				dest = filepath.Join(absRoot, "CLAUDE.md")
 			} else {
 				dest, err = filepath.Abs(dest)
 				if err != nil {
@@ -102,7 +102,7 @@ Use --stdout to preview the rendered output without writing.`,
 		},
 	}
 	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path (overridden by positional PATH)")
-	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "output path (default <repo>/.claude/CLAUDE.md)")
+	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "output path (default <repo>/CLAUDE.md)")
 	cmd.Flags().BoolVar(&toStdout, "stdout", false, "print to stdout instead of writing the file")
 	return cmd
 }
@@ -121,7 +121,7 @@ func regenerateClaudeMd(ctx context.Context, conn *sql.DB, repoID, absRoot strin
 		return fmt.Errorf("collect data: %w", err)
 	}
 	managed := renderClaudeMdManaged(data)
-	dest := filepath.Join(absRoot, ".claude", "CLAUDE.md")
+	dest := filepath.Join(absRoot, "CLAUDE.md")
 	return writeClaudeMd(dest, managed)
 }
 
@@ -367,7 +367,27 @@ func writeClaudeMd(dest, managed string) error {
 		return err
 	}
 	merged := mergeClaudeMd(string(existing), managed)
+	// Idempotent: when the only difference from the existing file is the
+	// "Last indexed" timestamp, skip the write so committed CLAUDE.md
+	// files don't churn on every re-index.
+	if stripIndexedLine(merged) == stripIndexedLine(string(existing)) {
+		return nil
+	}
 	return os.WriteFile(dest, []byte(merged), 0o644)
+}
+
+// stripIndexedLine removes the volatile "Last indexed: …" line so two
+// renders can be compared for meaningful (non-timestamp) changes.
+func stripIndexedLine(s string) string {
+	lines := strings.Split(s, "\n")
+	out := lines[:0]
+	for _, ln := range lines {
+		if strings.HasPrefix(strings.TrimSpace(ln), "Last indexed:") {
+			continue
+		}
+		out = append(out, ln)
+	}
+	return strings.Join(out, "\n")
 }
 
 // mergeClaudeMd preserves content outside the marker pair and replaces
@@ -384,6 +404,11 @@ func mergeClaudeMd(existing, managed string) string {
 		head = strings.TrimRight(head, "\n") + "\n\n"
 		if tail = strings.TrimLeft(tail, "\n"); tail != "" {
 			tail = "\n" + tail
+		} else {
+			// Keep a single trailing newline after END so the framing
+			// matches the freshly-created file — otherwise the first
+			// merge after creation would rewrite just to drop it.
+			tail = "\n"
 		}
 		return head + claudeMarkerStart + "\n" + managed + claudeMarkerEnd + tail
 	}
