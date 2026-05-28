@@ -38,6 +38,26 @@ func statePath(root string) string {
 	return filepath.Join(root, ".repowise", "workspace.json")
 }
 
+// FindRoot walks up from start looking for a .repowise/workspace.json.
+// Returns "" + nil error when none is found — the caller decides how
+// to handle absence.
+func FindRoot(start string) (string, error) {
+	cur, err := filepath.Abs(start)
+	if err != nil {
+		return "", err
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(cur, ".repowise", "workspace.json")); err == nil {
+			return cur, nil
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return "", nil
+		}
+		cur = parent
+	}
+}
+
 // Load reads the workspace state from <root>/.repowise/workspace.json.
 // Returns a zero State (no error) when no file exists yet.
 func Load(root string) (*State, error) {

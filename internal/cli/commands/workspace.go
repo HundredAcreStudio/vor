@@ -31,6 +31,10 @@ func newWorkspaceCmd() *cobra.Command {
 	cmd.AddCommand(newWorkspaceRemoveCmd())
 	cmd.AddCommand(newWorkspaceScanCmd())
 	cmd.AddCommand(newWorkspaceSetDefaultCmd())
+	cmd.AddCommand(newWorkspaceStatusCmd())
+	cmd.AddCommand(newWorkspaceUpdateCmd())
+	cmd.AddCommand(newWorkspaceHookCmd())
+	cmd.AddCommand(newWorkspaceDoctorCmd())
 	return cmd
 }
 
