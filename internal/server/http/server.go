@@ -36,6 +36,12 @@ type Options struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
+
+	// MCPHandler is the optional MCP server handler. When set, it's
+	// mounted at /mcp so editor clients can connect over HTTP
+	// (Streamable HTTP transport) instead of spawning a stdio process.
+	// Nil disables the route.
+	MCPHandler http.Handler
 }
 
 // Server is the HTTP API for repowise. Implements http.Handler so it can
@@ -79,6 +85,15 @@ func New(opts Options) (*Server, error) {
 			routes.MountPipeline(per, deps)
 		})
 	})
+
+	// MCP over Streamable HTTP. Mounted at /mcp so editor clients
+	// connecting to the long-running daemon get the full repowise
+	// tool surface without each spawning a stdio child process.
+	// The mcp-go handler manages session state, SSE upgrades, and
+	// JSON-RPC parsing itself — we just hand off the chi prefix.
+	if opts.MCPHandler != nil {
+		r.Mount("/mcp", opts.MCPHandler)
+	}
 
 	return &Server{opts: opts, handler: r}, nil
 }

@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"path/filepath"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -91,6 +92,19 @@ func (s *Server) ServeStdio() error {
 // MCPServer returns the underlying mcp-go server. Exposed so tests can
 // drive it directly without stdio.
 func (s *Server) MCPServer() *server.MCPServer { return s.srv }
+
+// HTTPHandler wraps the MCP server in an http.Handler implementing the
+// MCP Streamable HTTP transport. Mount it under a path on any HTTP
+// router (chi, stdlib mux, ...) to serve MCP over the network — the
+// same transport works for short-lived requests (POST one JSON-RPC
+// message, get the reply) and long-lived sessions (SSE).
+//
+// This unlocks the daemon model: one long-running `repowise serve`
+// can host both the /api/* REST endpoints and /mcp, so multiple
+// editor clients can attach without each spawning their own process.
+func (s *Server) HTTPHandler() http.Handler {
+	return server.NewStreamableHTTPServer(s.srv)
+}
 
 // ResolveRepositoryID returns the repository row's ID for the given local
 // path, creating the row if needed. Use during CLI setup to translate a
