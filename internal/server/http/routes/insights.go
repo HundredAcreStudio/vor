@@ -23,6 +23,86 @@ func MountInsights(r chi.Router, deps Deps) {
 	r.Get("/communities", communities(deps))
 	r.Get("/entry-points", entryPoints(deps))
 	r.Get("/git-insights", gitInsights(deps))
+	r.Get("/dependency-matrix", dependencyMatrix(deps))
+}
+
+// dependencyMatrix returns a module×module import-density matrix. Modules are
+// the first two path segments of each file (e.g. internal/server, ui/src), so
+// the matrix is coarse enough to read. Cell [i][j] counts import edges from a
+// file in module i to a file in module j.
+func dependencyMatrix(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		repoID := httpx.URLParam(r, "repoID")
+		// For file nodes the node_id IS the file path, and import edges
+		// connect file→file, so the edge endpoints are paths directly.
+		rows, err := deps.DB.QueryContext(r.Context(), `
+			SELECT source_node_id, target_node_id
+			  FROM graph_edges
+			 WHERE repository_id = ? AND edge_type = 'imports'`, repoID)
+		if err != nil {
+			httpx.Internal(w, err)
+			return
+		}
+		defer rows.Close()
+
+		pairCount := map[[2]string]int{}
+		moduleTotal := map[string]int{}
+		for rows.Next() {
+			var sp, tp string
+			if err := rows.Scan(&sp, &tp); err != nil {
+				httpx.Internal(w, err)
+				return
+			}
+			if sp == "" || tp == "" {
+				continue
+			}
+			a, b := moduleKey(sp), moduleKey(tp)
+			pairCount[[2]string{a, b}]++
+			moduleTotal[a]++
+			moduleTotal[b]++
+		}
+		if err := rows.Err(); err != nil {
+			httpx.Internal(w, err)
+			return
+		}
+
+		// Keep the most-connected modules so the grid stays legible.
+		mods := make([]string, 0, len(moduleTotal))
+		for m := range moduleTotal {
+			mods = append(mods, m)
+		}
+		sort.Slice(mods, func(i, j int) bool { return moduleTotal[mods[i]] > moduleTotal[mods[j]] })
+		if len(mods) > 16 {
+			mods = mods[:16]
+		}
+		sort.Strings(mods)
+
+		idx := map[string]int{}
+		for i, m := range mods {
+			idx[m] = i
+		}
+		cells := make([][]int, len(mods))
+		for i := range cells {
+			cells[i] = make([]int, len(mods))
+		}
+		for pair, n := range pairCount {
+			i, iok := idx[pair[0]]
+			j, jok := idx[pair[1]]
+			if iok && jok {
+				cells[i][j] += n
+			}
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"modules": mods, "cells": cells})
+	}
+}
+
+// moduleKey collapses a file path to its first two segments (or one).
+func moduleKey(path string) string {
+	parts := strings.SplitN(path, "/", 3)
+	if len(parts) >= 2 {
+		return parts[0] + "/" + parts[1]
+	}
+	return parts[0]
 }
 
 type communityDTO struct {
@@ -135,13 +215,21 @@ func gitInsights(deps Deps) http.HandlerFunc {
 		ctx := r.Context()
 		repoID := httpx.URLParam(r, "repoID")
 
-		// Bus factor: files at risk (single owner, still active) vs. total.
-		var risky, total int
+		// Bus-factor distribution: Safe (≥3 contributors), Warning (2),
+		// Risk (≤1) — plus the highest-risk files.
+		var safe, warning, risk, total int
 		if err := deps.DB.QueryRowContext(ctx, `
 			SELECT
-			  COALESCE(SUM(CASE WHEN bus_factor <= 1 AND commit_count_90d > 0 THEN 1 ELSE 0 END), 0),
+			  COALESCE(SUM(CASE WHEN bus_factor >= 3 THEN 1 ELSE 0 END), 0),
+			  COALESCE(SUM(CASE WHEN bus_factor = 2 THEN 1 ELSE 0 END), 0),
+			  COALESCE(SUM(CASE WHEN bus_factor <= 1 THEN 1 ELSE 0 END), 0),
 			  COUNT(*)
-			FROM git_metadata WHERE repository_id = ?`, repoID).Scan(&risky, &total); err != nil {
+			FROM git_metadata WHERE repository_id = ?`, repoID).Scan(&safe, &warning, &risk, &total); err != nil {
+			httpx.Internal(w, err)
+			return
+		}
+		riskFiles, err := busFactorRiskFiles(ctx, deps.DB, repoID, 5)
+		if err != nil {
 			httpx.Internal(w, err)
 			return
 		}
@@ -188,11 +276,43 @@ func gitInsights(deps Deps) http.HandlerFunc {
 		}
 
 		httpx.JSON(w, http.StatusOK, map[string]any{
-			"busFactor":    map[string]int{"atRisk": risky, "total": total},
+			"busFactor": map[string]any{
+				"safe": safe, "warning": warning, "risk": risk, "total": total,
+				"riskFiles": riskFiles,
+			},
 			"churnBuckets": buckets,
 			"contributors": contributors,
 		})
 	}
+}
+
+type riskFileDTO struct {
+	Path         string `json:"path"`
+	Contributors int    `json:"contributors"`
+}
+
+// busFactorRiskFiles returns the lowest-bus-factor files (most at risk),
+// ordered by churn so the riskiest *and* most active surface first.
+func busFactorRiskFiles(ctx context.Context, db *sql.DB, repoID string, limit int) ([]riskFileDTO, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT file_path, contributor_count
+		  FROM git_metadata
+		 WHERE repository_id = ? AND bus_factor <= 1
+		 ORDER BY commit_count_90d DESC, churn_percentile DESC
+		 LIMIT ?`, repoID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]riskFileDTO, 0, limit)
+	for rows.Next() {
+		var f riskFileDTO
+		if err := rows.Scan(&f.Path, &f.Contributors); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
 }
 
 type contributorDTO struct {
