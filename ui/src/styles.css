@@ -1470,3 +1470,26 @@ select {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- module dependency graph ----------------------------------------- */
+.module-graph-wrap {
+  max-width: 640px;
+  margin: 4px auto 8px;
+}
+.module-graph {
+  display: block;
+}
+.module-graph .mg-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+/* module cards are links into the graph */
+a.module-card {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+a.module-card:hover {
+  border-color: var(--accent);
+}

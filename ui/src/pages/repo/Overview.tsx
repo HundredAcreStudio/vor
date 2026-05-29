@@ -359,7 +359,11 @@ export function RepoOverview() {
           ) : (
             <div className="module-grid">
               {ms.slice(0, 8).map((m) => (
-                <div className="module-card" key={m.name}>
+                <Link
+                  className="module-card"
+                  key={m.name}
+                  to={`${base}/graph?focus=${encodeURIComponent(m.name)}`}
+                >
                   <div className="module-name mono" title={m.name}>
                     {m.name}
                   </div>
@@ -376,7 +380,7 @@ export function RepoOverview() {
                     />
                   </div>
                   <div className="muted small">{Math.round(m.docsCoverage * 100)}% docs</div>
-                </div>
+                </Link>
               ))}
             </div>
           )

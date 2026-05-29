@@ -1,11 +1,13 @@
-import { useParams } from "react-router-dom";
-import { fetchGraphEdges, fetchGraphNodes } from "../../api.ts";
+import { useParams, useSearchParams } from "react-router-dom";
+import { fetchDependencyMatrix, fetchGraphEdges, fetchGraphNodes } from "../../api.ts";
+import { ModuleGraph } from "../../ModuleGraph.tsx";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 
-// v1: a ranked, tabular view of the dependency graph (most-central files +
-// import edges). A visual node-link diagram is a planned follow-up.
 export function Graph() {
   const { repoId = "" } = useParams();
+  const [params, setParams] = useSearchParams();
+  const focus = params.get("focus") ?? undefined;
+  const matrix = useAsync(() => fetchDependencyMatrix(repoId), [repoId]);
   const files = useAsync(() => fetchGraphNodes(repoId, "file", 50), [repoId]);
   const edges = useAsync(() => fetchGraphEdges(repoId, "imports", 100), [repoId]);
 
@@ -14,6 +16,27 @@ export function Graph() {
       <header className="page-header">
         <h1>Graph</h1>
       </header>
+
+      <p className="muted small">
+        Module dependency graph — node size reflects connectivity; click a module to focus its
+        imports.{focus ? ` Focused on ${focus}.` : ""}
+      </p>
+      <AsyncView state={matrix}>
+        {(m) =>
+          m.modules.length === 0 ? (
+            <p className="muted">No import edges to graph.</p>
+          ) : (
+            <div className="module-graph-wrap">
+              <ModuleGraph
+                modules={m.modules}
+                cells={m.cells}
+                focus={focus}
+                onSelect={(mod) => setParams(focus === mod ? {} : { focus: mod })}
+              />
+            </div>
+          )
+        }
+      </AsyncView>
 
       <h2 className="section-title">Most central files</h2>
       <AsyncView state={files}>
