@@ -81,18 +81,28 @@ func TestUp_SQLite(t *testing.T) {
 	}
 
 	// Down rolls back the most-recent migration only (goose semantics), so
-	// the latest change (the tracked columns from 0004) should disappear
-	// while the earlier tables remain.
+	// the latest change (the settings table from 0005) should disappear
+	// while the earlier ones remain.
 	if err := Down(ctx, conn, dialect); err != nil {
 		t.Fatalf("Down: %v", err)
 	}
+	var settingsTbl int
+	if err := conn.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = 'settings'`).Scan(&settingsTbl); err != nil {
+		t.Fatalf("probe settings table: %v", err)
+	}
+	if settingsTbl != 0 {
+		t.Errorf("settings table still present after one Down")
+	}
+	// The previous migration's change (the tracked column from 0004) should
+	// survive a single-step Down.
 	var trackedCols int
 	if err := conn.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM pragma_table_info('repositories') WHERE name = 'tracked'`).Scan(&trackedCols); err != nil {
 		t.Fatalf("probe tracked column: %v", err)
 	}
-	if trackedCols != 0 {
-		t.Errorf("repositories.tracked still present after one Down")
+	if trackedCols == 0 {
+		t.Errorf("repositories.tracked should survive a single-step Down (it predates 0005)")
 	}
 	// The previous migration's table (parse_cache, 0003) should survive a
 	// single-step Down.

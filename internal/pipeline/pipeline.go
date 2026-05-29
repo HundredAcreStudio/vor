@@ -418,7 +418,7 @@ func phaseHealth(ctx context.Context, opts Options, res *Result) error {
 		SourceLoader: func(rel string) ([]byte, error) {
 			return readFile(filepath.Join(opts.RepoPath, rel))
 		},
-		Exclude: healthExcludesFor(opts.RepoPath),
+		Exclude: healthExcludesFor(ctx, opts.DB, opts.RepositoryID),
 	}
 	if len(res.GitRecords) > 0 {
 		analyzer.HotspotPaths, analyzer.CoChangePairs = hotspotsAndCoChanges(res.GitRecords)
@@ -435,12 +435,16 @@ func phaseHealth(ctx context.Context, opts Options, res *Result) error {
 	return nil
 }
 
-// healthExcludesFor loads the repo's config and projects its health_rules
-// onto health.ExcludeRule, keeping only rules that actually disable a
-// biomarker. A missing/invalid config yields no exclusions (best-effort:
-// health analysis should never fail because of a config typo).
-func healthExcludesFor(repoPath string) []health.ExcludeRule {
-	cfg, err := config.Load(repoPath)
+// healthExcludesFor resolves the repo's config from the DB and projects its
+// health_rules onto health.ExcludeRule, keeping only rules that actually
+// disable a biomarker. A nil connection or any resolution error yields no
+// exclusions (best-effort: health analysis should never fail because of a
+// config typo or a not-yet-persisted run).
+func healthExcludesFor(ctx context.Context, conn *sql.DB, repoID string) []health.ExcludeRule {
+	if conn == nil {
+		return nil
+	}
+	cfg, err := config.Resolve(ctx, conn, repoID, config.LoadBootstrap())
 	if err != nil {
 		return nil
 	}

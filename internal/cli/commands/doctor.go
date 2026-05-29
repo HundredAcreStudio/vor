@@ -90,30 +90,24 @@ func checkRepoPath(repoPath string) doctorCheck {
 }
 
 func checkConfigFile(repoPath string) doctorCheck {
-	configPath := filepath.Join(repoPath, ".vor", "config.yaml")
-	_, err := os.Stat(configPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return doctorCheck{
-			name:   "config file",
-			status: statusWarn,
-			detail: configPath + " missing (using defaults)",
-		}
+	_ = repoPath
+	// Configuration is database-backed now (the settings table); there is no
+	// config file to validate. Report where the DB that holds it lives.
+	boot := config.LoadBootstrap()
+	return doctorCheck{
+		name:   "configuration",
+		status: statusOK,
+		detail: "stored in the database (" + boot.DatabaseURL + ")",
 	}
-	if err != nil {
-		return doctorCheck{name: "config file", status: statusFail, detail: err.Error()}
-	}
-	if _, err := config.Load(repoPath); err != nil {
-		return doctorCheck{name: "config file", status: statusFail, detail: "parse: " + err.Error()}
-	}
-	return doctorCheck{name: "config file", status: statusOK, detail: configPath}
 }
 
 func checkProviderKeys(repoPath string) doctorCheck {
-	cfg, _ := config.Load(repoPath)
+	_ = repoPath
+	keysCfg := config.LoadBootstrap().ProviderKeys
 	keys := []struct{ name, val string }{
-		{"ANTHROPIC_API_KEY", cfg.ProviderKeys.Anthropic},
-		{"OPENAI_API_KEY", cfg.ProviderKeys.OpenAI},
-		{"GEMINI_API_KEY", cfg.ProviderKeys.Gemini},
+		{"ANTHROPIC_API_KEY", keysCfg.Anthropic},
+		{"OPENAI_API_KEY", keysCfg.OpenAI},
+		{"GEMINI_API_KEY", keysCfg.Gemini},
 	}
 	set := []string{}
 	for _, k := range keys {
@@ -136,13 +130,8 @@ func checkProviderKeys(repoPath string) doctorCheck {
 }
 
 func checkDatabaseURL(ctx context.Context, repoPath string) doctorCheck {
-	cfg, _ := config.Load(repoPath)
-	url := cfg.DatabaseURL
-	if url == "" {
-		abs, _ := filepath.Abs(filepath.Join(repoPath, ".vor", "wiki.db"))
-		url = "sqlite:" + abs
-	}
-
+	_ = repoPath
+	url := config.LoadBootstrap().DatabaseURL
 	conn, dialect, err := db.Open(ctx, db.OpenOptions{URL: url})
 	if err != nil {
 		return doctorCheck{name: "database", status: statusFail, detail: err.Error()}

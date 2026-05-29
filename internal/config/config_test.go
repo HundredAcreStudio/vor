@@ -1,206 +1,115 @@
-package config
+package config_test
 
 import (
-	"os"
+	"context"
+	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/HundredAcreStudio/vor/internal/config"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/settingsstore"
 )
 
-func TestDefaults(t *testing.T) {
-	d := Defaults()
-	if d.Provider != "anthropic" {
-		t.Errorf("Provider default = %q, want %q", d.Provider, "anthropic")
+// newDB returns a migrated SQLite connection and a Bootstrap, with the
+// environment isolated from the developer's real ~/.config/vor.
+func newDB(t *testing.T) (context.Context, *sql.DB, config.Bootstrap) {
+	t.Helper()
+	ctx := context.Background()
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "xdg"))
+	t.Setenv("VOR_DB_URL", "")
+	t.Setenv("VOR_DATABASE_URL", "")
+
+	conn, dialect, err := db.Open(ctx, db.OpenOptions{URL: "sqlite:" + filepath.Join(tmp, "t.db")})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if d.Port != 7337 {
-		t.Errorf("Port default = %d, want %d", d.Port, 7337)
+	t.Cleanup(func() { _ = conn.Close() })
+	if err := migrations.Up(ctx, conn, dialect); err != nil {
+		t.Fatal(err)
 	}
-	if d.RPM != 600 || d.TPM != 90_000 {
-		t.Errorf("rate limits = (%d, %d), want (600, 90000)", d.RPM, d.TPM)
+	return ctx, conn, config.LoadBootstrap()
+}
+
+func set(t *testing.T, ctx context.Context, conn *sql.DB, repoID, key, val string) {
+	t.Helper()
+	if err := settingsstore.New(conn).Set(ctx, repoID, key, val); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestLoad_MissingFileFallsBackToDefaults(t *testing.T) {
-	dir := t.TempDir()
-	cfg, err := Load(dir)
-	if err != nil {
-		t.Fatalf("Load returned error for missing config: %v", err)
-	}
-	if cfg.Provider != "anthropic" {
-		t.Errorf("expected default provider, got %q", cfg.Provider)
+func TestBootstrap_DefaultsToGlobalDBPath(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("VOR_DB_URL", "")
+	t.Setenv("VOR_DATABASE_URL", "")
+
+	want := "sqlite:" + filepath.Join(tmp, "vor", "vor.db")
+	if got := config.LoadBootstrap().DatabaseURL; got != want {
+		t.Errorf("DatabaseURL = %q, want %q", got, want)
 	}
 }
 
-func TestLoad_FileOverridesDefaults(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".vor"), 0o755); err != nil {
+func TestBootstrap_EnvOverridesDBPath(t *testing.T) {
+	t.Setenv("VOR_DB_URL", "postgres://example/db")
+	if got := config.LoadBootstrap().DatabaseURL; got != "postgres://example/db" {
+		t.Errorf("DatabaseURL = %q, want the env value", got)
+	}
+}
+
+func TestResolve_LayersDefaultsGlobalRepoEnv(t *testing.T) {
+	ctx, conn, boot := newDB(t)
+
+	// 1. Defaults when nothing is set.
+	cfg, err := config.Resolve(ctx, conn, "", boot)
+	if err != nil {
 		t.Fatal(err)
 	}
-	cfgPath := filepath.Join(dir, ".vor", "config.yaml")
-	body := []byte(`provider: openai
-model: gpt-4o
-languages:
-  enabled: [go, rust]
-reasoning: true
-`)
-	if err := os.WriteFile(cfgPath, body, 0o644); err != nil {
-		t.Fatal(err)
+	if cfg.Provider != "anthropic" || cfg.Port != 7337 {
+		t.Fatalf("defaults wrong: provider=%q port=%d", cfg.Provider, cfg.Port)
 	}
 
-	cfg, err := Load(dir)
+	// 2. Global settings override defaults.
+	set(t, ctx, conn, settingsstore.Global, config.KeyProvider, `"openai"`)
+	set(t, ctx, conn, settingsstore.Global, config.KeyPort, `8080`)
+	cfg, _ = config.Resolve(ctx, conn, "", boot)
+	if cfg.Provider != "openai" || cfg.Port != 8080 {
+		t.Fatalf("global override wrong: provider=%q port=%d", cfg.Provider, cfg.Port)
+	}
+
+	// 3. Per-repo settings beat global; unset repo keys fall back to global.
+	set(t, ctx, conn, "repoX", config.KeyProvider, `"google"`)
+	cfg, _ = config.Resolve(ctx, conn, "repoX", boot)
+	if cfg.Provider != "google" {
+		t.Errorf("repo override: provider=%q, want google", cfg.Provider)
+	}
+	if cfg.Port != 8080 {
+		t.Errorf("repo should inherit global port, got %d", cfg.Port)
+	}
+
+	// 4. Env beats the database.
+	t.Setenv("VOR_PROVIDER", "ollama")
+	cfg, _ = config.Resolve(ctx, conn, "repoX", boot)
+	if cfg.Provider != "ollama" {
+		t.Errorf("env override: provider=%q, want ollama", cfg.Provider)
+	}
+}
+
+func TestResolve_DecodesStructuredValues(t *testing.T) {
+	ctx, conn, boot := newDB(t)
+	set(t, ctx, conn, settingsstore.Global, config.KeyLanguages, `{"enabled":["go","python"],"skip":["c"]}`)
+	set(t, ctx, conn, settingsstore.Global, config.KeyReasoning, `true`)
+	cfg, err := config.Resolve(ctx, conn, "", boot)
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatal(err)
 	}
-	if cfg.Provider != "openai" {
-		t.Errorf("Provider = %q, want %q", cfg.Provider, "openai")
-	}
-	if cfg.Model != "gpt-4o" {
-		t.Errorf("Model = %q, want %q", cfg.Model, "gpt-4o")
+	if strings.Join(cfg.Languages.Enabled, ",") != "go,python" {
+		t.Errorf("languages.enabled = %v", cfg.Languages.Enabled)
 	}
 	if !cfg.Reasoning {
-		t.Errorf("Reasoning = false, want true")
+		t.Error("reasoning should be true")
 	}
-	if got, want := cfg.Languages.Enabled, []string{"go", "rust"}; !equalSlice(got, want) {
-		t.Errorf("Languages.Enabled = %v, want %v", got, want)
-	}
-}
-
-func TestLoad_EnvOverridesFile(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".vor"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cfgPath := filepath.Join(dir, ".vor", "config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("provider: openai\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("VOR_PORT", "9999")
-	t.Setenv("VOR_DB_URL", "sqlite:///tmp/test.db")
-	t.Setenv("VOR_SKIP_LANGUAGES", "java,scala")
-	t.Setenv("ANTHROPIC_API_KEY", "sk-test")
-
-	cfg, err := Load(dir)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Port != 9999 {
-		t.Errorf("Port = %d, want 9999", cfg.Port)
-	}
-	if cfg.DatabaseURL != "sqlite:///tmp/test.db" {
-		t.Errorf("DatabaseURL = %q", cfg.DatabaseURL)
-	}
-	if got, want := cfg.Languages.Skip, []string{"java", "scala"}; !equalSlice(got, want) {
-		t.Errorf("Languages.Skip = %v, want %v", got, want)
-	}
-	if cfg.ProviderKeys.Anthropic != "sk-test" {
-		t.Errorf("ProviderKeys.Anthropic = %q", cfg.ProviderKeys.Anthropic)
-	}
-}
-
-func TestSplitCSV(t *testing.T) {
-	cases := []struct {
-		in   string
-		want []string
-	}{
-		{"", []string{}},
-		{"  ", []string{}},
-		{"a", []string{"a"}},
-		{"a,b, c ,,d", []string{"a", "b", "c", "d"}},
-	}
-	for _, tc := range cases {
-		got := splitCSV(tc.in)
-		if !equalSlice(got, tc.want) {
-			t.Errorf("splitCSV(%q) = %v, want %v", tc.in, got, tc.want)
-		}
-	}
-}
-
-func TestLoad_WatchConfig(t *testing.T) {
-	// Absent by default: Enabled nil (caller treats as on), Debounce empty.
-	def, err := Load(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if def.Watch.Enabled != nil {
-		t.Errorf("default Watch.Enabled = %v, want nil", *def.Watch.Enabled)
-	}
-	if def.Watch.Debounce != "" {
-		t.Errorf("default Watch.Debounce = %q, want empty", def.Watch.Debounce)
-	}
-
-	// File sets both keys.
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".vor"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	body := []byte("watch:\n  enabled: false\n  debounce: 3s\n")
-	if err := os.WriteFile(filepath.Join(dir, ".vor", "config.yaml"), body, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := Load(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Watch.Enabled == nil || *cfg.Watch.Enabled != false {
-		t.Errorf("Watch.Enabled = %v, want false", cfg.Watch.Enabled)
-	}
-	if cfg.Watch.Debounce != "3s" {
-		t.Errorf("Watch.Debounce = %q, want %q", cfg.Watch.Debounce, "3s")
-	}
-
-	// Env overrides the file (higher precedence).
-	t.Setenv("VOR_WATCH", "true")
-	t.Setenv("VOR_WATCH_DEBOUNCE", "750ms")
-	cfg, err = Load(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Watch.Enabled == nil || *cfg.Watch.Enabled != true {
-		t.Errorf("VOR_WATCH override: Enabled = %v, want true", cfg.Watch.Enabled)
-	}
-	if cfg.Watch.Debounce != "750ms" {
-		t.Errorf("VOR_WATCH_DEBOUNCE override: Debounce = %q, want %q", cfg.Watch.Debounce, "750ms")
-	}
-}
-
-func TestLoadRepoFile(t *testing.T) {
-	// Missing file: ok=false, no error.
-	if _, ok, err := LoadRepoFile(t.TempDir()); err != nil || ok {
-		t.Fatalf("missing file: ok=%v err=%v, want ok=false err=nil", ok, err)
-	}
-
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".vor"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	body := []byte("watch:\n  enabled: false\n  debounce: 4s\n")
-	if err := os.WriteFile(filepath.Join(dir, ".vor", "config.yaml"), body, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	c, ok, err := LoadRepoFile(dir)
-	if err != nil || !ok {
-		t.Fatalf("LoadRepoFile: ok=%v err=%v", ok, err)
-	}
-	if c.Watch.Enabled == nil || *c.Watch.Enabled {
-		t.Errorf("Watch.Enabled = %v, want false", c.Watch.Enabled)
-	}
-	if c.Watch.Debounce != "4s" {
-		t.Errorf("Watch.Debounce = %q, want %q", c.Watch.Debounce, "4s")
-	}
-	// Crucially, no defaults/global are applied — Provider stays zero so the
-	// caller can layer just these overrides onto its own merged config.
-	if c.Provider != "" {
-		t.Errorf("LoadRepoFile applied defaults (Provider=%q); want raw file only", c.Provider)
-	}
-}
-
-func equalSlice(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

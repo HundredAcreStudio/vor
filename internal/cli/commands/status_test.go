@@ -3,7 +3,6 @@ package commands
 import (
 	"bytes"
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -29,14 +28,11 @@ func TestStatusCommand_RendersPersistedData(t *testing.T) {
 	tmp := t.TempDir()
 	ctx := context.Background()
 
-	// .vor/wiki.db lives at <repoPath>/.vor/wiki.db — make the
-	// dir so openDB can write into it.
-	if err := os.MkdirAll(filepath.Join(tmp, ".vor"), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	conn, dialect, err := db.Open(ctx, db.OpenOptions{
-		URL: "sqlite:" + filepath.Join(tmp, ".vor", "wiki.db"),
-	})
+	// The global DB is resolved from VOR_DB_URL; point it at our seeded DB so
+	// `vor status` reads the snapshot below.
+	dbURL := "sqlite:" + filepath.Join(tmp, "vor.db")
+	t.Setenv("VOR_DB_URL", dbURL)
+	conn, dialect, err := db.Open(ctx, db.OpenOptions{URL: dbURL})
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

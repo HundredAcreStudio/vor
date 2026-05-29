@@ -1,9 +1,14 @@
 package pipeline
 
 import (
-	"os"
+	"context"
 	"path/filepath"
 	"testing"
+
+	"github.com/HundredAcreStudio/vor/internal/config"
+	"github.com/HundredAcreStudio/vor/internal/persistence/db"
+	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
+	"github.com/HundredAcreStudio/vor/internal/persistence/settingsstore"
 )
 
 func TestIsDisableAction(t *testing.T) {
@@ -20,28 +25,30 @@ func TestIsDisableAction(t *testing.T) {
 }
 
 func TestHealthExcludesFor_MapsConfig(t *testing.T) {
-	dir := t.TempDir()
-	cfgDir := filepath.Join(dir, ".vor")
-	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	// Isolate LoadBootstrap from any real ~/.config/vor.
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "xdg"))
+
+	conn, dialect, err := db.Open(ctx, db.OpenOptions{URL: "sqlite:" + filepath.Join(tmp, "t.db")})
+	if err != nil {
 		t.Fatal(err)
 	}
-	yaml := `health_rules:
-  - pattern: "**/*_test.go"
-    overrides:
-      high_complexity: disabled
-      long_function: warn
-  - path: "generated/"
-    overrides:
-      "*": disabled
-`
-	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(yaml), 0o644); err != nil {
+	defer conn.Close()
+	if err := migrations.Up(ctx, conn, dialect); err != nil {
 		t.Fatal(err)
 	}
 
-	// Isolate from any real ~/.config/vor during the test.
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "xdg"))
+	const repoID = "repo1"
+	healthRules := `[
+		{"pattern":"**/*_test.go","overrides":{"high_complexity":"disabled","long_function":"warn"}},
+		{"path":"generated/","overrides":{"*":"disabled"}}
+	]`
+	if err := settingsstore.New(conn).Set(ctx, repoID, config.KeyHealthRules, healthRules); err != nil {
+		t.Fatal(err)
+	}
 
-	rules := healthExcludesFor(dir)
+	rules := healthExcludesFor(ctx, conn, repoID)
 	if len(rules) != 2 {
 		t.Fatalf("expected 2 exclude rules, got %d: %+v", len(rules), rules)
 	}

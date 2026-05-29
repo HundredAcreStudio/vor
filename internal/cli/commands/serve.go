@@ -61,51 +61,37 @@ The daemon is machine-wide: a bare 'vor serve' uses one shared database
 are registered with 'vor register'. Address them per-call by local path or
 repository id. An explicit --repo scopes the daemon to a single repo.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(repoPath)
-			if err != nil {
-				return fmt.Errorf("load config: %w", err)
-			}
+			boot := config.LoadBootstrap()
 
 			ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 
 			logger := logging.New(logging.Options{
-				Level:  logging.ParseLevel(cfg.LogLevel),
+				Level:  logging.ParseLevel(boot.LogLevel),
 				Format: logging.FormatAuto,
 				Out:    os.Stderr,
 			})
 
-			// The daemon is machine-wide: a bare `vor serve` uses one shared
-			// DB (VOR_DB_URL, else the state-dir wiki.db) and watches the
-			// registered/tracked repos. An explicit --repo/--workspace scopes
-			// to that tree's own DB instead.
+			// One shared global database (VOR_DB_URL, else ~/.config/vor/vor.db)
+			// holds every repo. --repo no longer selects a different DB; it
+			// only scopes which repo the daemon defaults to for no-repo calls.
 			explicitScope := cmd.Flags().Changed("repo")
-			dbURL := cfg.DatabaseURL
-			if dbURL == "" && !explicitScope {
-				dir, derr := userconfig.StateDir()
-				if derr != nil {
-					return fmt.Errorf("resolve state dir for shared db: %w", derr)
-				}
-				dbURL = "sqlite:" + filepath.Join(dir, "wiki.db")
-			}
 
-			var (
-				conn    *sql.DB
-				dialect db.Dialect
-			)
-			if dbURL != "" {
-				conn, dialect, err = db.Open(ctx, db.OpenOptions{URL: dbURL})
-			} else {
-				conn, dialect, err = openDB(ctx, repoPath)
-			}
+			conn, dialect, err := db.Open(ctx, db.OpenOptions{URL: boot.DatabaseURL})
 			if err != nil {
 				return err
 			}
 			defer conn.Close()
-			// Idempotent — also lets a fresh shared DB come up without a
-			// prior `vor init`.
+			// Idempotent — also lets a fresh DB come up without a prior init.
 			if err := migrations.Up(ctx, conn, dialect); err != nil {
 				return fmt.Errorf("apply migrations: %w", err)
+			}
+
+			// Configuration lives in the DB; resolve it after migrations so
+			// the settings table exists.
+			cfg, err := config.Resolve(ctx, conn, "", boot)
+			if err != nil {
+				return fmt.Errorf("resolve config: %w", err)
 			}
 
 			// MCP default repo for no-`repo` calls: in bare daemon mode, the

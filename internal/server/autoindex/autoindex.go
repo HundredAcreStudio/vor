@@ -127,7 +127,7 @@ func (w *Watcher) Track(repoID, root string) {
 		return
 	}
 
-	enabled, debounce := w.resolveRepoWatch(repoID, root)
+	enabled, debounce := w.resolveRepoWatch(repoID)
 	if !enabled {
 		w.logger.Info("auto-reindex: repo opted out via config, not watching", "repo", repoID, "path", root)
 		return
@@ -174,29 +174,25 @@ func (w *Watcher) Untrack(repoID string) {
 	}
 }
 
-// resolveRepoWatch reads the repo-local .vor/config.yaml for per-repo watch
-// overrides. The daemon-level debounce is the base; a repo can disable
-// watching for itself or set its own debounce. Only the repo-local file is
-// read so the global layer isn't counted twice.
-func (w *Watcher) resolveRepoWatch(repoID, root string) (enabled bool, debounce time.Duration) {
+// resolveRepoWatch resolves per-repo watch overrides from the database
+// (repo settings ← global ← defaults). The daemon-level debounce is the
+// base; a repo can disable watching for itself or set its own debounce.
+func (w *Watcher) resolveRepoWatch(repoID string) (enabled bool, debounce time.Duration) {
 	enabled, debounce = true, w.debounce
-	rc, ok, err := config.LoadRepoFile(root)
+	cfg, err := config.Resolve(context.Background(), w.db, repoID, config.LoadBootstrap())
 	if err != nil {
-		w.logger.Warn("auto-reindex: cannot read repo config", "repo", repoID, "err", err)
+		w.logger.Warn("auto-reindex: cannot resolve repo config", "repo", repoID, "err", err)
 		return enabled, debounce
 	}
-	if !ok {
-		return enabled, debounce
+	if cfg.Watch.Enabled != nil {
+		enabled = *cfg.Watch.Enabled
 	}
-	if rc.Watch.Enabled != nil {
-		enabled = *rc.Watch.Enabled
-	}
-	if rc.Watch.Debounce != "" {
-		if d, perr := time.ParseDuration(rc.Watch.Debounce); perr == nil {
+	if cfg.Watch.Debounce != "" {
+		if d, perr := time.ParseDuration(cfg.Watch.Debounce); perr == nil {
 			debounce = d
 		} else {
 			w.logger.Warn("auto-reindex: invalid repo watch.debounce, using daemon default",
-				"repo", repoID, "value", rc.Watch.Debounce, "err", perr)
+				"repo", repoID, "value", cfg.Watch.Debounce, "err", perr)
 		}
 	}
 	return enabled, debounce

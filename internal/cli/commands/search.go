@@ -111,9 +111,10 @@ func newSearchCmd() *cobra.Command {
 // similarity. Errors clearly when no embeddings exist so the user knows
 // to run `vor embed` first.
 func runSemanticSearch(ctx context.Context, cmd *cobra.Command, conn *sql.DB, repoPath, repoID, query string, limit int) error {
-	cfg, err := config.Load(repoPath)
+	_ = repoPath
+	cfg, err := config.Resolve(ctx, conn, repoID, config.LoadBootstrap())
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return fmt.Errorf("resolve config: %w", err)
 	}
 	embedder, err := buildEmbedder(cfg)
 	if err != nil {

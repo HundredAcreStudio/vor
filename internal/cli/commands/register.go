@@ -152,23 +152,12 @@ func purgedSuffix(ephemeral bool) string {
 
 func cliLogger() *slog.Logger { return logging.New(logging.Options{Out: os.Stderr}) }
 
-// openDaemonDB opens (and migrates) the shared database the daemon uses:
-// VOR_DB_URL when set, otherwise the user state-dir wiki.db. Used by the CLI
-// when no daemon is running.
+// openDaemonDB opens (and migrates) the shared global database: VOR_DB_URL
+// when set, otherwise ~/.config/vor/vor.db. Used by the CLI when no daemon is
+// running.
 func openDaemonDB(ctx context.Context) (*sql.DB, error) {
-	cfg, err := config.Load("")
-	if err != nil {
-		return nil, fmt.Errorf("load config: %w", err)
-	}
-	url := cfg.DatabaseURL
-	if url == "" {
-		dir, derr := userconfig.StateDir()
-		if derr != nil {
-			return nil, fmt.Errorf("resolve state dir: %w", derr)
-		}
-		url = "sqlite:" + filepath.Join(dir, "wiki.db")
-	}
-	conn, dialect, err := db.Open(ctx, db.OpenOptions{URL: url})
+	boot := config.LoadBootstrap()
+	conn, dialect, err := db.Open(ctx, db.OpenOptions{URL: boot.DatabaseURL})
 	if err != nil {
 		return nil, err
 	}

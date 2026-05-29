@@ -39,15 +39,6 @@ stdin/stdout for a single repository:
 				Out:    os.Stderr,
 			})
 
-			// Optionally wire an LLM provider so the synthesis tools
-			// (get_answer, get_why) work. Absent a key they degrade to
-			// returning raw retrieved material — the server still starts.
-			cfg, _ := config.Load(repoPath)
-			provider, model := buildOptionalProvider(cfg)
-			embedder, _ := buildEmbedder(cfg)
-
-			opts := mcp.Options{DB: conn, Logger: logger, Provider: provider, Model: model, Embedder: embedder}
-
 			abs, err := filepath.Abs(repoPath)
 			if err != nil {
 				return fmt.Errorf("resolve --repo: %w", err)
@@ -56,7 +47,21 @@ stdin/stdout for a single repository:
 			if err != nil {
 				return fmt.Errorf("resolve repo: %w", err)
 			}
-			opts.RepositoryID = repoID
+
+			// Optionally wire an LLM provider so the synthesis tools
+			// (get_answer, get_why) work. Absent a key they degrade to
+			// returning raw retrieved material — the server still starts.
+			// Config is resolved from the DB (repo settings ← global ←
+			// defaults); a failure degrades to defaults rather than aborting.
+			boot := config.LoadBootstrap()
+			cfg, _ := config.Resolve(ctx, conn, repoID, boot)
+			provider, model := buildOptionalProvider(cfg)
+			embedder, _ := buildEmbedder(cfg)
+
+			opts := mcp.Options{
+				DB: conn, Logger: logger, Provider: provider, Model: model,
+				Embedder: embedder, RepositoryID: repoID,
+			}
 
 			srv, err := mcp.New(opts)
 			if err != nil {

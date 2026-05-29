@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/HundredAcreStudio/vor/internal/config"
 	"github.com/HundredAcreStudio/vor/internal/persistence/db"
 	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
 	"github.com/HundredAcreStudio/vor/internal/persistence/pipelinestore"
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/settingsstore"
 
 	// Register the Go parser so a reindex does real work in this test binary.
 	_ "github.com/HundredAcreStudio/vor/internal/ingestion/parser/golang"
@@ -123,13 +125,17 @@ func TestRun_ReindexesOnChange(t *testing.T) {
 }
 
 func TestRun_RepoOptsOutViaConfig(t *testing.T) {
-	// The repo's own .vor/config.yaml disables watching for itself, so the
+	// The repo opts out of watching via a per-repo `watch` setting, so the
 	// daemon must neither startup-reindex nor watch it.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // isolate config.LoadBootstrap
 	w, repoID, _ := fixture(t, map[string]string{
-		"main.go":          "package main\nfunc main(){}\n",
-		"go.mod":           "module example.com/x\ngo 1.21\n",
-		".vor/config.yaml": "watch:\n  enabled: false\n",
+		"main.go": "package main\nfunc main(){}\n",
+		"go.mod":  "module example.com/x\ngo 1.21\n",
 	})
+	if err := settingsstore.New(w.db).Set(
+		context.Background(), repoID, config.KeyWatch, `{"enabled":false}`); err != nil {
+		t.Fatal(err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

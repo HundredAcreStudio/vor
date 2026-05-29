@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -43,7 +41,7 @@ func newDBMigrateCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&repoPath, "repo", ".", "repository path (resolves .vor/config.yaml and default wiki.db)")
+	cmd.Flags().StringVar(&repoPath, "repo", ".", "(unused; the global DB at ~/.config/vor/vor.db is always used unless VOR_DB_URL is set)")
 	return cmd
 }
 
@@ -76,25 +74,22 @@ func newDBStatusCmd() *cobra.Command {
 	return cmd
 }
 
-// openDB resolves the database URL from config (env > .vor/config.yaml >
-// default sqlite://.vor/wiki.db) and opens the connection.
+// openDB opens the global vor database. The location is bootstrap-resolved
+// (VOR_DB_URL / VOR_DATABASE_URL, else ~/.config/vor/vor.db) — one shared DB
+// for every repo, not a per-repo .vor/wiki.db. repoPath is retained for
+// call-site compatibility but no longer affects the database location.
 func openDB(ctx context.Context, repoPath string) (*sql.DB, db.Dialect, error) {
-	cfg, err := config.Load(repoPath)
+	_ = repoPath
+	boot := config.LoadBootstrap()
+	conn, dialect, err := db.Open(ctx, db.OpenOptions{URL: boot.DatabaseURL})
 	if err != nil {
-		return nil, "", fmt.Errorf("load config: %w", err)
+		return nil, "", err
 	}
-
-	url := cfg.DatabaseURL
-	if url == "" {
-		abs, err := filepath.Abs(filepath.Join(repoPath, ".vor", "wiki.db"))
-		if err != nil {
-			return nil, "", fmt.Errorf("resolve default db path: %w", err)
-		}
-		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-			return nil, "", fmt.Errorf("create .vor dir: %w", err)
-		}
-		url = "sqlite:" + abs
+	// Migrate on open (idempotent) so a fresh global DB has its schema —
+	// including the settings table that config.Resolve reads.
+	if err := migrations.Up(ctx, conn, dialect); err != nil {
+		_ = conn.Close()
+		return nil, "", fmt.Errorf("apply migrations: %w", err)
 	}
-
-	return db.Open(ctx, db.OpenOptions{URL: url})
+	return conn, dialect, nil
 }
