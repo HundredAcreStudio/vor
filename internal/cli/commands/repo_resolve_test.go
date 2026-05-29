@@ -14,7 +14,7 @@ import (
 func TestRepoID_AddressesNonCwdRepo(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
 	// Index the fixture repo so it has a row + data.
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	repoRow, _ := repos.New(conn).EnsureByLocalPath(context.Background(), tmp, "")
@@ -34,7 +34,7 @@ func TestRepoID_AddressesNonCwdRepo(t *testing.T) {
 
 func TestRepoID_UnknownIDErrors(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	_, _, err := runVorCmd(t, nil, "status", "--repo", tmp, "--repo-id", "does-not-exist")
@@ -49,7 +49,7 @@ func TestRepoID_UnknownIDErrors(t *testing.T) {
 func TestRepoID_EmptyFallsBackToPath(t *testing.T) {
 	// Without --repo-id, the existing --repo path resolution applies.
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	stdout, _, err := runVorCmd(t, nil, "status", "--repo", tmp)
@@ -66,22 +66,18 @@ func TestRepoID_EmptyFallsBackToPath(t *testing.T) {
 // registration is per-command).
 func TestRepoID_AcrossReadCommands(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	repoRow, _ := repos.New(conn).EnsureByLocalPath(context.Background(), tmp, "")
 	other := t.TempDir()
 
+	// Browsing commands moved to the dashboard; the read commands that
+	// remain in the CLI must still honor --repo-id (they share
+	// resolveReadRepo, but the flag is registered per-command).
 	for _, cmd := range [][]string{
 		{"status", "--repo", other, "--repo-id", repoRow.ID},
-		{"health", "--repo", other, "--repo-id", repoRow.ID},
-		{"hotspots", "--repo", other, "--repo-id", repoRow.ID},
-		{"dead-code", "--repo", other, "--repo-id", repoRow.ID},
-		{"externals", "--repo", other, "--repo-id", repoRow.ID},
-		{"costs", "--repo", other, "--repo-id", repoRow.ID},
-		{"decision", "list", "--repo", other, "--repo-id", repoRow.ID},
-		{"pages", "list", "--repo", other, "--repo-id", repoRow.ID},
-		{"pipeline", "log", "--repo", other, "--repo-id", repoRow.ID},
+		{"search", "x", "--repo", other, "--repo-id", repoRow.ID},
 	} {
 		if _, _, err := runVorCmd(t, nil, cmd...); err != nil {
 			t.Errorf("%v: %v", cmd, err)

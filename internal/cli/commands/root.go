@@ -17,38 +17,30 @@ func Root() *cobra.Command {
 		SilenceErrors: true,
 	}
 
+	// The CLI is intentionally lean: bootstrap/ops + repo lifecycle +
+	// scriptable read shortcuts. Browsing (health, hotspots, decisions,
+	// pages, security, costs, coverage, pipeline) and generation (generate,
+	// embed, export) now live in the dashboard; freshness is handled by the
+	// daemon's auto-indexer, which retired the `hook`/`update`/`ingest`
+	// commands.
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newServeCmd())
-	root.AddCommand(newDBCmd())
-	root.AddCommand(newIngestCmd())
-	root.AddCommand(newInitCmd())
-	root.AddCommand(newStatusCmd())
-	root.AddCommand(newHealthCmd())
-	root.AddCommand(newDeadCodeCmd())
-	root.AddCommand(newDecisionCmd())
-	root.AddCommand(newGenerateCmd())
-	root.AddCommand(newEmbedCmd())
-	root.AddCommand(newCoverageCmd())
-	root.AddCommand(newSecurityCmd())
-	root.AddCommand(newPagesCmd())
-	root.AddCommand(newUpdateCmd())
-	root.AddCommand(newReindexCmd())
-	root.AddCommand(newDeleteCmd())
+	root.AddCommand(newMCPCmd())
+	root.AddCommand(newDaemonCmd())
+
 	root.AddCommand(newRegisterCmd())
 	root.AddCommand(newUnregisterCmd())
-	root.AddCommand(newDaemonCmd())
-	root.AddCommand(newClaudeMdCmd())
-	root.AddCommand(newHookCmd())
-	root.AddCommand(newExportCmd())
-	root.AddCommand(newHotspotsCmd())
+	root.AddCommand(newInitCmd())
+	root.AddCommand(newReindexCmd())
+	root.AddCommand(newDeleteCmd())
+
+	root.AddCommand(newStatusCmd())
 	root.AddCommand(newSearchCmd())
-	root.AddCommand(newExternalsCmd())
-	root.AddCommand(newCostsCmd())
+	root.AddCommand(newClaudeMdCmd())
+
+	root.AddCommand(newDBCmd())
 	root.AddCommand(newDoctorCmd())
-	root.AddCommand(newPipelineCmd())
-	root.AddCommand(newMCPCmd())
 	root.AddCommand(newCompletionCmd())
-	// Additional subcommands are added in their respective phases.
 
 	return root
 }

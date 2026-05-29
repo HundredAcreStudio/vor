@@ -67,14 +67,14 @@ func repoFixture(t *testing.T) (string, string, *sql.DB) {
 	return tmp, dbURL, conn
 }
 
-func TestUpdate_RunsPipeline(t *testing.T) {
+func TestInit_RunsPipeline(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
-	stdout, _, err := runVorCmd(t, nil, "update", tmp)
+	stdout, _, err := runVorCmd(t, nil, "init", tmp)
 	if err != nil {
-		t.Fatalf("update: %v", err)
+		t.Fatalf("init: %v", err)
 	}
-	if !strings.Contains(stdout, "update complete") {
-		t.Errorf("expected 'update complete' in output, got: %s", stdout)
+	if !strings.Contains(stdout, "files indexed") {
+		t.Errorf("expected 'files indexed' in output, got: %s", stdout)
 	}
 	// Repo row should exist with persisted state.
 	all, _ := repos.New(conn).List(context.Background())
@@ -86,7 +86,7 @@ func TestUpdate_RunsPipeline(t *testing.T) {
 func TestDelete_RequiresConfirm(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
 	// First index to create the repo row.
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -106,7 +106,7 @@ func TestDelete_RequiresConfirm(t *testing.T) {
 
 func TestDelete_WithConfirmRemovesRepo(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := runVorCmd(t, nil, "delete", "--yes", tmp); err != nil {
@@ -120,7 +120,7 @@ func TestDelete_WithConfirmRemovesRepo(t *testing.T) {
 
 func TestDelete_CascadesPersistedTables(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	// Verify some persisted state exists before delete.
@@ -148,7 +148,7 @@ func TestDelete_CascadesPersistedTables(t *testing.T) {
 
 func TestReindex_RequiresConfirm(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	stdout, _, err := runVorCmd(t, nil, "reindex", tmp)
@@ -162,7 +162,7 @@ func TestReindex_RequiresConfirm(t *testing.T) {
 
 func TestReindex_RebuildsFromScratch(t *testing.T) {
 	tmp, _, conn := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	var oldID string

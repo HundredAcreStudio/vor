@@ -9,7 +9,7 @@ import (
 
 func TestClaudeMd_WritesNewFile(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := runVorCmd(t, nil, "claude-md", tmp); err != nil {
@@ -34,7 +34,7 @@ func TestClaudeMd_WritesNewFile(t *testing.T) {
 
 func TestClaudeMd_PreservesUserContent(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	// Pre-create CLAUDE.md with user content + the managed block.
@@ -65,7 +65,7 @@ func TestClaudeMd_PreservesUserContent(t *testing.T) {
 
 func TestClaudeMd_AppendsWhenMarkersAbsent(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	dest := filepath.Join(tmp, "CLAUDE.md")
@@ -87,10 +87,10 @@ func TestClaudeMd_AppendsWhenMarkersAbsent(t *testing.T) {
 
 func TestClaudeMd_Stdout(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
-	// `update` auto-regenerates CLAUDE.md (matches the Python flow).
+	// `init` auto-regenerates CLAUDE.md from the freshly-indexed state.
 	// Delete it so we can assert --stdout doesn't re-create it.
 	_ = os.Remove(filepath.Join(tmp, "CLAUDE.md"))
 
@@ -106,16 +106,16 @@ func TestClaudeMd_Stdout(t *testing.T) {
 	}
 }
 
-// TestUpdate_AutoRegeneratesClaudeMd documents the auto-regen
-// contract: every `update` writes <repo>/CLAUDE.md.
-func TestUpdate_AutoRegeneratesClaudeMd(t *testing.T) {
+// TestInit_AutoRegeneratesClaudeMd documents the auto-regen
+// contract: every `init` writes <repo>/CLAUDE.md.
+func TestInit_AutoRegeneratesClaudeMd(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	body, err := os.ReadFile(filepath.Join(tmp, "CLAUDE.md"))
 	if err != nil {
-		t.Fatalf("update did not auto-write CLAUDE.md: %v", err)
+		t.Fatalf("init did not auto-write CLAUDE.md: %v", err)
 	}
 	if !strings.Contains(string(body), "VOR:START") {
 		t.Errorf("auto-regen output missing VOR:START marker: %q", body)
@@ -124,7 +124,7 @@ func TestUpdate_AutoRegeneratesClaudeMd(t *testing.T) {
 
 func TestClaudeMd_AcceptsLegacyAlias(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := runVorCmd(t, nil, "generate-claude-md", tmp); err != nil {
@@ -137,7 +137,7 @@ func TestClaudeMd_AcceptsLegacyAlias(t *testing.T) {
 
 func TestClaudeMd_RoundTripDoesNotDuplicateMarkers(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
-	if _, _, err := runVorCmd(t, nil, "update", tmp); err != nil {
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 3; i++ {
