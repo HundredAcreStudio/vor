@@ -273,7 +273,7 @@ func newDaemonRestartCmd() *cobra.Command {
 		Use:   "restart",
 		Short: "Stop the daemon (if running) and start it again",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			stop := newDaemonStopCmd()
 			stop.SetOut(cmd.OutOrStdout())
 			stop.SetErr(cmd.ErrOrStderr())
@@ -283,10 +283,15 @@ func newDaemonRestartCmd() *cobra.Command {
 			start := newDaemonStartCmd()
 			start.SetOut(cmd.OutOrStdout())
 			start.SetErr(cmd.ErrOrStderr())
+			// Invoke RunE directly (not Execute, which would re-parse os.Args
+			// and choke on "daemon restart"). Forward --addr by setting the
+			// bound flag value, since we're bypassing flag parsing.
 			if addr != "" {
-				start.SetArgs([]string{"--addr", addr})
+				if err := start.Flags().Set("addr", addr); err != nil {
+					return err
+				}
 			}
-			return start.Execute()
+			return start.RunE(start, nil)
 		},
 	}
 	cmd.Flags().StringVar(&addr, "addr", "", "host:port to bind (forwarded to `vor serve`)")
