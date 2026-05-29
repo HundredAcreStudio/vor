@@ -61,72 +61,31 @@ func (p *CParser) Parse(ctx context.Context, fi models.FileInfo, source []byte) 
 	return parseInternal(ctx, fi, source, "c", loadCQuery)
 }
 
+// parseInternal is the shared C/C++ implementation. Both variants use the C++
+// grammar (the C parser just runs a narrower query); the extraction shell
+// lives in common.RunQuery.
 func parseInternal(ctx context.Context, fi models.FileInfo, source []byte, langTag models.LanguageTag, loadQuery func() (*sitter.Query, error)) (models.ParsedFile, error) {
-	if err := ctx.Err(); err != nil {
-		return models.ParsedFile{}, err
-	}
-
-	tsp := sitter.NewParser()
-	tsp.SetLanguage(cpp.GetLanguage())
-	tree, err := tsp.ParseCtx(ctx, nil, source)
-	if err != nil {
-		return models.ParsedFile{}, fmt.Errorf("tree-sitter parse: %w", err)
-	}
-	defer tree.Close()
-
 	query, err := loadQuery()
 	if err != nil {
 		return models.ParsedFile{}, err
 	}
-
-	cursor := sitter.NewQueryCursor()
-	defer cursor.Close()
-	cursor.Exec(query, tree.RootNode())
-
-	symbolsByDefStart := map[uint32]*models.Symbol{}
-	var imports []models.Import
-	var calls []models.CallSite
-
-	for {
-		m, ok := cursor.NextMatch()
-		if !ok {
-			break
-		}
-		caps := common.BucketCaptures(m, query)
-		switch {
-		case len(caps["symbol.def"]) > 0:
-			absorbSymbol(symbolsByDefStart, caps, fi, langTag, source)
-		case len(caps["import.statement"]) > 0:
-			if im := absorbImport(caps, source); im != nil {
-				imports = append(imports, *im)
+	return common.RunQuery(ctx, fi, source, common.ParseSpec{
+		Lang:  cpp.GetLanguage(),
+		Query: query,
+		AbsorbSymbol: func(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node, fi models.FileInfo, source []byte) {
+			absorbSymbol(out, caps, fi, langTag, source)
+		},
+		AbsorbImport: absorbImport,
+		AbsorbCall:   absorbCall,
+		Finalize: func(_ *sitter.Node, _ []byte, pf *models.ParsedFile) {
+			// C/C++ has no module-level visibility; surface every symbol name.
+			exports := make([]string, 0, len(pf.Symbols))
+			for _, s := range pf.Symbols {
+				exports = append(exports, s.Name)
 			}
-		case len(caps["call.site"]) > 0:
-			if cs := absorbCall(caps, source); cs != nil {
-				calls = append(calls, *cs)
-			}
-		}
-	}
-
-	symbols := make([]models.Symbol, 0, len(symbolsByDefStart))
-	for _, s := range symbolsByDefStart {
-		symbols = append(symbols, *s)
-	}
-	common.SortByStartLine(symbols)
-	for i := range calls {
-		calls[i].CallerSymbolID = common.EnclosingSymbolID(symbols, calls[i].Line)
-	}
-
-	exports := make([]string, 0, len(symbols))
-	for _, s := range symbols {
-		exports = append(exports, s.Name)
-	}
-
-	return models.ParsedFile{
-		Symbols: symbols,
-		Imports: imports,
-		Calls:   calls,
-		Exports: exports,
-	}, nil
+			pf.Exports = exports
+		},
+	})
 }
 
 func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node, fi models.FileInfo, langTag models.LanguageTag, source []byte) {

@@ -35,75 +35,24 @@ type Parser struct{}
 
 func init() { parser.Register(langTag, &Parser{}) }
 
-// Parse extracts C# symbols, using directives, and invocations.
+// Parse extracts C# symbols, using directives, and invocations. The extraction
+// shell lives in common.RunQuery; this wires in C#'s symbol/import/call logic
+// and the public-top-level export rule.
 func (p *Parser) Parse(ctx context.Context, fi models.FileInfo, source []byte) (models.ParsedFile, error) {
-	if err := ctx.Err(); err != nil {
-		return models.ParsedFile{}, err
-	}
-
-	tsp := sitter.NewParser()
-	tsp.SetLanguage(csharp.GetLanguage())
-	tree, err := tsp.ParseCtx(ctx, nil, source)
-	if err != nil {
-		return models.ParsedFile{}, fmt.Errorf("tree-sitter parse: %w", err)
-	}
-	defer tree.Close()
-
 	query, err := loadQuery()
 	if err != nil {
 		return models.ParsedFile{}, err
 	}
-
-	cursor := sitter.NewQueryCursor()
-	defer cursor.Close()
-	cursor.Exec(query, tree.RootNode())
-
-	symbolsByDefStart := map[uint32]*models.Symbol{}
-	var imports []models.Import
-	var calls []models.CallSite
-
-	for {
-		m, ok := cursor.NextMatch()
-		if !ok {
-			break
-		}
-		caps := common.BucketCaptures(m, query)
-		switch {
-		case len(caps["symbol.def"]) > 0:
-			absorbSymbol(symbolsByDefStart, caps, fi, source)
-		case len(caps["import.statement"]) > 0:
-			if im := absorbImport(caps, source); im != nil {
-				imports = append(imports, *im)
-			}
-		case len(caps["call.site"]) > 0:
-			if cs := absorbCall(caps, source); cs != nil {
-				calls = append(calls, *cs)
-			}
-		}
-	}
-
-	symbols := make([]models.Symbol, 0, len(symbolsByDefStart))
-	for _, s := range symbolsByDefStart {
-		symbols = append(symbols, *s)
-	}
-	common.SortByStartLine(symbols)
-	for i := range calls {
-		calls[i].CallerSymbolID = common.EnclosingSymbolID(symbols, calls[i].Line)
-	}
-
-	exports := make([]string, 0)
-	for _, s := range symbols {
-		if s.Visibility == models.VisibilityPublic && s.ParentName == nil {
-			exports = append(exports, s.Name)
-		}
-	}
-
-	return models.ParsedFile{
-		Symbols: symbols,
-		Imports: imports,
-		Calls:   calls,
-		Exports: exports,
-	}, nil
+	return common.RunQuery(ctx, fi, source, common.ParseSpec{
+		Lang:         csharp.GetLanguage(),
+		Query:        query,
+		AbsorbSymbol: absorbSymbol,
+		AbsorbImport: absorbImport,
+		AbsorbCall:   absorbCall,
+		Finalize: func(_ *sitter.Node, _ []byte, pf *models.ParsedFile) {
+			pf.Exports = common.ExportsPublicTopLevel(pf.Symbols)
+		},
+	})
 }
 
 func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node, fi models.FileInfo, source []byte) {

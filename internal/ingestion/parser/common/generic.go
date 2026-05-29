@@ -62,79 +62,44 @@ type GenericConfig struct {
 }
 
 // GenericExtract runs the standard tree-sitter extraction loop for cfg and
-// returns the parsed symbols, imports, and calls.
+// returns the parsed symbols, imports, and calls. It builds a ParseSpec from
+// cfg — wiring the generic symbol/import/call absorbers and the public
+// top-level export rule — and delegates the shell to RunQuery.
 func GenericExtract(ctx context.Context, fi models.FileInfo, source []byte, cfg GenericConfig) (models.ParsedFile, error) {
-	if err := ctx.Err(); err != nil {
-		return models.ParsedFile{}, err
-	}
-	tsp := sitter.NewParser()
-	tsp.SetLanguage(cfg.Lang)
-	tree, err := tsp.ParseCtx(ctx, nil, source)
-	if err != nil {
-		return models.ParsedFile{}, fmt.Errorf("%s: tree-sitter parse: %w", cfg.LangTag, err)
-	}
-	defer tree.Close()
-
 	query, err := LoadQueryOnce(cfg.QueryName, cfg.Lang, cfg.Once, cfg.QueryPtr, cfg.ErrPtr)
 	if err != nil {
 		return models.ParsedFile{}, err
 	}
-
-	cursor := sitter.NewQueryCursor()
-	defer cursor.Close()
-	cursor.Exec(query, tree.RootNode())
 
 	methodKinds := cfg.MethodKinds
 	if methodKinds == nil {
 		methodKinds = map[models.SymbolKind]struct{}{models.KindFunction: {}}
 	}
 
-	symbolsByStart := map[uint32]*models.Symbol{}
-	var imports []models.Import
-	var calls []models.CallSite
-
-	for {
-		m, ok := cursor.NextMatch()
-		if !ok {
-			break
-		}
-		caps := BucketCaptures(m, query)
-		switch {
-		case len(caps["symbol.def"]) > 0 && len(caps["symbol.name"]) > 0:
-			absorbGenericSymbol(symbolsByStart, caps, fi, source, cfg, methodKinds)
-		case len(caps["import.statement"]) > 0:
-			if im := absorbGenericImport(caps, source, cfg); im != nil {
-				imports = append(imports, *im)
+	return RunQuery(ctx, fi, source, ParseSpec{
+		Lang:  cfg.Lang,
+		Query: query,
+		AbsorbSymbol: func(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node, fi models.FileInfo, source []byte) {
+			// The generic symbol absorber indexes symbol.name; guard here
+			// since RunQuery's dispatch only checks symbol.def.
+			if len(caps["symbol.name"]) == 0 {
+				return
 			}
-		case len(caps["call.site"]) > 0 && len(caps["call.target"]) > 0:
-			if cs := absorbGenericCall(caps, source, cfg); cs != nil {
-				calls = append(calls, *cs)
+			absorbGenericSymbol(out, caps, fi, source, cfg, methodKinds)
+		},
+		AbsorbImport: func(caps map[string][]*sitter.Node, source []byte) *models.Import {
+			return absorbGenericImport(caps, source, cfg)
+		},
+		AbsorbCall: func(caps map[string][]*sitter.Node, source []byte) *models.CallSite {
+			if len(caps["call.target"]) == 0 {
+				return nil
 			}
-		}
-	}
-
-	symbols := make([]models.Symbol, 0, len(symbolsByStart))
-	for _, s := range symbolsByStart {
-		symbols = append(symbols, *s)
-	}
-	SortByStartLine(symbols)
-	for i := range calls {
-		calls[i].CallerSymbolID = EnclosingSymbolID(symbols, calls[i].Line)
-	}
-
-	exports := make([]string, 0)
-	for _, s := range symbols {
-		if s.Visibility == models.VisibilityPublic && s.ParentName == nil {
-			exports = append(exports, s.Name)
-		}
-	}
-
-	return models.ParsedFile{
-		Symbols: symbols,
-		Imports: imports,
-		Calls:   calls,
-		Exports: exports,
-	}, nil
+			return absorbGenericCall(caps, source, cfg)
+		},
+		Finalize: func(_ *sitter.Node, _ []byte, pf *models.ParsedFile) {
+			pf.Exports = ExportsPublicTopLevel(pf.Symbols)
+		},
+	})
 }
 
 func absorbGenericSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node, fi models.FileInfo, source []byte, cfg GenericConfig, methodKinds map[models.SymbolKind]struct{}) {

@@ -39,79 +39,36 @@ func init() { parser.Register(langTag, &Parser{}) }
 // Parse extracts JavaScript symbols, imports, and calls (including JSX
 // element references treated as calls to the component).
 func (p *Parser) Parse(ctx context.Context, fi models.FileInfo, source []byte) (models.ParsedFile, error) {
-	if err := ctx.Err(); err != nil {
-		return models.ParsedFile{}, err
-	}
-
-	tsp := sitter.NewParser()
-	tsp.SetLanguage(javascript.GetLanguage())
-	tree, err := tsp.ParseCtx(ctx, nil, source)
-	if err != nil {
-		return models.ParsedFile{}, fmt.Errorf("tree-sitter parse: %w", err)
-	}
-	defer tree.Close()
-
 	query, err := loadQuery()
 	if err != nil {
 		return models.ParsedFile{}, err
 	}
+	return common.RunQuery(ctx, fi, source, common.ParseSpec{
+		Lang:         javascript.GetLanguage(),
+		Query:        query,
+		AbsorbSymbol: absorbSymbol,
+		AbsorbImport: absorbImport,
+		AbsorbCall:   absorbCall,
+		Finalize:     finalizeExports,
+	})
+}
 
-	cursor := sitter.NewQueryCursor()
-	defer cursor.Close()
-	cursor.Exec(query, tree.RootNode())
-
-	symbolsByDefStart := map[uint32]*models.Symbol{}
-	var imports []models.Import
-	var calls []models.CallSite
+// finalizeExports collects `export` markers from a separate top-level tree
+// walk (the .scm query doesn't capture them), marks the matching symbols
+// exported, and records the full export set on the parsed file.
+func finalizeExports(root *sitter.Node, source []byte, pf *models.ParsedFile) {
 	exportedNames := map[string]struct{}{}
-
-	for {
-		m, ok := cursor.NextMatch()
-		if !ok {
-			break
-		}
-		caps := common.BucketCaptures(m, query)
-		switch {
-		case len(caps["symbol.def"]) > 0:
-			absorbSymbol(symbolsByDefStart, caps, fi, source)
-		case len(caps["import.statement"]) > 0:
-			if im := absorbImport(caps, source); im != nil {
-				imports = append(imports, *im)
-			}
-		case len(caps["call.site"]) > 0:
-			if cs := absorbCall(caps, source); cs != nil {
-				calls = append(calls, *cs)
-			}
+	collectExportedNames(root, source, exportedNames)
+	for i := range pf.Symbols {
+		if _, exported := exportedNames[pf.Symbols[i].Name]; exported {
+			pf.Symbols[i].IsExportedSymbol = true
 		}
 	}
-
-	collectExportedNames(tree.RootNode(), source, exportedNames)
-	for i := range symbolsByDefStart {
-		if _, exported := exportedNames[symbolsByDefStart[i].Name]; exported {
-			symbolsByDefStart[i].IsExportedSymbol = true
-		}
-	}
-
-	symbols := make([]models.Symbol, 0, len(symbolsByDefStart))
-	for _, s := range symbolsByDefStart {
-		symbols = append(symbols, *s)
-	}
-	common.SortByStartLine(symbols)
-	for i := range calls {
-		calls[i].CallerSymbolID = common.EnclosingSymbolID(symbols, calls[i].Line)
-	}
-
 	exports := make([]string, 0, len(exportedNames))
 	for name := range exportedNames {
 		exports = append(exports, name)
 	}
-
-	return models.ParsedFile{
-		Symbols: symbols,
-		Imports: imports,
-		Calls:   calls,
-		Exports: exports,
-	}, nil
+	pf.Exports = exports
 }
 
 func absorbSymbol(out map[uint32]*models.Symbol, caps map[string][]*sitter.Node, fi models.FileInfo, source []byte) {
