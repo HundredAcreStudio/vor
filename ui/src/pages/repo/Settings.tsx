@@ -4,9 +4,13 @@ import {
   clearRepoSetting,
   deleteRepo,
   fetchRepoSettings,
+  fetchTasks,
   putRepoSetting,
+  setTask,
   type HealthRule,
   type RepoSettings,
+  type TaskInfo,
+  type TasksResponse,
 } from "../../api.ts";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 
@@ -106,6 +110,10 @@ function SettingsBody({
 
   return (
     <>
+      <TasksSection repoId={repoId} />
+
+      <GenerationSection repoId={repoId} settings={settings} reload={reload} />
+
       <section className="settings-section">
         <h2 className="section-title">Exclude files from health checks</h2>
         <p className="muted small">
@@ -176,6 +184,259 @@ function SettingsBody({
         <DeleteRepo repoId={repoId} onDeleted={() => navigate("/repositories")} />
       </section>
     </>
+  );
+}
+
+function TasksSection({ repoId }: { repoId: string }) {
+  const [nonce, setNonce] = useState(0);
+  const state = useAsync(() => fetchTasks(repoId), [repoId, nonce]);
+
+  return (
+    <section className="settings-section">
+      <h2 className="section-title">Tasks</h2>
+      <p className="muted small">
+        Choose which analysis tasks run for this repository. Changes apply on the
+        next run.
+      </p>
+      <AsyncView state={state}>
+        {(data) => (
+          <TasksBody repoId={repoId} data={data} reload={() => setNonce((n) => n + 1)} />
+        )}
+      </AsyncView>
+    </section>
+  );
+}
+
+function TasksBody({
+  repoId,
+  data,
+  reload,
+}: {
+  repoId: string;
+  data: TasksResponse;
+  reload: () => void;
+}) {
+  // Local mirror so toggles feel instant; we still reload to pick up any
+  // server-side recomputation of `overridden`.
+  const [tasks, setTasks] = useState<TaskInfo[]>(data.tasks);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  function toggle(task: TaskInfo) {
+    const next = !task.enabled;
+    setBusy(task.id);
+    setMsg(null);
+    setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, enabled: next } : t)));
+    setTask(repoId, task.id, next)
+      .then(() => reload())
+      .catch((e: unknown) => {
+        // Roll back the optimistic change on failure.
+        setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, enabled: task.enabled } : t)));
+        setMsg(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setBusy(null));
+  }
+
+  // Wiki generation (and similar LLM tasks) need a provider to actually run.
+  const needsProvider = (id: string) => id === "wiki_generation";
+
+  return (
+    <>
+      <div className="rules">
+        {tasks.map((t) => (
+          <div className="rule" key={t.id}>
+            <div className="rule-match">
+              <label className={"chip-toggle" + (t.enabled ? " chip-toggle-good" : "")}>
+                <input
+                  type="checkbox"
+                  checked={t.enabled}
+                  disabled={busy === t.id}
+                  onChange={() => toggle(t)}
+                />
+                {t.enabled ? "Enabled" : "Disabled"}
+              </label>
+              <strong>{t.name}</strong>
+              {t.overridden && <span className="muted small">customised</span>}
+              <span className="spacer" />
+            </div>
+            <p className="muted small">{t.description}</p>
+            {!data.providerConfigured && needsProvider(t.id) && (
+              <p className="muted small">
+                No LLM provider configured — this task will be skipped until one is
+                set up.
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+      {msg && <p className="error small">{msg}</p>}
+    </>
+  );
+}
+
+function GenerationSection({
+  repoId,
+  settings,
+  reload,
+}: {
+  repoId: string;
+  settings: RepoSettings;
+  reload: () => void;
+}) {
+  const { global, providerOptions, embedderOptions, effective, overridden } = settings;
+
+  if (!global.providerConfigured && !global.embedderConfigured) {
+    return (
+      <section className="settings-section">
+        <h2 className="section-title">Generation &amp; embeddings</h2>
+        <p className="muted small">
+          No LLM provider or embedder is configured globally. Configure one in
+          global settings to enable per-repo overrides.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="settings-section">
+      <h2 className="section-title">Generation &amp; embeddings</h2>
+      <p className="muted small">
+        Override the provider, model, or embedder for this repository. Leave a
+        field on "Inherit global" to use the global configuration.
+      </p>
+      {global.providerConfigured && (
+        <OverrideGroup
+          repoId={repoId}
+          reload={reload}
+          label="Provider"
+          selectKey="provider"
+          selectOptions={providerOptions}
+          selectValue={overridden["provider"] ? effective.provider : ""}
+          selectOverridden={!!overridden["provider"]}
+          modelKey="model"
+          modelValue={overridden["model"] ? effective.model : ""}
+          modelPlaceholder={effective.model || "model"}
+          modelOverridden={!!overridden["model"]}
+        />
+      )}
+      {global.embedderConfigured && (
+        <OverrideGroup
+          repoId={repoId}
+          reload={reload}
+          label="Embedder"
+          selectKey="embedder"
+          selectOptions={embedderOptions}
+          selectValue={overridden["embedder"] ? effective.embedder : ""}
+          selectOverridden={!!overridden["embedder"]}
+          modelKey="embedding_model"
+          modelValue={overridden["embedding_model"] ? effective.embedding_model : ""}
+          modelPlaceholder={effective.embedding_model || "embedding model"}
+          modelOverridden={!!overridden["embedding_model"]}
+        />
+      )}
+    </section>
+  );
+}
+
+function OverrideGroup({
+  repoId,
+  reload,
+  label,
+  selectKey,
+  selectOptions,
+  selectValue,
+  selectOverridden,
+  modelKey,
+  modelValue,
+  modelPlaceholder,
+  modelOverridden,
+}: {
+  repoId: string;
+  reload: () => void;
+  label: string;
+  selectKey: string;
+  selectOptions: string[];
+  selectValue: string;
+  selectOverridden: boolean;
+  modelKey: string;
+  modelValue: string;
+  modelPlaceholder: string;
+  modelOverridden: boolean;
+}) {
+  const [sel, setSel] = useState(selectValue);
+  const [model, setModel] = useState(modelValue);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const customised = selectOverridden || modelOverridden;
+
+  function persist(key: string, value: string): Promise<void> {
+    return value.trim()
+      ? putRepoSetting(repoId, key, value.trim())
+      : clearRepoSetting(repoId, key);
+  }
+
+  function save() {
+    setSaving(true);
+    setMsg(null);
+    Promise.all([persist(selectKey, sel), persist(modelKey, model)])
+      .then(() => {
+        setMsg("Saved. Re-index the repo for changes to take effect.");
+        reload();
+      })
+      .catch((e: unknown) => setMsg(e instanceof Error ? e.message : String(e)))
+      .finally(() => setSaving(false));
+  }
+
+  function resetToGlobal() {
+    setSaving(true);
+    setMsg(null);
+    Promise.all([clearRepoSetting(repoId, selectKey), clearRepoSetting(repoId, modelKey)])
+      .then(() => {
+        setSel("");
+        setModel("");
+        setMsg("Reset to global defaults.");
+        reload();
+      })
+      .catch((e: unknown) => setMsg(e instanceof Error ? e.message : String(e)))
+      .finally(() => setSaving(false));
+  }
+
+  return (
+    <div className="rule">
+      <div className="rule-match">
+        <strong>{label}</strong>
+        {customised && <span className="muted small">customised</span>}
+        <span className="spacer" />
+      </div>
+      <div className="rule-match">
+        <select value={sel} onChange={(e) => setSel(e.target.value)}>
+          <option value="">Inherit global</option>
+          {selectOptions.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+        <input
+          className="wiki-search"
+          placeholder={modelPlaceholder}
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+        />
+      </div>
+      <div className="settings-actions">
+        <span className="spacer" />
+        {customised && (
+          <button className="btn-ghost" onClick={resetToGlobal} disabled={saving}>
+            Reset to global
+          </button>
+        )}
+        <button className="btn" onClick={save} disabled={saving}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+      {msg && <p className="muted small">{msg}</p>}
+    </div>
   );
 }
 

@@ -182,12 +182,17 @@ export type RepoSettings = {
   effective: {
     provider: string;
     model: string;
+    embedder: string;
+    embedding_model: string;
     reasoning: boolean;
     health_rules: HealthRule[] | null;
     [k: string]: unknown;
   };
   overridden: Record<string, boolean>;
   biomarkers: string[];
+  global: { providerConfigured: boolean; embedderConfigured: boolean };
+  providerOptions: string[];
+  embedderOptions: string[];
 };
 
 export function fetchRepoSettings(id: string): Promise<RepoSettings> {
@@ -200,6 +205,65 @@ export function putRepoSetting(id: string, key: string, value: unknown): Promise
 
 export function clearRepoSetting(id: string, key: string): Promise<void> {
   return send<void>("DELETE", `/api/repos/${id}/settings/${key}`);
+}
+
+// ---- global settings ----------------------------------------------------
+
+export type GlobalSettings = {
+  effective: {
+    provider: string;
+    model: string;
+    embedder: string;
+    embedding_model: string;
+    [k: string]: unknown;
+  };
+  overridden: Record<string, boolean>;
+  providerOptions: string[];
+  embedderOptions: string[];
+  providerKeys: Record<string, boolean>;
+  global: { providerConfigured: boolean; embedderConfigured: boolean };
+};
+
+export function fetchGlobalSettings(): Promise<GlobalSettings> {
+  return getJSON<GlobalSettings>("/api/settings");
+}
+
+export function putGlobalSetting(key: string, value: unknown): Promise<void> {
+  return send<void>("PUT", `/api/settings/${key}`, value);
+}
+
+export function clearGlobalSetting(key: string): Promise<void> {
+  return send<void>("DELETE", `/api/settings/${key}`);
+}
+
+// ---- per-repo tasks -----------------------------------------------------
+
+export type TaskInfo = {
+  id: string;
+  name: string;
+  description: string;
+  default: boolean;
+  enabled: boolean;
+  overridden: boolean;
+};
+
+export type TasksResponse = {
+  tasks: TaskInfo[];
+  providerConfigured: boolean;
+};
+
+export function fetchTasks(id: string): Promise<TasksResponse> {
+  return getJSON<TasksResponse>(`/api/repos/${id}/tasks`);
+}
+
+export function setTask(
+  id: string,
+  taskId: string,
+  enabled: boolean,
+): Promise<{ id: string; enabled: boolean }> {
+  return send<{ id: string; enabled: boolean }>("PUT", `/api/repos/${id}/tasks/${taskId}`, {
+    enabled,
+  });
 }
 
 export type HealthSummary = {

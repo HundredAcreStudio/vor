@@ -979,6 +979,11 @@ select {
   border-color: var(--bad);
   color: var(--bad);
 }
+.chip-toggle-good {
+  background: rgba(63, 185, 80, 0.12);
+  border-color: var(--good);
+  color: var(--good);
+}
 .settings-actions {
   display: flex;
   align-items: center;
