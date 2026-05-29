@@ -46,6 +46,27 @@ export function fetchOverview(): Promise<Overview> {
   return getJSON<Overview>("/api/overview");
 }
 
+// ---- overview extras: attention digest + language mix ------------------
+
+export type AttentionItem = {
+  category: "knowledge_silo" | "ungoverned_hotspot" | "dead_code" | "needs_review";
+  title: string;
+  detail: string;
+  link: string;
+};
+
+export function fetchAttention(id: string): Promise<AttentionItem[]> {
+  return getJSON<{ items: AttentionItem[] }>(`/api/repos/${id}/attention`).then(
+    (r) => r.items ?? [],
+  );
+}
+
+export type LanguageSlice = { language: string; files: number };
+
+export function fetchLanguages(id: string): Promise<{ languages: LanguageSlice[]; total: number }> {
+  return getJSON<{ languages: LanguageSlice[]; total: number }>(`/api/repos/${id}/languages`);
+}
+
 // ---- per-repo drill-down ------------------------------------------------
 
 export type RepoDetail = {

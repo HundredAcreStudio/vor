@@ -1036,3 +1036,133 @@ select {
   gap: 8px;
   flex: none;
 }
+
+/* ---- overview: gauge + top row --------------------------------------- */
+.ov-top {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.gauge .gauge-value {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.gauge .gauge-sub {
+  font-size: 11px;
+  fill: var(--muted);
+}
+
+.ov-cols {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  margin-top: 24px;
+}
+@media (max-width: 900px) {
+  .ov-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- attention needed ------------------------------------------------- */
+.attention-panel {
+  padding-top: 12px;
+}
+.attention-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.attention-item {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.attention-item:last-child {
+  border-bottom: none;
+}
+.attention-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text);
+}
+.attention-link:hover .attention-title {
+  color: var(--accent);
+}
+.attention-title {
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.attention-detail {
+  display: block;
+  margin-top: 2px;
+}
+.att-tag {
+  flex: none;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-radius: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.att-silo {
+  background: rgba(248, 81, 73, 0.12);
+  color: var(--bad);
+  border-color: transparent;
+}
+.att-hotspot {
+  background: rgba(210, 153, 34, 0.14);
+  color: var(--warn);
+  border-color: transparent;
+}
+.att-dead {
+  background: rgba(139, 148, 158, 0.15);
+  color: var(--muted);
+  border-color: transparent;
+}
+.att-review {
+  background: rgba(88, 166, 255, 0.14);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+/* ---- donut ------------------------------------------------------------ */
+.donut {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.donut-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.donut-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.donut-legend .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+.donut-legend .ellipsis {
+  flex: 1;
+}

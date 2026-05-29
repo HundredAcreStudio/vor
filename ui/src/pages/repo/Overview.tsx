@@ -1,28 +1,33 @@
 import { Link, useParams } from "react-router-dom";
 import {
+  fetchAttention,
   fetchDeadCode,
   fetchDecisions,
   fetchHealthSummary,
   fetchHotspots,
+  fetchLanguages,
   fetchOverview,
   fetchRepo,
+  type AttentionItem,
   type RepoSummary,
 } from "../../api.ts";
+import { Donut, HealthGauge } from "../../charts.tsx";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 
 export function RepoOverview() {
   const { repoId = "" } = useParams();
+  const base = `/repositories/${repoId}`;
   const repo = useAsync(() => fetchRepo(repoId), [repoId]);
   const health = useAsync(() => fetchHealthSummary(repoId), [repoId]);
   const summary = useAsync(
     () => fetchOverview().then((o) => o.repos.find((r) => r.id === repoId)),
     [repoId],
   );
+  const attention = useAsync(() => fetchAttention(repoId), [repoId]);
+  const langs = useAsync(() => fetchLanguages(repoId), [repoId]);
   const hotspots = useAsync(() => fetchHotspots(repoId), [repoId]);
   const decisions = useAsync(() => fetchDecisions(repoId), [repoId]);
   const deadcode = useAsync(() => fetchDeadCode(repoId), [repoId]);
-
-  const base = `/repositories/${repoId}`;
 
   return (
     <>
@@ -30,25 +35,28 @@ export function RepoOverview() {
         <h1>Overview</h1>
       </header>
 
-      <AsyncView state={health}>
-        {(h) => {
-          const tier = h.averageScore >= 7.5 ? "good" : h.averageScore >= 5 ? "warn" : "bad";
-          return (
-            <div className="kpi-row">
-              <Kpi value={h.averageScore.toFixed(1)} label="health (1–10)" tier={tier} />
-              <Kpi value={h.findingCount.toLocaleString()} label="findings" />
-              <AsyncView state={summary}>
-                {(s?: RepoSummary) => (
-                  <>
-                    <Kpi value={(s?.fileCount ?? 0).toLocaleString()} label="files" />
-                    <Kpi value={(s?.symbolCount ?? 0).toLocaleString()} label="symbols" />
-                  </>
-                )}
-              </AsyncView>
-            </div>
-          );
-        }}
-      </AsyncView>
+      {/* gauge + KPI cards */}
+      <div className="ov-top">
+        <AsyncView state={health}>
+          {(h) => <HealthGauge score={h.averageScore} />}
+        </AsyncView>
+        <div className="kpi-row">
+          <AsyncView state={health}>
+            {(h) => <Kpi value={h.findingCount.toLocaleString()} label="findings" />}
+          </AsyncView>
+          <AsyncView state={summary}>
+            {(s?: RepoSummary) => (
+              <>
+                <Kpi value={(s?.fileCount ?? 0).toLocaleString()} label="files" />
+                <Kpi value={(s?.symbolCount ?? 0).toLocaleString()} label="symbols" />
+              </>
+            )}
+          </AsyncView>
+          <AsyncView state={langs}>
+            {(l) => <Kpi value={String(l.languages.length)} label="languages" />}
+          </AsyncView>
+        </div>
+      </div>
 
       <AsyncView state={repo}>
         {(r) => (
@@ -61,6 +69,44 @@ export function RepoOverview() {
         )}
       </AsyncView>
 
+      {/* attention + languages */}
+      <div className="ov-cols">
+        <section className="panel attention-panel">
+          <header className="panel-head">
+            <h3>⚠ Attention needed</h3>
+          </header>
+          <AsyncView state={attention}>
+            {(items) =>
+              items.length === 0 ? (
+                <p className="muted small">Nothing flagged — nice.</p>
+              ) : (
+                <ul className="attention-list">
+                  {items.map((it, i) => (
+                    <AttentionRow key={i} item={it} base={base} />
+                  ))}
+                </ul>
+              )
+            }
+          </AsyncView>
+        </section>
+
+        <section className="panel">
+          <header className="panel-head">
+            <h3>Languages</h3>
+          </header>
+          <AsyncView state={langs}>
+            {(l) =>
+              l.languages.length === 0 ? (
+                <p className="muted small">No language data.</p>
+              ) : (
+                <Donut slices={l.languages.slice(0, 8).map((s) => ({ label: s.language, value: s.files }))} />
+              )
+            }
+          </AsyncView>
+        </section>
+      </div>
+
+      {/* detail panels */}
       <div className="panel-grid">
         <Panel title="Health breakdown" to={`${base}/risk`}>
           <AsyncView state={health}>
@@ -94,7 +140,7 @@ export function RepoOverview() {
                       <span className="mono path" title={h.path}>
                         {h.path}
                       </span>
-                      <span className="muted">{h.commitCount90d} commits/90d</span>
+                      <span className="muted">{h.commitCount90d} c/90d</span>
                     </li>
                   ))}
                 </ul>
@@ -131,12 +177,7 @@ export function RepoOverview() {
               ) : (
                 <p className="big-stat">
                   {rows.length} <span className="muted small">findings</span>
-                  {safe > 0 && (
-                    <span className="add small">
-                      {" "}
-                      · {safe} safe to delete
-                    </span>
-                  )}
+                  {safe > 0 && <span className="add small"> · {safe} safe to delete</span>}
                 </p>
               );
             }}
@@ -147,10 +188,30 @@ export function RepoOverview() {
   );
 }
 
-function Kpi({ value, label, tier }: { value: string; label: string; tier?: string }) {
+const CATEGORY_META: Record<AttentionItem["category"], { label: string; cls: string }> = {
+  knowledge_silo: { label: "Knowledge silo", cls: "att-silo" },
+  ungoverned_hotspot: { label: "Hotspot", cls: "att-hotspot" },
+  dead_code: { label: "Dead code", cls: "att-dead" },
+  needs_review: { label: "Needs review", cls: "att-review" },
+};
+
+function AttentionRow({ item, base }: { item: AttentionItem; base: string }) {
+  const meta = CATEGORY_META[item.category] ?? { label: item.category, cls: "" };
+  return (
+    <li className="attention-item">
+      <Link to={`${base}/${item.link}`} className="attention-link">
+        <span className="attention-title ellipsis">{item.title}</span>
+        <span className={`att-tag ${meta.cls}`}>{meta.label}</span>
+      </Link>
+      <span className="muted small attention-detail">{item.detail}</span>
+    </li>
+  );
+}
+
+function Kpi({ value, label }: { value: string; label: string }) {
   return (
     <div className="kpi">
-      <span className={`kpi-value${tier ? ` health-${tier}` : ""}`}>{value}</span>
+      <span className="kpi-value">{value}</span>
       <span className="kpi-label">{label}</span>
     </div>
   );
