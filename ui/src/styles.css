@@ -1394,3 +1394,79 @@ select {
 .pkg-name {
   font-weight: 600;
 }
+
+/* ---- overview header (gauge + title + meta) -------------------------- */
+.ov-header {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding-bottom: 22px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--border);
+}
+.ov-titleblock {
+  min-width: 0;
+}
+.ov-h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 24px;
+}
+.ov-icon {
+  color: var(--warn);
+}
+.ov-sub {
+  margin: 4px 0 10px;
+  font-size: 14px;
+}
+.ov-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 13px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.ov-meta .meta-icon {
+  margin-right: 4px;
+  opacity: 0.7;
+}
+
+/* ---- KPI cards -------------------------------------------------------- */
+.kpi-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 8px;
+}
+.kpi-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.kpi-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.kpi-card-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+.kpi-card-icon {
+  color: var(--muted);
+  font-size: 14px;
+  opacity: 0.8;
+}
+.kpi-card-value {
+  display: block;
+  margin-top: 10px;
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

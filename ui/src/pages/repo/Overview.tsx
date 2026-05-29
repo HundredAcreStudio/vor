@@ -48,12 +48,8 @@ export function RepoOverview() {
 
   return (
     <>
-      <header className="page-header">
-        <h1>Overview</h1>
-      </header>
-
-      {/* gauge + KPI cards */}
-      <div className="ov-top">
+      {/* header: gauge + title/subtitle/meta */}
+      <header className="ov-header">
         <AsyncView state={health}>
           {(h) => (
             <div className="gauge-block">
@@ -65,34 +61,48 @@ export function RepoOverview() {
             </div>
           )}
         </AsyncView>
-        <div className="kpi-row">
-          <AsyncView state={summary}>
-            {(s?: RepoSummary) => (
-              <>
-                <Kpi value={(s?.fileCount ?? 0).toLocaleString()} label="files" />
-                <Kpi value={(s?.symbolCount ?? 0).toLocaleString()} label="symbols" />
-              </>
+        <div className="ov-titleblock">
+          <h1 className="ov-h1">
+            <span className="ov-icon">▦</span> Overview
+          </h1>
+          <p className="muted ov-sub">High-level stats and structure of the indexed repository.</p>
+          <AsyncView state={repo}>
+            {(r) => (
+              <div className="ov-meta">
+                <span title={r.localPath}>
+                  <span className="meta-icon">⎇</span> {r.defaultBranch || "—"}
+                </span>
+                {r.headCommit && (
+                  <span>
+                    <span className="meta-icon">⌥</span> <code>{r.headCommit.slice(0, 8)}</code>
+                  </span>
+                )}
+                <span>
+                  <span className="meta-icon">⏱</span> indexed {relDays(r.updatedAt)}
+                </span>
+              </div>
             )}
           </AsyncView>
-          <AsyncView state={langs}>
-            {(l) => <Kpi value={String(l.languages.length)} label="languages" />}
-          </AsyncView>
-          <AsyncView state={pkgs}>
-            {(p) => <Kpi value={p.monorepo ? "Monorepo" : "Single"} label="structure" />}
-          </AsyncView>
         </div>
-      </div>
+      </header>
 
-      <AsyncView state={repo}>
-        {(r) => (
-          <dl className="facts">
-            <Fact label="Local path" value={r.localPath} mono />
-            <Fact label="Default branch" value={r.defaultBranch} mono />
-            <Fact label="Head commit" value={r.headCommit ? r.headCommit.slice(0, 12) : "—"} mono />
-            <Fact label="Last indexed" value={new Date(r.updatedAt).toLocaleString()} />
-          </dl>
-        )}
-      </AsyncView>
+      {/* KPI cards */}
+      <div className="kpi-cards">
+        <AsyncView state={summary}>
+          {(s?: RepoSummary) => (
+            <>
+              <KpiCard label="Files" value={(s?.fileCount ?? 0).toLocaleString()} icon="🗎" />
+              <KpiCard label="Symbols" value={(s?.symbolCount ?? 0).toLocaleString()} icon="❮❯" />
+            </>
+          )}
+        </AsyncView>
+        <AsyncView state={langs}>
+          {(l) => <KpiCard label="Languages" value={String(l.languages.length)} icon="文" />}
+        </AsyncView>
+        <AsyncView state={pkgs}>
+          {(p) => <KpiCard label="Structure" value={p.monorepo ? "Monorepo" : "Single"} icon="⊟" />}
+        </AsyncView>
+      </div>
 
       {/* attention + languages */}
       <div className="ov-cols">
@@ -549,22 +559,28 @@ function AttentionRow({ item, base }: { item: AttentionItem; base: string }) {
   );
 }
 
-function Kpi({ value, label }: { value: string; label: string }) {
+function KpiCard({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
-    <div className="kpi">
-      <span className="kpi-value">{value}</span>
-      <span className="kpi-label">{label}</span>
+    <div className="kpi-card">
+      <div className="kpi-card-top">
+        <span className="kpi-card-label">{label}</span>
+        <span className="kpi-card-icon" aria-hidden>
+          {icon}
+        </span>
+      </div>
+      <span className="kpi-card-value">{value}</span>
     </div>
   );
 }
 
-function Fact({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="fact">
-      <dt>{label}</dt>
-      <dd className={mono ? "mono" : undefined}>{value}</dd>
-    </div>
-  );
+// relDays formats an RFC3339 timestamp as "Nd ago" / "today".
+function relDays(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+  const days = Math.floor((Date.now() - then) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "1d ago";
+  return `${days}d ago`;
 }
 
 function Panel({ title, to, children }: { title: string; to: string; children: React.ReactNode }) {
