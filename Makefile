@@ -2,6 +2,10 @@
 
 GO            ?= go
 BIN_DIR       ?= bin
+GOBIN         ?= $(shell $(GO) env GOBIN)
+ifeq ($(GOBIN),)
+GOBIN         := $(shell $(GO) env GOPATH)/bin
+endif
 PKG           := github.com/HundredAcreStudio/vor
 VERSION       ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT        := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -18,9 +22,10 @@ build: ## Build all binaries into ./bin
 	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/vor ./cmd/vor
 	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/vor-augment ./cmd/vor-augment
 
-install: ## Install binaries to $GOBIN
-	$(GO) install -ldflags "$(LDFLAGS)" ./cmd/vor
-	$(GO) install -ldflags "$(LDFLAGS)" ./cmd/vor-augment
+install: build ## Install built binaries to $GOBIN (fresh inode; avoids macOS codesign-cache SIGKILL)
+	@mkdir -p $(GOBIN)
+	install -m 0755 $(BIN_DIR)/vor $(GOBIN)/vor
+	install -m 0755 $(BIN_DIR)/vor-augment $(GOBIN)/vor-augment
 
 test: ## Run tests
 	$(GO) test ./...
