@@ -1,6 +1,8 @@
-.PHONY: build install test test-race lint vet fmt tidy clean run version-info help
+.PHONY: build install test test-race lint vet fmt tidy clean run version-info help ui ui-dev all
 
 GO            ?= go
+NPM           ?= npm
+UI_DIR        ?= ui
 BIN_DIR       ?= bin
 GOBIN         ?= $(shell $(GO) env GOBIN)
 ifeq ($(GOBIN),)
@@ -17,10 +19,18 @@ LDFLAGS       := -X $(PKG)/internal/version.Version=$(VERSION) \
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-build: ## Build all binaries into ./bin
+build: ## Build all binaries into ./bin (embeds the last-built UI in ui/dist)
 	@mkdir -p $(BIN_DIR)
 	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/vor ./cmd/vor
 	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/vor-augment ./cmd/vor-augment
+
+ui: ## Build the dashboard SPA into ui/dist (embedded by `make build`)
+	cd $(UI_DIR) && $(NPM) install && $(NPM) run build
+
+ui-dev: ## Run the Vite dev server (proxies /api to the daemon on :7337)
+	cd $(UI_DIR) && $(NPM) install && $(NPM) run dev
+
+all: ui build ## Build the UI then the binaries (full release build)
 
 install: build ## Install built binaries to $GOBIN (fresh inode; avoids macOS codesign-cache SIGKILL)
 	@mkdir -p $(GOBIN)
