@@ -16,12 +16,19 @@ import (
 func MountRepos(r chi.Router, deps Deps) {
 	store := repos.New(deps.DB)
 	r.Get("/", listRepos(store))
-	// Daemon registry control. Static segments register before the
-	// /{repoID} wildcard so they take precedence.
+	// Daemon registry control.
 	r.Get("/tracked", listTracked(deps))
 	r.Post("/register", registerRepo(deps))
 	r.Post("/unregister", unregisterRepo(deps))
-	r.Get("/{repoID}", getRepo(store))
+}
+
+// MountRepoDetail registers the single-repo endpoint as the index of the
+// /api/repos/{repoID} subrouter. It lives on the subrouter (not as a bare
+// /{repoID} on the collection router) because a sibling Route("/{repoID}",
+// …) mount would otherwise shadow it, leaving GET /api/repos/{id} a 404.
+func MountRepoDetail(r chi.Router, deps Deps) {
+	store := repos.New(deps.DB)
+	r.Get("/", getRepo(store))
 }
 
 // registerRepo handles POST /api/repos/register {path, ephemeral}: track a

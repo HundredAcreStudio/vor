@@ -18,6 +18,7 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/server/http/routes"
 	"github.com/HundredAcreStudio/vor/internal/server/registry"
 	"github.com/HundredAcreStudio/vor/internal/version"
+	"github.com/HundredAcreStudio/vor/ui"
 )
 
 // Options configures Server.
@@ -76,9 +77,11 @@ func New(opts Options) (*Server, error) {
 	// Per-domain route packages mount themselves on /api.
 	deps := routes.Deps{DB: opts.DB, Logger: opts.Logger, Registrar: opts.Registrar}
 	r.Route("/api", func(api chi.Router) {
+		routes.MountOverview(api, deps)
 		api.Route("/repos", func(reposR chi.Router) {
 			routes.MountRepos(reposR, deps)
 			reposR.Route("/{repoID}", func(per chi.Router) {
+				routes.MountRepoDetail(per, deps)
 				routes.MountGraph(per, deps)
 				routes.MountSymbols(per, deps)
 				routes.MountSearch(per, deps)
@@ -101,6 +104,11 @@ func New(opts Options) (*Server, error) {
 	if opts.MCPHandler != nil {
 		r.Mount("/mcp", opts.MCPHandler)
 	}
+
+	// Dashboard SPA (embedded Vite build). Lowest-priority catch-all, so
+	// /api and /mcp above still match first. Unknown paths fall back to
+	// index.html for client-side routing.
+	r.Handle("/*", ui.Handler())
 
 	return &Server{opts: opts, handler: r}, nil
 }

@@ -415,16 +415,15 @@ func TestPanic_RecoveredAs500(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	// chi router won't be modified post-construction; instead we serve the
-	// existing /api/repos/no-such with a malformed ID — covered above. To
-	// exercise Recovery() directly, hit a route that doesn't exist; chi
-	// returns 404 not 500, so we settle for asserting the 404 here (the
-	// Recovery middleware is unit-tested by integration above implicitly).
+	// chi router won't be modified post-construction; instead we serve an
+	// unknown /api route. (Unknown *non*-API paths now fall through to the
+	// dashboard SPA catch-all and return 200 — see TestUI_ServesIndex.) The
+	// /api subrouter does not backtrack to the catch-all, so it still 404s.
 	rec := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/does/not/exist", nil)
+	req, _ := http.NewRequest("GET", "/api/does/not/exist", nil)
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
-		t.Errorf("unknown route = %d, want 404", rec.Code)
+		t.Errorf("unknown api route = %d, want 404", rec.Code)
 	}
 	_ = strings.Contains // keep import linter happy if all other usages drop
 }
@@ -510,6 +509,62 @@ func TestShowPage_NotFound(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestOverview(t *testing.T) {
+	srv, _ := fixtureRepo(t)
+	var body struct {
+		Repos []struct {
+			Name        string  `json:"name"`
+			FileCount   int     `json:"fileCount"`
+			SymbolCount int     `json:"symbolCount"`
+			HealthAvg   float64 `json:"healthAvg"`
+		} `json:"repos"`
+	}
+	hitJSON(t, srv.URL, "/api/overview", &body)
+	if len(body.Repos) != 1 {
+		t.Fatalf("repos = %d, want 1", len(body.Repos))
+	}
+	r := body.Repos[0]
+	// The fixture seeds 3 file nodes and 2 symbol nodes.
+	if r.FileCount != 3 {
+		t.Errorf("fileCount = %d, want 3", r.FileCount)
+	}
+	if r.SymbolCount != 2 {
+		t.Errorf("symbolCount = %d, want 2", r.SymbolCount)
+	}
+}
+
+func TestRepoDetail(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+	var repo struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	hitJSON(t, srv.URL, "/api/repos/"+repoID, &repo)
+	if repo.ID != repoID {
+		t.Errorf("id = %q, want %q", repo.ID, repoID)
+	}
+	if repo.Name != "fix" {
+		t.Errorf("name = %q, want %q", repo.Name, "fix")
+	}
+}
+
+func TestUI_ServesIndex(t *testing.T) {
+	srv, _ := fixtureRepo(t)
+	for _, path := range []string{"/", "/some/client/route"} {
+		resp := mustGet(t, srv.URL+path)
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		// Unknown paths fall back to the SPA entry point (200, HTML).
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200", path, resp.StatusCode)
+		}
+		if !strings.Contains(string(body), "<div id=\"root\">") &&
+			!strings.Contains(string(body), "Vor") {
+			t.Errorf("GET %s did not return the SPA index, got: %s", path, string(body))
+		}
 	}
 }
 
