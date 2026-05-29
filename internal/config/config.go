@@ -36,6 +36,13 @@ type Config struct {
 	Watch       WatchConfig     `json:"watch"`
 	Reasoning   bool            `json:"reasoning"`
 
+	// Tasks holds per-repo enable/disable overrides for registered
+	// post-pipeline tasks (e.g. wiki generation), keyed by task ID. A task
+	// absent from this map falls back to its registered DefaultEnabled.
+	// Resolved with the usual global→repo precedence: a repo-scoped entry
+	// overrides the global entry for that task ID.
+	Tasks map[string]bool `json:"tasks"`
+
 	// DatabaseURL is bootstrap-resolved (env/default), never from the DB.
 	DatabaseURL string `json:"-"`
 
@@ -100,6 +107,7 @@ const (
 	KeyLogLevel       = "log_level"
 	KeyRPM            = "rpm"
 	KeyTPM            = "tpm"
+	KeyTasks          = "tasks"
 )
 
 // Keys is the full set of database-backed setting keys, in display order.
@@ -107,7 +115,7 @@ func Keys() []string {
 	return []string{
 		KeyProvider, KeyModel, KeyLanguages, KeyHealthRules, KeyWatch,
 		KeyReasoning, KeyEmbedder, KeyEmbeddingModel, KeyEmbeddingDims,
-		KeyHost, KeyPort, KeyLogLevel, KeyRPM, KeyTPM,
+		KeyHost, KeyPort, KeyLogLevel, KeyRPM, KeyTPM, KeyTasks,
 	}
 }
 
@@ -263,6 +271,8 @@ func applySettings(cfg *Config, rows map[string]string) error {
 			dst = &cfg.RPM
 		case KeyTPM:
 			dst = &cfg.TPM
+		case KeyTasks:
+			dst = &cfg.Tasks
 		default:
 			continue // unknown key — ignore
 		}

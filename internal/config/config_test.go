@@ -60,6 +60,52 @@ func TestBootstrap_EnvOverridesDBPath(t *testing.T) {
 	}
 }
 
+func TestResolve_TasksMergeGlobalAndRepo(t *testing.T) {
+	ctx, conn, boot := newDB(t)
+
+	// Unset: Tasks is empty (callers fall back to each task's default).
+	cfg, err := config.Resolve(ctx, conn, "repoX", boot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Tasks) != 0 {
+		t.Fatalf("expected no task overrides, got %v", cfg.Tasks)
+	}
+
+	// Global disables wiki generation for every repo; enables another task.
+	set(t, ctx, conn, settingsstore.Global, config.KeyTasks, `{"wiki_generation":false,"embeddings":true}`)
+	cfg, _ = config.Resolve(ctx, conn, "repoX", boot)
+	if cfg.Tasks["wiki_generation"] != false || cfg.Tasks["embeddings"] != true {
+		t.Fatalf("global task overrides not applied: %v", cfg.Tasks)
+	}
+
+	// Repo scope flips wiki_generation back on for this repo only; the global
+	// "embeddings" entry is inherited (per-key merge, not whole-map replace).
+	set(t, ctx, conn, "repoX", config.KeyTasks, `{"wiki_generation":true}`)
+	cfg, _ = config.Resolve(ctx, conn, "repoX", boot)
+	if cfg.Tasks["wiki_generation"] != true {
+		t.Errorf("repo override should re-enable wiki_generation, got %v", cfg.Tasks)
+	}
+	if cfg.Tasks["embeddings"] != true {
+		t.Errorf("repo scope should inherit global embeddings entry, got %v", cfg.Tasks)
+	}
+
+	// A different repo with no override still sees the global default (off).
+	cfg, _ = config.Resolve(ctx, conn, "repoY", boot)
+	if cfg.Tasks["wiki_generation"] != false {
+		t.Errorf("repoY should inherit global wiki_generation=false, got %v", cfg.Tasks)
+	}
+}
+
+func TestValidateSetting_Tasks(t *testing.T) {
+	if err := config.ValidateSetting(config.KeyTasks, `{"wiki_generation":true}`); err != nil {
+		t.Errorf("valid tasks map rejected: %v", err)
+	}
+	if err := config.ValidateSetting(config.KeyTasks, `["not","a","map"]`); err == nil {
+		t.Error("expected error for non-object tasks value")
+	}
+}
+
 func TestResolve_LayersDefaultsGlobalRepoEnv(t *testing.T) {
 	ctx, conn, boot := newDB(t)
 
