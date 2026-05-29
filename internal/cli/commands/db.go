@@ -81,15 +81,8 @@ func newDBStatusCmd() *cobra.Command {
 func openDB(ctx context.Context, repoPath string) (*sql.DB, db.Dialect, error) {
 	_ = repoPath
 	boot := config.LoadBootstrap()
-	conn, dialect, err := db.Open(ctx, db.OpenOptions{URL: boot.DatabaseURL})
-	if err != nil {
-		return nil, "", err
-	}
-	// Migrate on open (idempotent) so a fresh global DB has its schema —
-	// including the settings table that config.Resolve reads.
-	if err := migrations.Up(ctx, conn, dialect); err != nil {
-		_ = conn.Close()
-		return nil, "", fmt.Errorf("apply migrations: %w", err)
-	}
-	return conn, dialect, nil
+	// No migration here — the daemon migrates on startup, and the setup
+	// commands (init, register, db migrate) migrate explicitly. Read/utility
+	// commands operate on an already-migrated DB, so they just connect.
+	return db.Open(ctx, db.OpenOptions{URL: boot.DatabaseURL})
 }

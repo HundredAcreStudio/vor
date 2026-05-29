@@ -98,6 +98,32 @@ func TestResolve_LayersDefaultsGlobalRepoEnv(t *testing.T) {
 	}
 }
 
+func TestResolve_ToleratesUnmigratedDB(t *testing.T) {
+	// A DB that exists but hasn't been migrated yet (no settings table) must
+	// resolve to built-in defaults rather than erroring — migration is the
+	// daemon's job, not every read command's.
+	ctx := context.Background()
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "xdg"))
+	t.Setenv("VOR_DB_URL", "")
+	t.Setenv("VOR_DATABASE_URL", "")
+
+	conn, _, err := db.Open(ctx, db.OpenOptions{URL: "sqlite:" + filepath.Join(tmp, "fresh.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	// Deliberately do NOT run migrations.
+
+	cfg, err := config.Resolve(ctx, conn, "repoX", config.LoadBootstrap())
+	if err != nil {
+		t.Fatalf("Resolve on unmigrated DB should not error: %v", err)
+	}
+	if cfg.Provider != "anthropic" || cfg.Port != 7337 {
+		t.Errorf("expected defaults, got provider=%q port=%d", cfg.Provider, cfg.Port)
+	}
+}
+
 func TestResolve_DecodesStructuredValues(t *testing.T) {
 	ctx, conn, boot := newDB(t)
 	set(t, ctx, conn, settingsstore.Global, config.KeyLanguages, `{"enabled":["go","python"],"skip":["c"]}`)

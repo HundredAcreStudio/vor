@@ -8,6 +8,7 @@ package settingsstore
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 // Global is the sentinel repository_id for settings that apply to every repo
@@ -44,6 +45,12 @@ func (s *Store) GetScope(ctx context.Context, repoID string) (map[string]string,
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT key, value FROM settings WHERE repository_id = ? ORDER BY key`, repoID)
 	if err != nil {
+		// A not-yet-migrated DB has no settings table. Treat that as "no
+		// settings" so config resolution degrades to defaults rather than
+		// failing — migration is the daemon's / setup commands' job.
+		if isMissingTable(err) {
+			return map[string]string{}, nil
+		}
 		return nil, err
 	}
 	defer rows.Close()
@@ -76,4 +83,11 @@ func (s *Store) Delete(ctx context.Context, repoID, key string) error {
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM settings WHERE repository_id = ? AND key = ?`, repoID, key)
 	return err
+}
+
+// isMissingTable reports whether err is the dialect's "settings table does
+// not exist yet" error (SQLite: "no such table"; Postgres: "does not exist").
+func isMissingTable(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "no such table") || strings.Contains(msg, "does not exist")
 }
