@@ -9,12 +9,16 @@ const REPO_NAV: { to: string; label: string; soon?: boolean }[] = [
   { to: "search", label: "Search" },
   { to: "risk", label: "Risk" },
   { to: "hotspots", label: "Hotspots" },
+  { to: "dead-code", label: "Dead code" },
   { to: "graph", label: "Graph" },
   { to: "symbols", label: "Symbols" },
-  { to: "contributors", label: "Contributors", soon: true },
+  { to: "dependencies", label: "Dependencies", soon: true },
   { to: "decisions", label: "Decisions" },
-  { to: "dead-code", label: "Dead code" },
+  { to: "contributors", label: "Contributors", soon: true },
+  { to: "coverage", label: "Coverage", soon: true },
+  { to: "costs", label: "Costs", soon: true },
   { to: "security", label: "Security", soon: true },
+  { to: "activity", label: "Activity", soon: true },
 ];
 
 export function RepoLayout() {

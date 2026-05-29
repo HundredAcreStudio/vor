@@ -14,6 +14,10 @@ import { Symbols } from "./pages/repo/Symbols.tsx";
 import { Contributors } from "./pages/repo/Contributors.tsx";
 import { RepoDecisions } from "./pages/repo/Decisions.tsx";
 import { RepoDeadCode } from "./pages/repo/DeadCode.tsx";
+import { Dependencies } from "./pages/repo/Dependencies.tsx";
+import { Coverage } from "./pages/repo/Coverage.tsx";
+import { Costs } from "./pages/repo/Costs.tsx";
+import { Activity } from "./pages/repo/Activity.tsx";
 import { Security } from "./pages/repo/Security.tsx";
 import { Settings } from "./pages/Settings.tsx";
 import "./styles.css";
@@ -34,10 +38,14 @@ createRoot(document.getElementById("root")!).render(
             <Route path="hotspots" element={<RepoHotspots />} />
             <Route path="graph" element={<Graph />} />
             <Route path="symbols" element={<Symbols />} />
-            <Route path="contributors" element={<Contributors />} />
+            <Route path="dependencies" element={<Dependencies />} />
             <Route path="decisions" element={<RepoDecisions />} />
             <Route path="dead-code" element={<RepoDeadCode />} />
+            <Route path="contributors" element={<Contributors />} />
+            <Route path="coverage" element={<Coverage />} />
+            <Route path="costs" element={<Costs />} />
             <Route path="security" element={<Security />} />
+            <Route path="activity" element={<Activity />} />
           </Route>
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/repositories" replace />} />
