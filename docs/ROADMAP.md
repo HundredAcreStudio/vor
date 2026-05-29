@@ -32,6 +32,25 @@ working binary and tests, same as the original plan.
 
 ---
 
+## Since Phase 11 — shipped post-parity
+
+Work that landed after the port reached parity, much of it outside the original
+phase plan (see [PARITY.md](PARITY.md) → *Notable intentional divergences*):
+
+- **Web dashboard** — React SPA embedded via `go:embed`, served by the daemon
+  at `/` (overview, wiki, search, per-repo settings, a visual module graph).
+- **Database-backed configuration** — a `settings` table (global + per-repo)
+  replaces YAML config; one global DB at `~/.config/vor/vor.db`.
+- **Lean CLI** — pruned to ops + lifecycle; browsing moved to the dashboard,
+  index-freshness to the daemon's auto-indexer (`update`/`watch`/`hook` retired).
+- **MCP expansion** — 32 tools, including `vor_risk` and the dashboard analytics
+  (`vor_attention`, `vor_git_insights`, `vor_modules`, …), all over a shared
+  `internal/insights` read layer used by HTTP routes too.
+- **Claude Code plugin** (`plugins/claude-code/`) — registers the MCP server +
+  tool-usage skills.
+
+---
+
 ## ✅ Phase 12 — Production LLM providers & embedders (done)
 
 All providers speak their vendor API directly over net/http (no SDK
@@ -129,9 +148,10 @@ CI build-step extraction.
 
 ## Phase 16 — Risk & knowledge intelligence
 
-- PR blast-radius / `get_risk` PR-mode: a `directive` block that, given
-  a changeset, returns impacted files, owners, hotspots, and review
-  guidance (the one MCP gap remaining vs. Python's `get_risk`).
+- PR blast-radius / `get_risk` PR-mode: the per-file `vor_risk` tool ships
+  (blast radius, co-change, ownership, governing decisions); what remains is the
+  changeset-level `directive` block — given a diff, return impacted files,
+  owners, hotspots, and review guidance (the one MCP gap vs. Python's `get_risk`).
 - Knowledge-graph depth: richer decision ↔ code linking
   (`decision_node_links`) and a knowledge-map view.
 - Architecture **page kind** for generation (whole-system narrative),

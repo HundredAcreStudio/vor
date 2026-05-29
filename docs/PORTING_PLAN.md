@@ -1,15 +1,25 @@
 # vor-go — Porting Plan
 
-This document captures the design decisions and phased roadmap for porting [repowise](https://github.com/repowise-dev/repowise) from Python to Go. The Go port (**vor**) targets **full feature parity** with the upstream Python implementation across `packages/core`, `packages/server`, and `packages/cli`. The Next.js dashboard is out of scope for this repository — it will live in a separate dashboard repo and communicate with this backend over HTTP.
+This document captures the design decisions and phased roadmap for porting [repowise](https://github.com/repowise-dev/repowise) from Python to Go. The Go port (**vor**) targets **full feature parity** with the upstream Python implementation across `packages/core`, `packages/server`, and `packages/cli`.
 
 Source reference: `~/projects/repowise` (the upstream Python project, 3.11+, v0.12.0).
 
-> **Status (2026-05-28): Phases 0–11 complete.** The port reaches
-> functional parity with the Python core, server, and CLI. Post-parity
-> work (real LLM providers, the full 14-language set, deeper biomarkers,
-> incremental indexing, webhooks) is tracked in **[ROADMAP.md](ROADMAP.md)**
-> as Phases 12–17. This document is the historical port plan; ROADMAP.md
-> is where active planning continues.
+> **Status:** Phases 0–11 (port to parity) are complete. **This is the
+> historical port plan** — for the current shape of the system see
+> [architecture.md](architecture.md); for active planning see
+> [ROADMAP.md](ROADMAP.md).
+>
+> Post-parity, the port has **diverged from this plan** in a few load-bearing
+> ways (see [PARITY.md](PARITY.md) → *Notable intentional divergences* for
+> detail):
+> - The **web dashboard now lives in this repo** — a React SPA embedded into
+>   the binary via `go:embed` and served by the daemon — rather than the
+>   separate Next.js repo this plan assumed.
+> - **Configuration moved into the database** (`settings` table); YAML config
+>   files are gone. Only the DB URL + API keys come from the environment.
+> - A **single global database** (`~/.config/vor/vor.db`) holds every repo;
+>   there is no per-repo `.vor/wiki.db`, and the CLI was pruned to a lean
+>   ops/lifecycle surface (browsing moved to the dashboard).
 
 ---
 
@@ -21,7 +31,7 @@ Source reference: `~/projects/repowise` (the upstream Python project, 3.11+, v0.
 | `packages/server` | `internal/server` (`http/`, `mcp/`, `services/`, `schemas/`) | In scope |
 | `packages/cli` | `internal/cli`, `cmd/vor`, `cmd/vor-augment` | In scope |
 | `packages/types` | N/A — Go has its own types in `internal/...` | Out of scope |
-| `packages/ui` + `packages/web` | Separate `vor-dashboard` repo (Next.js) | Out of scope |
+| `packages/ui` + `packages/web` | `ui/` — React + Vite SPA, embedded via `go:embed`, served by the daemon at `/` | In scope (changed from the original plan) |
 
 ### Two runtime components
 
@@ -289,7 +299,6 @@ Integration tests on real fixture repos (`testdata/`). Parity tests comparing Go
 - Plugin loading at runtime (Python's `register_command` will become compile-time interface registration).
 - Reading existing Python `.vor/wiki.db` files (incompatible by design — users must re-index).
 - Windows support beyond "best-effort" (Python vor targets Linux/macOS; Go port follows suit).
-- Web dashboard in this repo (handled by `vor-dashboard`).
 
 ---
 

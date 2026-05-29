@@ -5,7 +5,7 @@
 -- 0001–0024. The Go port does not replay history; one consolidated migration is
 -- equivalent at first install.
 --
--- See PORTING_PLAN.md §4 and docs/python-migrations-reference.md for context.
+-- See docs/PORTING_PLAN.md §4 for context.
 
 CREATE TABLE IF NOT EXISTS repositories (
     id              TEXT PRIMARY KEY,

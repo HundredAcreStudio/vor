@@ -47,7 +47,7 @@ func Root() *cobra.Command {
 
 const longDescription = `vor indexes a codebase into five intelligence layers — dependency graph,
 git history, auto-generated documentation, architectural decisions, and code
-health — and exposes them over MCP and HTTP so AI coding agents can answer
-questions without re-reading the source every time.
+health — and exposes them over a web dashboard, a REST API, and MCP so AI
+coding agents can answer questions without re-reading the source every time.
 
-This is the Go port. See PORTING_PLAN.md for status and roadmap.`
+See the docs/ directory (architecture, configuration, CLI, MCP, dashboard).`

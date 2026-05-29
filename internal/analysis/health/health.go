@@ -2,7 +2,7 @@
 // biomarkers over parser output and emits per-finding + per-file metric
 // records that mirror the health_findings and health_file_metrics tables.
 //
-// Mirrors the Python `core.analysis.health` package — see PORTING_PLAN.md
+// Mirrors the Python `core.analysis.health` package — see docs/PORTING_PLAN.md
 // §5 for the full biomarker roster. Pass A lands the two biomarkers with
 // the highest signal per LOC of code: cyclomatic complexity and long
 // functions. Additional biomarkers (deep nesting, brain methods, primitive

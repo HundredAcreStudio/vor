@@ -4,7 +4,7 @@
 
 > A derivative work of repowise (Python), re-implemented in Go. Not affiliated with or endorsed by the upstream project. Licensed under AGPL-3.0-or-later, the same license as repowise — see [Attribution & license](#attribution--license).
 
-> Work in progress. See [PORTING_PLAN.md](./PORTING_PLAN.md) for the phased roadmap, library choices, and risk register.
+> Work in progress. See [docs/PORTING_PLAN.md](./docs/PORTING_PLAN.md) for the historical port plan and [docs/ROADMAP.md](./docs/ROADMAP.md) for what's next.
 
 ## Three roles, one binary
 
@@ -83,20 +83,23 @@ full settings key list: [docs/configuration.md](./docs/configuration.md).
 
 ## Documentation
 
+Everything lives under [`docs/`](./docs/) (index: [docs/README.md](./docs/README.md)).
+
 | Doc | What's in it |
 |---|---|
-| [docs/architecture.md](./docs/architecture.md) | CLI / daemon / dashboard, the shared DB, ports, migrations |
-| [docs/dashboard.md](./docs/dashboard.md) | how the UI is embedded + served by the daemon; the dev loop |
-| [docs/configuration.md](./docs/configuration.md) | DB-backed settings, bootstrap, health exclusions |
-| [docs/cli.md](./docs/cli.md) | the lean command set |
-| [docs/mcp.md](./docs/mcp.md) | MCP tools, transports, driving agent usage |
-| [PARITY.md](./PARITY.md) | feature-by-feature comparison vs. the Python original |
+| [architecture](./docs/architecture.md) | CLI / daemon / dashboard, the shared DB, ports, migrations |
+| [dashboard](./docs/dashboard.md) | how the UI is embedded + served by the daemon; the dev loop |
+| [configuration](./docs/configuration.md) | DB-backed settings, bootstrap, health exclusions |
+| [cli](./docs/cli.md) | the lean command set |
+| [mcp](./docs/mcp.md) | MCP tools, transports, driving agent usage |
+| [PARITY](./docs/PARITY.md) | feature-by-feature comparison vs. the Python original |
+| [ROADMAP](./docs/ROADMAP.md) · [PORTING_PLAN](./docs/PORTING_PLAN.md) · [TESTING](./docs/TESTING.md) · [CHANGELOG](./docs/CHANGELOG.md) | what's next · historical port plan · review checklist · release notes |
 
 ## Status
 
 For a feature-by-feature comparison against the Python implementation
 (CLI commands, MCP tools, biomarkers, languages, providers), see
-[PARITY.md](./PARITY.md).
+[PARITY.md](./docs/PARITY.md).
 
 | Subsystem | Status |
 |---|---|

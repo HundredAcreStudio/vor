@@ -1,11 +1,13 @@
-# Testing Plan — Review checklist
+# Testing — review checklist
 
-Use this to walk through 29 commits of work without missing anything important. Each section has commands to run and what to expect.
+A hands-on walkthrough for verifying a build end-to-end. Each section has
+commands to run and what to expect. (For the architecture these exercise, see
+[architecture.md](architecture.md).)
 
 ## 0. Prerequisites
 
 ```bash
-go version          # 1.24+
+go version          # 1.25+
 which sqlite3       # for one DB inspection step (optional)
 make build          # produces bin/vor + bin/vor-augment
 ```

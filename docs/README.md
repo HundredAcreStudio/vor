@@ -1,5 +1,7 @@
 # Vor documentation
 
+## Guides
+
 - [Architecture](./architecture.md) — the binary's three roles (CLI, daemon,
   dashboard), the one shared database, ports/surfaces, and migrations.
 - [The web dashboard](./dashboard.md) — how the UI is built into the binary and
@@ -10,7 +12,17 @@
 - [MCP tools](./mcp.md) — the tool surface, transports, and how agents are
   driven to use them.
 
-Other top-level docs: [PARITY.md](../PARITY.md), [ROADMAP.md](../ROADMAP.md),
-[TESTING.md](../TESTING.md), [CHANGELOG.md](../CHANGELOG.md),
-[PORTING_PLAN.md](../PORTING_PLAN.md), and architecture decision records under
-[`docs/adr/`](./adr/).
+## Project docs
+
+- [PARITY.md](./PARITY.md) — feature-by-feature comparison vs. the Python
+  original, and the notable intentional divergences.
+- [ROADMAP.md](./ROADMAP.md) — what's shipped post-parity and what's next.
+- [PORTING_PLAN.md](./PORTING_PLAN.md) — the historical Python→Go port plan.
+- [TESTING.md](./TESTING.md) — hands-on review/verification checklist.
+- [CHANGELOG.md](./CHANGELOG.md) — release notes.
+- [adr/](./adr/) — architecture decision records.
+
+> The repo root keeps only `README.md`, `LICENSE`, `NOTICE`, and `CLAUDE.md`.
+> `CLAUDE.md` stays at the root on purpose — it's the agent-context file Vor
+> generates into every indexed repo (and that coding agents read), not project
+> documentation.
