@@ -28,6 +28,7 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/persistence/pipelinestore"
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 	"github.com/HundredAcreStudio/vor/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/pipeline/tasks"
 )
 
 // defaultDebounce collapses a burst of filesystem events (a git checkout,
@@ -365,4 +366,10 @@ func (rw *repoWatcher) reindex(ctx context.Context, reason string) {
 	}
 	rw.logger.Info("auto-reindex: done", "repo", rw.repoID, "reason", reason,
 		"took", time.Since(start).Round(time.Millisecond))
+
+	// Run enabled post-pipeline tasks (e.g. wiki generation) so pages stay
+	// fresh as files change. Each task self-skips when disabled for this repo
+	// or when no LLM provider is configured; the wiki runner regenerates only
+	// the units whose source changed. Outcomes are logged inside AfterPipeline.
+	tasks.AfterPipeline(ctx, rw.db, rw.repoID, rw.root, rw.logger)
 }

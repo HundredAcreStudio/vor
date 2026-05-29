@@ -10,6 +10,7 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/logging"
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 	"github.com/HundredAcreStudio/vor/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/pipeline/tasks"
 )
 
 // newReindexCmd is the "scorched earth" rebuild: drop the repository row
@@ -89,6 +90,11 @@ func newReindexCmd() *cobra.Command {
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "\nreindex complete (new run %s, %d phases)\n",
 				res.RunID, len(res.Phases))
+
+			// Run enabled post-pipeline tasks (e.g. wiki generation) against
+			// the freshly-rebuilt index. With state wiped, every page is
+			// regenerated; otherwise the runner skips unchanged units.
+			reportTaskOutcomes(cmd, tasks.AfterPipeline(ctx, conn, fresh.ID, absRoot, logger))
 			return nil
 		},
 	}

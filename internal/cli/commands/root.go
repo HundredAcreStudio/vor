@@ -32,6 +32,7 @@ func Root() *cobra.Command {
 	root.AddCommand(newUnregisterCmd())
 	root.AddCommand(newInitCmd())
 	root.AddCommand(newReindexCmd())
+	root.AddCommand(newGenerateCmd())
 	root.AddCommand(newDeleteCmd())
 
 	root.AddCommand(newStatusCmd())

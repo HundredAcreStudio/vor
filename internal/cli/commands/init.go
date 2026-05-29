@@ -14,6 +14,7 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 	"github.com/HundredAcreStudio/vor/internal/pipeline"
+	"github.com/HundredAcreStudio/vor/internal/pipeline/tasks"
 
 	// Side-effect imports: ingest's registry hooks need to fire here too.
 	_ "github.com/HundredAcreStudio/vor/internal/ingestion/external/cargo"
@@ -114,6 +115,11 @@ incremental re-indexing.`,
 				fmt.Fprintf(cmd.OutOrStdout(), "CLAUDE.md regenerated at %s\n",
 					filepath.Join(absRoot, "CLAUDE.md"))
 			}
+
+			// Run enabled post-pipeline tasks (e.g. wiki generation). These
+			// self-skip when disabled for this repo or when no LLM provider is
+			// configured, so this stays a no-op for zero-config repos.
+			reportTaskOutcomes(cmd, tasks.AfterPipeline(ctx, conn, repoRow.ID, absRoot, logger))
 			return nil
 		},
 	}
