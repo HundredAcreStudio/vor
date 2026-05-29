@@ -78,6 +78,7 @@ func New(opts Options) (*Server, error) {
 	deps := routes.Deps{DB: opts.DB, Logger: opts.Logger, Registrar: opts.Registrar}
 	r.Route("/api", func(api chi.Router) {
 		routes.MountOverview(api, deps)
+		routes.MountGlobalSettings(api, deps)
 		api.Route("/repos", func(reposR chi.Router) {
 			routes.MountRepos(reposR, deps)
 			reposR.Route("/{repoID}", func(per chi.Router) {
@@ -97,6 +98,7 @@ func New(opts Options) (*Server, error) {
 				routes.MountExternals(per, deps)
 				routes.MountDecisions(per, deps)
 				routes.MountPages(per, deps)
+				routes.MountTasks(per, deps)
 				routes.MountPipeline(per, deps)
 			})
 		})

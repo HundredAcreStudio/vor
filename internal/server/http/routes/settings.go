@@ -9,8 +9,22 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/analysis/health"
 	"github.com/HundredAcreStudio/vor/internal/config"
 	"github.com/HundredAcreStudio/vor/internal/persistence/settingsstore"
+	"github.com/HundredAcreStudio/vor/internal/providerfactory"
 	"github.com/HundredAcreStudio/vor/internal/server/http/httpx"
 )
+
+// providerOptions / embedderOptions are the selectable LLM provider and
+// embedder names the dashboard offers. "mock" is intentionally excluded —
+// selecting it would make the generation/embedding tasks self-skip, which
+// isn't a meaningful choice to surface.
+var (
+	providerOptions = []string{"anthropic", "openai", "google", "ollama", "litellm"}
+	embedderOptions = []string{"openai", "google", "ollama"}
+)
+
+// scoper extracts the settings scope (a repo ID, or settingsstore.Global) from
+// a request, so the same handlers serve both per-repo and global settings.
+type scoper func(*http.Request) string
 
 // MountSettings wires the per-repo settings endpoints under
 // /api/repos/{repoID}.
@@ -19,21 +33,37 @@ import (
 //	PUT    .../settings/{key}  — set a repo-scoped override (raw JSON body)
 //	DELETE .../settings/{key}  — clear a repo-scoped override
 func MountSettings(r chi.Router, deps Deps) {
-	r.Get("/settings", getSettings(deps))
-	r.Put("/settings/{key}", putSetting(deps))
-	r.Delete("/settings/{key}", deleteSetting(deps))
+	repoScope := func(r *http.Request) string { return httpx.URLParam(r, "repoID") }
+	r.Get("/settings", getSettings(deps, repoScope))
+	r.Put("/settings/{key}", putSetting(deps, repoScope))
+	r.Delete("/settings/{key}", deleteSetting(deps, repoScope))
 }
 
-func getSettings(deps Deps) http.HandlerFunc {
+// MountGlobalSettings wires the global settings endpoints under /api. These
+// edit the Global scope — the baseline every repo inherits and the place the
+// LLM provider / embedder are configured.
+//
+//	GET    /api/settings        — effective global config + provider-key detection
+//	PUT    /api/settings/{key}  — set a global setting
+//	DELETE /api/settings/{key}  — clear a global setting
+func MountGlobalSettings(r chi.Router, deps Deps) {
+	globalScope := func(*http.Request) string { return settingsstore.Global }
+	r.Get("/settings", getSettings(deps, globalScope))
+	r.Put("/settings/{key}", putSetting(deps, globalScope))
+	r.Delete("/settings/{key}", deleteSetting(deps, globalScope))
+}
+
+func getSettings(deps Deps, scope scoper) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		repoID := httpx.URLParam(r, "repoID")
-		cfg, err := config.Resolve(r.Context(), deps.DB, repoID, config.LoadBootstrap())
+		repoID := scope(r)
+		boot := config.LoadBootstrap()
+		cfg, err := config.Resolve(r.Context(), deps.DB, repoID, boot)
 		if err != nil {
 			httpx.Internal(w, err)
 			return
 		}
-		// Which keys are set at this repo's scope (vs. inherited from global
-		// defaults) — lets the UI show what's been customised here.
+		// Which keys are set at this scope (vs. inherited) — lets the UI show
+		// what's been customised here.
 		overrides, err := settingsstore.New(deps.DB).GetScope(r.Context(), repoID)
 		if err != nil {
 			httpx.Internal(w, err)
@@ -43,17 +73,44 @@ func getSettings(deps Deps) http.HandlerFunc {
 		for k := range overrides {
 			overridden[k] = true
 		}
+
+		// Per-repo provider/embedder overrides only make sense when something
+		// is configured globally (API keys are env-only). Resolve the global
+		// scope and report whether a usable provider/embedder exists there so
+		// the dashboard can gate those controls.
+		gProvider, gEmbedder := false, false
+		if gcfg, gerr := config.Resolve(r.Context(), deps.DB, settingsstore.Global, boot); gerr == nil {
+			p, _ := providerfactory.Optional(gcfg)
+			gProvider = p != nil
+			gEmbedder = providerfactory.OptionalEmbedder(gcfg) != nil
+		}
+
 		httpx.JSON(w, http.StatusOK, map[string]any{
 			"effective":  cfg, // marshals with the setting-key json tags
 			"overridden": overridden,
 			"biomarkers": health.AllBiomarkers(),
+			"global": map[string]bool{
+				"providerConfigured": gProvider,
+				"embedderConfigured": gEmbedder,
+			},
+			"providerOptions": providerOptions,
+			"embedderOptions": embedderOptions,
+			// Which API keys the daemon sees in its environment. Keys are
+			// env-only (never persisted), so the dashboard shows detection
+			// rather than an editable field.
+			"providerKeys": map[string]bool{
+				"anthropic":  boot.ProviderKeys.Anthropic != "",
+				"openai":     boot.ProviderKeys.OpenAI != "",
+				"gemini":     boot.ProviderKeys.Gemini != "",
+				"openrouter": boot.ProviderKeys.OpenRouter != "",
+			},
 		})
 	}
 }
 
-func putSetting(deps Deps) http.HandlerFunc {
+func putSetting(deps Deps, scope scoper) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		repoID := httpx.URLParam(r, "repoID")
+		repoID := scope(r)
 		key := httpx.URLParam(r, "key")
 		raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err != nil {
@@ -72,9 +129,9 @@ func putSetting(deps Deps) http.HandlerFunc {
 	}
 }
 
-func deleteSetting(deps Deps) http.HandlerFunc {
+func deleteSetting(deps Deps, scope scoper) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		repoID := httpx.URLParam(r, "repoID")
+		repoID := scope(r)
 		key := httpx.URLParam(r, "key")
 		if err := settingsstore.New(deps.DB).Delete(r.Context(), repoID, key); err != nil {
 			httpx.Internal(w, err)
