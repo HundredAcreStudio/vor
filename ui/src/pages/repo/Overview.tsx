@@ -11,7 +11,9 @@ import {
   fetchHealthSummary,
   fetchHotspots,
   fetchLanguages,
+  fetchModules,
   fetchOverview,
+  fetchPackages,
   fetchRepo,
   type AttentionItem,
   type FlowNode,
@@ -39,6 +41,8 @@ export function RepoOverview() {
   const gitInsights = useAsync(() => fetchGitInsights(repoId), [repoId]);
   const flows = useAsync(() => fetchExecutionFlows(repoId), [repoId]);
   const matrix = useAsync(() => fetchDependencyMatrix(repoId), [repoId]);
+  const mods = useAsync(() => fetchModules(repoId), [repoId]);
+  const pkgs = useAsync(() => fetchPackages(repoId), [repoId]);
 
   return (
     <>
@@ -49,12 +53,17 @@ export function RepoOverview() {
       {/* gauge + KPI cards */}
       <div className="ov-top">
         <AsyncView state={health}>
-          {(h) => <HealthGauge score={h.averageScore} />}
+          {(h) => (
+            <div className="gauge-block">
+              <HealthGauge score={h.averageScore} />
+              <span className="gauge-label">{scoreLabel(h.averageScore)}</span>
+              <Link to={`${base}/risk`} className="why-score">
+                why this score?
+              </Link>
+            </div>
+          )}
         </AsyncView>
         <div className="kpi-row">
-          <AsyncView state={health}>
-            {(h) => <Kpi value={h.findingCount.toLocaleString()} label="findings" />}
-          </AsyncView>
           <AsyncView state={summary}>
             {(s?: RepoSummary) => (
               <>
@@ -65,6 +74,9 @@ export function RepoOverview() {
           </AsyncView>
           <AsyncView state={langs}>
             {(l) => <Kpi value={String(l.languages.length)} label="languages" />}
+          </AsyncView>
+          <AsyncView state={pkgs}>
+            {(p) => <Kpi value={p.monorepo ? "Monorepo" : "Single"} label="structure" />}
           </AsyncView>
         </div>
       </div>
@@ -279,6 +291,61 @@ export function RepoOverview() {
         </AsyncView>
       </section>
 
+      {/* architecture modules */}
+      <h2 className="section-title">Architecture</h2>
+      <AsyncView state={mods}>
+        {(ms) =>
+          ms.length === 0 ? (
+            <p className="muted small">No modules.</p>
+          ) : (
+            <div className="module-grid">
+              {ms.slice(0, 8).map((m) => (
+                <div className="module-card" key={m.name}>
+                  <div className="module-name mono" title={m.name}>
+                    {m.name}
+                  </div>
+                  <div className="module-stats muted small">
+                    {m.files} files · {m.symbols} sym · {m.deps} deps
+                  </div>
+                  <div className="docs-track" title={`${Math.round(m.docsCoverage * 100)}% documented`}>
+                    <span
+                      className="docs-fill"
+                      style={{
+                        width: `${Math.round(m.docsCoverage * 100)}%`,
+                        background: m.docsCoverage >= 0.5 ? "var(--good)" : m.docsCoverage > 0 ? "var(--warn)" : "var(--bad)",
+                      }}
+                    />
+                  </div>
+                  <div className="muted small">{Math.round(m.docsCoverage * 100)}% docs</div>
+                </div>
+              ))}
+            </div>
+          )
+        }
+      </AsyncView>
+
+      {/* packages */}
+      <h2 className="section-title">Packages</h2>
+      <AsyncView state={pkgs}>
+        {(p) =>
+          p.packages.length === 0 ? (
+            <p className="muted small">No packages detected.</p>
+          ) : (
+            <div className="pkg-grid">
+              {p.packages.map((pkg) => (
+                <div className="pkg-card" key={pkg.path || pkg.name}>
+                  <div className="pkg-head">
+                    <span className="pkg-name">{pkg.name}</span>
+                    {pkg.language && <span className="muted small">{pkg.language}</span>}
+                  </div>
+                  <div className="muted small mono">{pkg.path || "."}</div>
+                </div>
+              ))}
+            </div>
+          )
+        }
+      </AsyncView>
+
       {/* structure */}
       <h2 className="section-title">Structure</h2>
       <div className="panel-grid">
@@ -374,6 +441,12 @@ function Bars({ data, graded }: { data: { label: string; value: number }[]; grad
 
 function segWidth(value: number, total: number): React.CSSProperties {
   return { width: `${total > 0 ? (value / total) * 100 : 0}%` };
+}
+
+function scoreLabel(score: number): string {
+  if (score >= 7.5) return "GOOD";
+  if (score >= 5) return "FAIR";
+  return "POOR";
 }
 
 function FlowBranch({ node, depth }: { node: FlowNode; depth: number }) {

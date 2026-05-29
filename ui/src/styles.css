@@ -1315,3 +1315,82 @@ select {
   min-width: 16px;
   border-radius: 3px;
 }
+
+/* ---- gauge block ------------------------------------------------------ */
+.gauge-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.gauge-label {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.why-score {
+  font-size: 11px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.why-score:hover {
+  color: var(--accent);
+}
+
+/* ---- architecture modules -------------------------------------------- */
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.module-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.module-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.module-stats {
+  margin: 4px 0 8px;
+}
+.docs-track {
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.docs-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+/* ---- packages --------------------------------------------------------- */
+.pkg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.pkg-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.pkg-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pkg-name {
+  font-weight: 600;
+}

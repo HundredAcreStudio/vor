@@ -107,6 +107,27 @@ export function fetchDependencyMatrix(id: string): Promise<DependencyMatrix> {
   return getJSON<DependencyMatrix>(`/api/repos/${id}/dependency-matrix`);
 }
 
+export type Module = {
+  name: string;
+  files: number;
+  symbols: number;
+  docsCoverage: number;
+  deps: number;
+};
+
+export function fetchModules(id: string): Promise<Module[]> {
+  return getJSON<{ modules: Module[] }>(`/api/repos/${id}/modules`).then((r) => r.modules ?? []);
+}
+
+export type Packages = {
+  packages: { name: string; path: string; language: string }[];
+  monorepo: boolean;
+};
+
+export function fetchPackages(id: string): Promise<Packages> {
+  return getJSON<Packages>(`/api/repos/${id}/packages`);
+}
+
 export type FlowNode = { node: string; children?: FlowNode[] };
 
 export function fetchExecutionFlows(id: string): Promise<FlowNode[]> {
