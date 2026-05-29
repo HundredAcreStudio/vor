@@ -86,6 +86,11 @@ repository id. An explicit --repo scopes the daemon to a single repo.`,
 			if err := migrations.Up(ctx, conn, dialect); err != nil {
 				return fmt.Errorf("apply migrations: %w", err)
 			}
+			if v, verr := migrations.Version(ctx, conn, dialect); verr != nil {
+				logger.Warn("could not read schema version", "err", verr)
+			} else {
+				logger.Info("database ready", "url", boot.DatabaseURL, "dialect", dialect, "schema_version", v)
+			}
 
 			// Configuration lives in the DB; resolve it after migrations so
 			// the settings table exists.

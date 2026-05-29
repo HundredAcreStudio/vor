@@ -46,6 +46,16 @@ func Status(ctx context.Context, conn *sql.DB, dialect db.Dialect) ([]*goose.Mig
 	return prov.Status(ctx, conn, ".")
 }
 
+// Version returns the current schema version recorded in the DB (the highest
+// applied migration).
+func Version(ctx context.Context, conn *sql.DB, dialect db.Dialect) (int64, error) {
+	prov, err := provider(conn, dialect)
+	if err != nil {
+		return 0, err
+	}
+	return prov.Version(ctx, conn)
+}
+
 // runner abstracts the goose surface we need so the per-dialect dispatch in
 // Up/Down/Status stays single-source.
 type runner struct {
@@ -92,6 +102,15 @@ func (r *runner) Down(ctx context.Context, conn *sql.DB, dir string) error {
 		return fmt.Errorf("set dialect: %w", err)
 	}
 	return goose.DownContext(ctx, conn, dir)
+}
+
+func (r *runner) Version(ctx context.Context, conn *sql.DB) (int64, error) {
+	goose.SetBaseFS(r.subFS)
+	defer goose.SetBaseFS(nil)
+	if err := goose.SetDialect(r.dialect); err != nil {
+		return 0, fmt.Errorf("set dialect: %w", err)
+	}
+	return goose.GetDBVersionContext(ctx, conn)
 }
 
 func (r *runner) Status(ctx context.Context, conn *sql.DB, dir string) ([]*goose.MigrationStatus, error) {
