@@ -47,6 +47,7 @@ Everything runs against the one global database
 | `vor db migrate` / `db status` | Run / inspect database migrations.                 |
 | `vor doctor`       | Diagnostics: configuration, DB reachability, parsers, provider keys. |
 | `vor completion`   | Generate (and optionally install) shell completion.            |
+| `vor hook install` / `hook uninstall` | Add/remove the `vor-augment` PostToolUse hook in a Claude Code `settings.json` (`--global` default, `--project` for repo-local). See [MCP tools](./mcp.md#getting-agents-to-use-the-tools). |
 | `vor version`      | Version information.                                           |
 
 ## Addressing a repo

@@ -11,15 +11,15 @@
 > (documentation, ownership, history, decisions). **Always verify against
 > actual source files before making changes** — the index may be stale.
 
-Last indexed: 2026-05-28 19:41:07Z (commit 02279038c1b9).
+Last indexed: 2026-05-29 00:08:07Z (commit 91e1d7f100af).
 
 ## Indexed state
 
-- **Files indexed**: 272
-- **Symbols indexed**: 2812
+- **Files indexed**: 262
+- **Symbols indexed**: 2715
 - **Wiki pages generated**: 0
-- **Health findings**: 679
-  - brain_method=30, deep_nesting=25, duplication=374, feature_envy=38, hidden_coupling=25, high_complexity=92, long_function=63, long_parameter_list=25, shotgun_surgery=4, untested_hotspot=3
+- **Health findings**: 660
+  - brain_method=27, deep_nesting=22, duplication=357, feature_envy=37, hidden_coupling=41, high_complexity=87, long_function=57, long_parameter_list=24, shotgun_surgery=5, untested_hotspot=3
 
 ## Entry points
 
@@ -34,13 +34,13 @@ Last indexed: 2026-05-28 19:41:07Z (commit 02279038c1b9).
 | `internal/analysis/health/health.go` | 14 | Jonathan Chauncey |
 | `internal/pipeline/pipeline.go` | 14 | Jonathan Chauncey |
 | `internal/cli/commands/ingest.go` | 17 | Jonathan Chauncey |
-| `internal/server/mcp/handlers.go` | 12 | Jonathan Chauncey |
+| `internal/server/mcp/handlers.go` | 13 | Jonathan Chauncey |
+| `internal/cli/commands/serve.go` | 17 | Jonathan Chauncey |
+| `internal/cli/commands/watch.go` | 5 | Jonathan Chauncey |
+| `internal/cli/commands/workspace_bulk.go` | 4 | Jonathan Chauncey |
+| `LICENSE` | 1 | Jonathan Chauncey |
+| `internal/cli/commands/workspace.go` | 7 | Jonathan Chauncey |
 | `internal/ingestion/traverser/traverser.go` | 3 | Jonathan Chauncey |
-| `internal/server/http/server_test.go` | 5 | Jonathan Chauncey |
-| `internal/analysis/health/health_test.go` | 8 | Jonathan Chauncey |
-| `internal/persistence/migrations/sqlite/0001_init.sql` | 2 | Jonathan Chauncey |
-| `internal/cli/commands/export.go` | 3 | Jonathan Chauncey |
-| `internal/persistence/migrations/postgres/0001_init.sql` | 1 | Jonathan Chauncey |
 
 ## Architectural decisions (top by confidence)
 

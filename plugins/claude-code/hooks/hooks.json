@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Grep|Glob",
+        "hooks": [
+          { "type": "command", "command": "vor-augment", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

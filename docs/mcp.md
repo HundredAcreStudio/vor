@@ -55,7 +55,7 @@ Docs & ops:
 
 ## Getting agents to use the tools
 
-Two reinforcing mechanisms:
+Three reinforcing mechanisms:
 
 1. **Generated `CLAUDE.md`.** `vor init` / `vor claude-md` write a managed
    section into the repo's `CLAUDE.md` that every agent reads. It opens with
@@ -68,3 +68,33 @@ Two reinforcing mechanisms:
    - `pre-modification` — before editing, call `vor_risk`; warn on high risk.
    - `codebase-exploration` — use `vor_status` / `get_architecture_diagram` /
      `attention` / `get_answer` / `get_why` to orient before reading source.
+
+3. **The `vor-augment` PostToolUse hook** (`plugins/claude-code/hooks/hooks.json`).
+   A safety net for when the skills don't fire. It runs after every `Grep`,
+   `Glob`, and `Bash`, reads the hook payload on stdin, and stays **silent** in
+   the common case — speaking up only when the raw tool output missed something
+   the index knows:
+   - **Grep/Glob with zero results** → *rescue*: the closest indexed symbol
+     (matching snake/camel/Pascal variants of the pattern) or wiki page.
+   - **Grep/Glob with a flood of matches** (≥15 lines) → *triage*: the top files
+     by graph centrality (PageRank) so the agent reads the load-bearing ones.
+   - **A focused result** → silent; the agent already found it.
+   - **`git commit`/`merge`/`rebase`/`pull`** → a one-shot *stale-index* notice
+     (suppressed for tracked repos, which the daemon auto-reindexes, and shown
+     at most once per HEAD).
+
+   Enrichment is delivered as `hookSpecificOutput.additionalContext`, never by
+   blocking or rewriting the agent's call. The hook resolves the repo by
+   matching the working directory against indexed `local_path`s; if no DB, no
+   repo, or any error, it exits cleanly and emits nothing — so it's safe to
+   register globally even though it fires everywhere.
+
+   **Installing it.** The `vor-augment` binary must be on `PATH` (`make install`
+   installs it alongside `vor`). Then either:
+   - **`vor hook install`** — merges the hook into `~/.claude/settings.json`
+     (global, the default) or, with `--project`, into `./.claude/settings.json`
+     (checked into the repo). Idempotent; `--force` rewrites; `vor hook
+     uninstall` removes it. This is the recommended path.
+   - **Install the plugin** — the hook ships in
+     `plugins/claude-code/hooks/hooks.json`, so installing the vor plugin wires
+     it automatically.

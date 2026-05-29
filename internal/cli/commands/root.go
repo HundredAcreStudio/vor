@@ -41,6 +41,7 @@ func Root() *cobra.Command {
 	root.AddCommand(newDBCmd())
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newCompletionCmd())
+	root.AddCommand(newHookCmd())
 
 	return root
 }
