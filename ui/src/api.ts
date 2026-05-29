@@ -183,6 +183,11 @@ export type HealthRule = {
 // in which case the UI falls back to a free-text model input.
 export type ModelCatalog = Record<string, { default: string; models: string[] }>;
 
+// OptionStatus describes whether a provider/embedder is usable in the daemon's
+// current environment. `requires` is a human label of the env var needed to
+// make it ready ("" when nothing is required, e.g. ollama).
+export type OptionStatus = { name: string; ready: boolean; requires: string };
+
 export type RepoSettings = {
   effective: {
     provider: string;
@@ -198,6 +203,8 @@ export type RepoSettings = {
   global: { providerConfigured: boolean; embedderConfigured: boolean };
   providerOptions: string[];
   embedderOptions: string[];
+  providerStatus: OptionStatus[];
+  embedderStatus: OptionStatus[];
   providerCatalog: ModelCatalog;
   embedderCatalog: ModelCatalog;
 };
@@ -227,6 +234,8 @@ export type GlobalSettings = {
   overridden: Record<string, boolean>;
   providerOptions: string[];
   embedderOptions: string[];
+  providerStatus: OptionStatus[];
+  embedderStatus: OptionStatus[];
   providerKeys: Record<string, boolean>;
   global: { providerConfigured: boolean; embedderConfigured: boolean };
   providerCatalog: ModelCatalog;

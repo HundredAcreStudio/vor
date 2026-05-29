@@ -27,6 +27,15 @@ var (
 // a request, so the same handlers serve both per-repo and global settings.
 type scoper func(*http.Request) string
 
+// optionStatus reports whether a provider/embedder option is usable given the
+// environment and, when not, what it needs. Drives the dashboard's
+// per-option readiness markers and the "selected provider needs X" message.
+type optionStatus struct {
+	Name     string `json:"name"`
+	Ready    bool   `json:"ready"`
+	Requires string `json:"requires"`
+}
+
 // MountSettings wires the per-repo settings endpoints under
 // /api/repos/{repoID}.
 //
@@ -79,11 +88,31 @@ func getSettings(deps Deps, scope scoper) http.HandlerFunc {
 		// is configured globally (API keys are env-only). Resolve the global
 		// scope and report whether a usable provider/embedder exists there so
 		// the dashboard can gate those controls.
-		gProvider, gEmbedder := false, false
-		if gcfg, gerr := config.Resolve(r.Context(), deps.DB, settingsstore.Global, boot); gerr == nil {
-			p, _ := providerfactory.Optional(gcfg)
-			gProvider = p != nil
-			gEmbedder = providerfactory.OptionalEmbedder(gcfg) != nil
+		gcfg, gerr := config.Resolve(r.Context(), deps.DB, settingsstore.Global, boot)
+		if gerr != nil {
+			// Fall back to a config carrying just the env keys so readiness is
+			// still meaningful if the DB read failed.
+			gcfg = config.Config{ProviderKeys: boot.ProviderKeys}
+		}
+		gProvider := false
+		if p, _ := providerfactory.Optional(gcfg); p != nil {
+			gProvider = true
+		}
+		gEmbedder := providerfactory.OptionalEmbedder(gcfg) != nil
+
+		// Per-option readiness: which providers/embedders are key-ready, and
+		// what each needs — so the dashboard can mark options and explain the
+		// selected one ("google needs GEMINI_API_KEY", etc.) instead of a
+		// generic "no usable provider".
+		provStatus := make([]optionStatus, 0, len(providerOptions))
+		for _, name := range providerOptions {
+			ready, requires := providerfactory.ProviderReady(name, gcfg)
+			provStatus = append(provStatus, optionStatus{Name: name, Ready: ready, Requires: requires})
+		}
+		embStatus := make([]optionStatus, 0, len(embedderOptions))
+		for _, name := range embedderOptions {
+			ready, requires := providerfactory.EmbedderReady(name, gcfg)
+			embStatus = append(embStatus, optionStatus{Name: name, Ready: ready, Requires: requires})
 		}
 
 		httpx.JSON(w, http.StatusOK, map[string]any{
@@ -96,6 +125,8 @@ func getSettings(deps Deps, scope scoper) http.HandlerFunc {
 			},
 			"providerOptions": providerOptions,
 			"embedderOptions": embedderOptions,
+			"providerStatus":  provStatus,
+			"embedderStatus":  embStatus,
 			// Per-provider model catalogs (name → {default, models}) so the
 			// dashboard can repopulate the model dropdown when the provider
 			// changes, with a sensible default preselected.

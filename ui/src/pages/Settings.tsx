@@ -4,6 +4,7 @@ import {
   putGlobalSetting,
   type GlobalSettings,
   type ModelCatalog,
+  type OptionStatus,
 } from "../api.ts";
 import { AsyncView, useAsync } from "../useAsync.tsx";
 
@@ -60,6 +61,66 @@ function pickModel(catalog: ModelCatalog, provider: string, current: string): st
   return entry.default;
 }
 
+// statusByName indexes a status list for O(1) lookup by option name. Names
+// absent from the backend status default to not-ready with no `requires`.
+function statusByName(list: OptionStatus[]): Record<string, OptionStatus> {
+  const m: Record<string, OptionStatus> = {};
+  for (const s of list) m[s.name] = s;
+  return m;
+}
+
+function lookupStatus(byName: Record<string, OptionStatus>, name: string): OptionStatus {
+  return byName[name] ?? { name, ready: false, requires: "" };
+}
+
+// optionLabel builds the <option> text from an option's readiness:
+//   ready              -> "name  ✓"
+//   not ready, needs X -> "name — needs X"
+//   not ready, no req  -> "name"
+function optionLabel(name: string, byName: Record<string, OptionStatus>): string {
+  const st = lookupStatus(byName, name);
+  if (st.ready) return `${name}  ✓`;
+  if (st.requires) return `${name} — needs ${st.requires}`;
+  return name;
+}
+
+// ReadinessLine renders the status message for the currently selected
+// provider/embedder. Ready -> a green positive line; not ready -> a specific
+// line naming the missing env var, plus a hint listing options that are ready
+// now (or, if none are, a nudge to set one up).
+function ReadinessLine({
+  selected,
+  options,
+  status,
+}: {
+  selected: string;
+  options: string[];
+  status: OptionStatus[];
+}) {
+  const byName = statusByName(status);
+  const st = lookupStatus(byName, selected);
+  if (st.ready) {
+    return (
+      <p className="muted small" style={{ color: "var(--good)" }}>
+        ✓ {selected} is ready.
+      </p>
+    );
+  }
+  const readyNames = options.filter((o) => lookupStatus(byName, o).ready);
+  const base = st.requires
+    ? `${selected} needs ${st.requires} in the daemon's environment.`
+    : `${selected} is not usable in the daemon's environment.`;
+  const hint = readyNames.length
+    ? ` Ready now: ${readyNames.join(", ")}.`
+    : " Set one of the options' required env vars in the daemon's environment to enable it.";
+  return (
+    <p className="muted small">
+      {base}
+      {hint}
+    </p>
+  );
+}
+
 export function Settings() {
   const [nonce, setNonce] = useState(0);
   const state = useAsync(() => fetchGlobalSettings(), [nonce]);
@@ -83,7 +144,8 @@ function SettingsBody({
   settings: GlobalSettings;
   reload: () => void;
 }) {
-  const { effective, providerOptions, embedderOptions, providerKeys, global } = settings;
+  const { effective, providerOptions, embedderOptions, providerKeys } = settings;
+  const { providerStatus, embedderStatus } = settings;
   const { providerCatalog, embedderCatalog } = settings;
 
   return (
@@ -91,18 +153,18 @@ function SettingsBody({
       <ProviderSection
         reload={reload}
         options={providerOptions}
+        status={providerStatus}
         catalog={providerCatalog}
         provider={effective.provider}
         model={effective.model}
-        ready={global.providerConfigured}
       />
       <EmbedderSection
         reload={reload}
         options={embedderOptions}
+        status={embedderStatus}
         catalog={embedderCatalog}
         embedder={effective.embedder}
         embeddingModel={effective.embedding_model}
-        ready={global.embedderConfigured}
       />
       <ApiKeysSection providerKeys={providerKeys} />
     </>
@@ -112,22 +174,23 @@ function SettingsBody({
 function ProviderSection({
   reload,
   options,
+  status,
   catalog,
   provider,
   model,
-  ready,
 }: {
   reload: () => void;
   options: string[];
+  status: OptionStatus[];
   catalog: ModelCatalog;
   provider: string;
   model: string;
-  ready: boolean;
 }) {
   const [sel, setSel] = useState(provider);
   const [mdl, setMdl] = useState(model);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const byName = statusByName(status);
 
   function changeProvider(next: string) {
     setSel(next);
@@ -158,7 +221,7 @@ function ProviderSection({
           <select value={sel} onChange={(e) => changeProvider(e.target.value)}>
             {options.map((o) => (
               <option key={o} value={o}>
-                {o}
+                {optionLabel(o, byName)}
               </option>
             ))}
           </select>
@@ -170,11 +233,7 @@ function ProviderSection({
             placeholder="model"
           />
         </div>
-        <p className="muted small">
-          {ready
-            ? "Provider ready."
-            : "No usable provider — set a provider above and provide its API key in the environment."}
-        </p>
+        <ReadinessLine selected={sel} options={options} status={status} />
         <div className="settings-actions">
           <span className="spacer" />
           <button className="btn" onClick={save} disabled={saving}>
@@ -190,22 +249,23 @@ function ProviderSection({
 function EmbedderSection({
   reload,
   options,
+  status,
   catalog,
   embedder,
   embeddingModel,
-  ready,
 }: {
   reload: () => void;
   options: string[];
+  status: OptionStatus[];
   catalog: ModelCatalog;
   embedder: string;
   embeddingModel: string;
-  ready: boolean;
 }) {
   const [sel, setSel] = useState(embedder);
   const [mdl, setMdl] = useState(embeddingModel);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const byName = statusByName(status);
 
   function changeEmbedder(next: string) {
     setSel(next);
@@ -239,7 +299,7 @@ function EmbedderSection({
           <select value={sel} onChange={(e) => changeEmbedder(e.target.value)}>
             {options.map((o) => (
               <option key={o} value={o}>
-                {o}
+                {optionLabel(o, byName)}
               </option>
             ))}
           </select>
@@ -251,9 +311,7 @@ function EmbedderSection({
             placeholder="embedding model"
           />
         </div>
-        <p className="muted small">
-          {ready ? "Embedder ready." : "No usable embedder configured."}
-        </p>
+        <ReadinessLine selected={sel} options={options} status={status} />
         <div className="settings-actions">
           <span className="spacer" />
           <button className="btn" onClick={save} disabled={saving}>

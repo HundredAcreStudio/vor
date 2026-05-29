@@ -119,6 +119,40 @@ func OptionalEmbedder(cfg config.Config) providers.Embedder {
 	return emb
 }
 
+// ProviderReady reports whether the named provider can be used given the
+// current environment (cfg-resolved keys + env vars), and a human-readable
+// label of what it needs. Used by the dashboard to mark which providers are
+// key-ready and to explain why the selected one isn't. ollama needs no key;
+// litellm needs a base URL.
+func ProviderReady(name string, cfg config.Config) (ready bool, requires string) {
+	switch name {
+	case "anthropic":
+		return firstSet(cfg.ProviderKeys.Anthropic, os.Getenv("ANTHROPIC_API_KEY")) != "", "ANTHROPIC_API_KEY"
+	case "openai":
+		return firstSet(cfg.ProviderKeys.OpenAI, os.Getenv("OPENAI_API_KEY")) != "", "OPENAI_API_KEY"
+	case "google":
+		return firstSet(cfg.ProviderKeys.Gemini, os.Getenv("GEMINI_API_KEY"), os.Getenv("GOOGLE_API_KEY")) != "", "GEMINI_API_KEY or GOOGLE_API_KEY"
+	case "ollama":
+		return true, "" // local server; no API key
+	case "litellm":
+		return os.Getenv("VOR_LITELLM_BASE_URL") != "", "VOR_LITELLM_BASE_URL"
+	}
+	return false, ""
+}
+
+// EmbedderReady mirrors ProviderReady for embedders.
+func EmbedderReady(name string, cfg config.Config) (ready bool, requires string) {
+	switch name {
+	case "openai":
+		return firstSet(cfg.ProviderKeys.OpenAI, os.Getenv("OPENAI_API_KEY")) != "", "OPENAI_API_KEY"
+	case "google":
+		return firstSet(cfg.ProviderKeys.Gemini, os.Getenv("GEMINI_API_KEY"), os.Getenv("GOOGLE_API_KEY")) != "", "GEMINI_API_KEY or GOOGLE_API_KEY"
+	case "ollama":
+		return true, "" // local server; no API key
+	}
+	return false, ""
+}
+
 // Embedder constructs the configured embedder. Falls back to mock when unset so
 // semantic features work zero-config.
 func Embedder(cfg config.Config) (providers.Embedder, error) {
