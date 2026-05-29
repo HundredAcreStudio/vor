@@ -551,6 +551,84 @@ func TestRepoDetail(t *testing.T) {
 	}
 }
 
+func TestRepoSettings_PutGetDelete(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+	base := srv.URL + "/api/repos/" + repoID + "/settings"
+
+	// PUT a health_rules override.
+	rules := `[{"path":"generated/","overrides":{"high_complexity":"disabled"}}]`
+	req, _ := http.NewRequest(http.MethodPut, base+"/health_rules", strings.NewReader(rules))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT status = %d, want 200", resp.StatusCode)
+	}
+
+	// GET reflects the override + lists biomarkers.
+	var got struct {
+		Effective struct {
+			HealthRules []struct {
+				Path string `json:"path"`
+			} `json:"health_rules"`
+		} `json:"effective"`
+		Overridden map[string]bool `json:"overridden"`
+		Biomarkers []string        `json:"biomarkers"`
+	}
+	hitJSON(t, srv.URL, "/api/repos/"+repoID+"/settings", &got)
+	if !got.Overridden["health_rules"] {
+		t.Error("health_rules should be marked overridden")
+	}
+	if len(got.Effective.HealthRules) != 1 || got.Effective.HealthRules[0].Path != "generated/" {
+		t.Errorf("effective health_rules = %+v", got.Effective.HealthRules)
+	}
+	if len(got.Biomarkers) == 0 {
+		t.Error("biomarkers list should be non-empty")
+	}
+
+	// Reject an unknown key.
+	req, _ = http.NewRequest(http.MethodPut, base+"/bogus", strings.NewReader(`1`))
+	resp, _ = http.DefaultClient.Do(req)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("PUT unknown key status = %d, want 400", resp.StatusCode)
+	}
+
+	// DELETE clears the override.
+	req, _ = http.NewRequest(http.MethodDelete, base+"/health_rules", nil)
+	resp, _ = http.DefaultClient.Do(req)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("DELETE status = %d, want 204", resp.StatusCode)
+	}
+	got.Overridden = nil
+	hitJSON(t, srv.URL, "/api/repos/"+repoID+"/settings", &got)
+	if got.Overridden["health_rules"] {
+		t.Error("health_rules override should be gone after DELETE")
+	}
+}
+
+func TestDeleteRepo(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/repos/"+repoID, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("DELETE status = %d, want 200", resp.StatusCode)
+	}
+	// The repo is gone now.
+	gone := mustGet(t, srv.URL+"/api/repos/"+repoID)
+	gone.Body.Close()
+	if gone.StatusCode != http.StatusNotFound {
+		t.Errorf("after delete, GET repo status = %d, want 404", gone.StatusCode)
+	}
+}
+
 func TestUI_ServesIndex(t *testing.T) {
 	srv, _ := fixtureRepo(t)
 	for _, path := range []string{"/", "/some/client/route"} {

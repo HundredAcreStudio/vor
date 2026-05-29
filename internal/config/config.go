@@ -28,31 +28,31 @@ import (
 // Config is the merged, runtime-ready configuration. Callers should treat it
 // as read-only after resolving.
 type Config struct {
-	Provider string
-	Model    string
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
 
-	Languages   LanguagesConfig
-	HealthRules []HealthRule
-	Watch       WatchConfig
-	Reasoning   bool
+	Languages   LanguagesConfig `json:"languages"`
+	HealthRules []HealthRule    `json:"health_rules"`
+	Watch       WatchConfig     `json:"watch"`
+	Reasoning   bool            `json:"reasoning"`
 
 	// DatabaseURL is bootstrap-resolved (env/default), never from the DB.
-	DatabaseURL string
+	DatabaseURL string `json:"-"`
 
-	Embedder       string
-	EmbeddingModel string
-	EmbeddingDims  int
+	Embedder       string `json:"embedder"`
+	EmbeddingModel string `json:"embedding_model"`
+	EmbeddingDims  int    `json:"embedding_dims"`
 
-	Host string
-	Port int
+	Host string `json:"host"`
+	Port int    `json:"port"`
 
-	LogLevel string
+	LogLevel string `json:"log_level"`
 
-	RPM int
-	TPM int
+	RPM int `json:"rpm"`
+	TPM int `json:"tpm"`
 
 	// ProviderKeys are env-only (never persisted to the DB).
-	ProviderKeys ProviderKeys
+	ProviderKeys ProviderKeys `json:"-"`
 }
 
 // LanguagesConfig controls which tree-sitter languages are enabled.
@@ -109,6 +109,24 @@ func Keys() []string {
 		KeyReasoning, KeyEmbedder, KeyEmbeddingModel, KeyEmbeddingDims,
 		KeyHost, KeyPort, KeyLogLevel, KeyRPM, KeyTPM,
 	}
+}
+
+// ValidateSetting checks that raw is well-formed JSON of the correct type for
+// the given setting key. Returns an error for unknown keys or type mismatches
+// so the settings API can reject bad writes before they hit the DB.
+func ValidateSetting(key, raw string) error {
+	known := false
+	for _, k := range Keys() {
+		if k == key {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return fmt.Errorf("unknown setting key %q", key)
+	}
+	tmp := Defaults()
+	return applySettings(&tmp, map[string]string{key: raw})
 }
 
 // Defaults returns a Config populated with the built-in fallback values.

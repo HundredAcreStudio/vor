@@ -43,6 +43,24 @@ const (
 	BiomarkerShotgunSurgery    = "shotgun_surgery"
 )
 
+// AllBiomarkers lists every biomarker type, for UIs that let users select
+// which checks to exclude. Kept here so it can't drift from the constants.
+func AllBiomarkers() []string {
+	return []string{
+		BiomarkerDuplication,
+		BiomarkerHighComplexity,
+		BiomarkerLongFunction,
+		BiomarkerDeepNesting,
+		BiomarkerGodClass,
+		BiomarkerUntestedHotspot,
+		BiomarkerBrainMethod,
+		BiomarkerHiddenCoupling,
+		BiomarkerLongParameterList,
+		BiomarkerFeatureEnvy,
+		BiomarkerShotgunSurgery,
+	}
+}
+
 // Finding is one biomarker hit. Persisted into health_findings.
 type Finding struct {
 	FilePath      string

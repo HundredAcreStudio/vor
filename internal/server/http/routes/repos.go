@@ -29,6 +29,39 @@ func MountRepos(r chi.Router, deps Deps) {
 func MountRepoDetail(r chi.Router, deps Deps) {
 	store := repos.New(deps.DB)
 	r.Get("/", getRepo(store))
+	r.Delete("/", deleteRepo(deps))
+}
+
+// deleteRepo handles DELETE /api/repos/{repoID}: stop watching the repo and
+// drop it and all its indexed data. Uses the live Registrar when present (so
+// the daemon also stops its watcher); otherwise deletes straight from the DB.
+func deleteRepo(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := httpx.URLParam(r, "repoID")
+		if deps.Registrar != nil {
+			repo, err := deps.Registrar.Delete(r.Context(), id)
+			if err != nil {
+				httpx.BadRequest(w, err.Error())
+				return
+			}
+			httpx.JSON(w, http.StatusOK, repo)
+			return
+		}
+		store := repos.New(deps.DB)
+		if _, err := store.Get(r.Context(), id); err != nil {
+			if httpx.IsNoRows(err) {
+				httpx.NotFound(w, "repository")
+				return
+			}
+			httpx.Internal(w, err)
+			return
+		}
+		if err := store.Delete(r.Context(), id); err != nil {
+			httpx.Internal(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]string{"id": id})
+	}
 }
 
 // registerRepo handles POST /api/repos/register {path, ephemeral}: track a

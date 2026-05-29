@@ -106,6 +106,26 @@ func (r *Registrar) Unregister(ctx context.Context, spec string) (Repo, error) {
 	return out, nil
 }
 
+// Delete stops watching the repo (if tracked) and removes it along with all
+// its indexed data (CASCADE). Unlike Unregister, it always purges — durable
+// or ephemeral.
+func (r *Registrar) Delete(ctx context.Context, spec string) (Repo, error) {
+	store := repos.New(r.db)
+	row, err := r.resolve(ctx, store, spec)
+	if err != nil {
+		return Repo{}, err
+	}
+	out := Repo{ID: row.ID, Name: row.Name, Path: row.LocalPath, Ephemeral: row.Ephemeral}
+	if r.tracker != nil {
+		r.tracker.Untrack(row.ID)
+	}
+	if err := store.Delete(ctx, row.ID); err != nil {
+		return out, fmt.Errorf("delete repo: %w", err)
+	}
+	r.logger.Info("registry: deleted repo + index", "repo", row.ID, "path", row.LocalPath)
+	return out, nil
+}
+
 // ListTracked returns the currently tracked repos.
 func (r *Registrar) ListTracked(ctx context.Context) ([]Repo, error) {
 	rows, err := repos.New(r.db).ListTracked(ctx)
