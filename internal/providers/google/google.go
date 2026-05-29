@@ -41,6 +41,17 @@ const (
 func init() {
 	providers.RegisterProvider(providerName, newProvider)
 	providers.RegisterEmbedder(providerName, newEmbedder)
+	providers.RegisterProviderModels(providerName, providers.ModelInfo{
+		Default: "gemini-2.0-flash", // fast/cheap default
+		Models: []string{
+			"gemini-2.0-flash", "gemini-2.0-flash-lite",
+			"gemini-1.5-pro", "gemini-1.5-flash",
+		},
+	})
+	providers.RegisterEmbedderModels(providerName, providers.ModelInfo{
+		Default: "text-embedding-004",
+		Models:  []string{"text-embedding-004"},
+	})
 }
 
 // Provider is the concrete Gemini implementation. Safe for concurrent use.

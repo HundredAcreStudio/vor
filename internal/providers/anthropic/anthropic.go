@@ -47,6 +47,17 @@ const (
 
 func init() {
 	providers.RegisterProvider(providerName, newProvider)
+	providers.RegisterProviderModels(providerName, providers.ModelInfo{
+		// Haiku is the default: cheap and fast for the automatic generation
+		// tasks. Opus/Sonnet are available for higher-quality runs.
+		Default: "claude-haiku-4-5",
+		Models: []string{
+			"claude-opus-4-7", "claude-opus-4-6",
+			"claude-sonnet-4-6", "claude-haiku-4-5",
+			"claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022",
+			"claude-3-opus-20240229",
+		},
+	})
 }
 
 // Provider is the concrete Anthropic implementation. Safe for concurrent

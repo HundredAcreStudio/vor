@@ -10,6 +10,7 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/config"
 	"github.com/HundredAcreStudio/vor/internal/persistence/settingsstore"
 	"github.com/HundredAcreStudio/vor/internal/providerfactory"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 	"github.com/HundredAcreStudio/vor/internal/server/http/httpx"
 )
 
@@ -95,6 +96,11 @@ func getSettings(deps Deps, scope scoper) http.HandlerFunc {
 			},
 			"providerOptions": providerOptions,
 			"embedderOptions": embedderOptions,
+			// Per-provider model catalogs (name → {default, models}) so the
+			// dashboard can repopulate the model dropdown when the provider
+			// changes, with a sensible default preselected.
+			"providerCatalog": providers.ProviderCatalog(),
+			"embedderCatalog": providers.EmbedderCatalog(),
 			// Which API keys the daemon sees in its environment. Keys are
 			// env-only (never persisted), so the dashboard shows detection
 			// rather than an editable field.

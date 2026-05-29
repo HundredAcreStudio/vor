@@ -2,6 +2,7 @@ package providers
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"sync"
 )
@@ -25,10 +26,49 @@ type embedderFactory func(opts Options) (Embedder, error)
 type Options map[string]any
 
 var (
-	registryMu sync.RWMutex
-	providers  = map[string]providerFactory{}
-	embedders  = map[string]embedderFactory{}
+	registryMu     sync.RWMutex
+	providers      = map[string]providerFactory{}
+	embedders      = map[string]embedderFactory{}
+	providerModels = map[string]ModelInfo{}
+	embedderModels = map[string]ModelInfo{}
 )
+
+// ModelInfo is the static, key-free catalog a vendor package advertises: the
+// selectable model names and a sensible default. It lets the dashboard offer
+// model dropdowns without constructing a provider (which would need API keys).
+type ModelInfo struct {
+	Default string   `json:"default"`
+	Models  []string `json:"models"`
+}
+
+// RegisterProviderModels records the model catalog for a provider. Called from
+// a vendor package's init() alongside RegisterProvider.
+func RegisterProviderModels(name string, info ModelInfo) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	providerModels[name] = info
+}
+
+// RegisterEmbedderModels records the embedding-model catalog for an embedder.
+func RegisterEmbedderModels(name string, info ModelInfo) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	embedderModels[name] = info
+}
+
+// ProviderCatalog returns a copy of the provider→models catalog.
+func ProviderCatalog() map[string]ModelInfo { return copyCatalog(providerModels) }
+
+// EmbedderCatalog returns a copy of the embedder→models catalog.
+func EmbedderCatalog() map[string]ModelInfo { return copyCatalog(embedderModels) }
+
+func copyCatalog(src map[string]ModelInfo) map[string]ModelInfo {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	out := make(map[string]ModelInfo, len(src))
+	maps.Copy(out, src)
+	return out
+}
 
 // RegisterProvider installs a provider factory under name.
 func RegisterProvider(name string, fac func(opts Options) (Provider, error)) {
@@ -103,4 +143,6 @@ func ResetForTest() {
 	defer registryMu.Unlock()
 	providers = map[string]providerFactory{}
 	embedders = map[string]embedderFactory{}
+	providerModels = map[string]ModelInfo{}
+	embedderModels = map[string]ModelInfo{}
 }

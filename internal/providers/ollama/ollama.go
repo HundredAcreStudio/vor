@@ -42,6 +42,14 @@ const (
 func init() {
 	providers.RegisterProvider(providerName, newProvider)
 	providers.RegisterEmbedder(providerName, newEmbedder)
+	providers.RegisterProviderModels(providerName, providers.ModelInfo{
+		Default: "llama3.2", // common local default
+		Models:  []string{"llama3.2", "llama3.1", "qwen2.5-coder", "mistral", "gemma2"},
+	})
+	providers.RegisterEmbedderModels(providerName, providers.ModelInfo{
+		Default: "nomic-embed-text",
+		Models:  []string{"nomic-embed-text", "mxbai-embed-large", "all-minilm"},
+	})
 }
 
 // Provider is the concrete Ollama implementation. Safe for concurrent use.

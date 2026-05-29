@@ -46,6 +46,17 @@ const (
 func init() {
 	providers.RegisterProvider(providerName, newProvider)
 	providers.RegisterEmbedder(providerName, newEmbedder)
+	providers.RegisterProviderModels(providerName, providers.ModelInfo{
+		Default: "gpt-4o-mini", // cost-effective default for generation
+		Models: []string{
+			"gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini",
+			"gpt-4-turbo", "o3", "o3-mini", "o1",
+		},
+	})
+	providers.RegisterEmbedderModels(providerName, providers.ModelInfo{
+		Default: "text-embedding-3-small",
+		Models:  []string{"text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"},
+	})
 }
 
 // Provider is the concrete OpenAI(-compatible) implementation. Safe for

@@ -51,6 +51,10 @@ func TestGlobalSettings_SetProviderFlipsGate(t *testing.T) {
 		Global struct {
 			ProviderConfigured bool `json:"providerConfigured"`
 		} `json:"global"`
+		ProviderCatalog map[string]struct {
+			Default string   `json:"default"`
+			Models  []string `json:"models"`
+		} `json:"providerCatalog"`
 	}
 	hitJSON(t, srv.URL, "/api/settings", &after)
 	if after.Effective.Provider != "ollama" {
@@ -58,6 +62,12 @@ func TestGlobalSettings_SetProviderFlipsGate(t *testing.T) {
 	}
 	if !after.Global.ProviderConfigured {
 		t.Error("provider gate should be true after setting a keyless provider")
+	}
+	// The model catalog for the registered ollama provider should be present
+	// with a default and a non-empty model list (drives the model dropdown).
+	ol, ok := after.ProviderCatalog["ollama"]
+	if !ok || ol.Default == "" || len(ol.Models) == 0 {
+		t.Errorf("providerCatalog[ollama] = %+v, want default + models", ol)
 	}
 }
 
