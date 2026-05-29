@@ -83,14 +83,28 @@ export function fetchEntryPoints(id: string): Promise<EntryPoint[]> {
   );
 }
 
+export type BusFactor = {
+  safe: number;
+  warning: number;
+  risk: number;
+  total: number;
+  riskFiles: { path: string; contributors: number }[];
+};
+
 export type GitInsights = {
-  busFactor: { atRisk: number; total: number };
+  busFactor: BusFactor;
   churnBuckets: { label: string; count: number }[];
   contributors: { name: string; commits: number }[];
 };
 
 export function fetchGitInsights(id: string): Promise<GitInsights> {
   return getJSON<GitInsights>(`/api/repos/${id}/git-insights`);
+}
+
+export type DependencyMatrix = { modules: string[]; cells: number[][] };
+
+export function fetchDependencyMatrix(id: string): Promise<DependencyMatrix> {
+  return getJSON<DependencyMatrix>(`/api/repos/${id}/dependency-matrix`);
 }
 
 export type FlowNode = { node: string; children?: FlowNode[] };

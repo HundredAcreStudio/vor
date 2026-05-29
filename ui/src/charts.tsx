@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+
 // Tiny dependency-free SVG charts for the dashboard.
 
 // HealthGauge draws a circular ring filled to score/max (default 1–10), with
@@ -44,6 +46,45 @@ const PALETTE = [
   "#7ee787",
   "#ffa657",
 ];
+
+// Heatmap renders a module×module density matrix. Cell intensity scales with
+// count (brighter = more import edges between the two modules).
+export function Heatmap({ modules, cells }: { modules: string[]; cells: number[][] }) {
+  const max = Math.max(1, ...cells.flat());
+  const short = (m: string) => {
+    const parts = m.split("/");
+    return parts[parts.length - 1] || m;
+  };
+  return (
+    <div className="heatmap" style={{ ["--n" as string]: modules.length }}>
+      <div className="heatmap-corner" />
+      {modules.map((m) => (
+        <div className="heatmap-coltick" key={`c-${m}`} title={m}>
+          <span>{short(m)}</span>
+        </div>
+      ))}
+      {modules.map((row, i) => (
+        <Fragment key={`r-${row}`}>
+          <div className="heatmap-rowtick" title={row}>
+            {short(row)}
+          </div>
+          {modules.map((_, j) => {
+            const v = cells[i]?.[j] ?? 0;
+            const alpha = v === 0 ? 0 : 0.15 + 0.85 * (v / max);
+            return (
+              <div
+                key={j}
+                className="heatmap-cell"
+                title={`${row} → ${modules[j]}: ${v}`}
+                style={{ background: v === 0 ? "var(--bg)" : `rgba(210, 153, 34, ${alpha})` }}
+              />
+            );
+          })}
+        </Fragment>
+      ))}
+    </div>
+  );
+}
 
 export type DonutSlice = { label: string; value: number };
 

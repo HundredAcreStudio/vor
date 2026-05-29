@@ -4,6 +4,7 @@ import {
   fetchCommunities,
   fetchDeadCode,
   fetchDecisions,
+  fetchDependencyMatrix,
   fetchEntryPoints,
   fetchExecutionFlows,
   fetchGitInsights,
@@ -16,7 +17,7 @@ import {
   type FlowNode,
   type RepoSummary,
 } from "../../api.ts";
-import { Donut, HealthGauge } from "../../charts.tsx";
+import { Donut, Heatmap, HealthGauge } from "../../charts.tsx";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 
 export function RepoOverview() {
@@ -37,6 +38,7 @@ export function RepoOverview() {
   const entryPoints = useAsync(() => fetchEntryPoints(repoId), [repoId]);
   const gitInsights = useAsync(() => fetchGitInsights(repoId), [repoId]);
   const flows = useAsync(() => fetchExecutionFlows(repoId), [repoId]);
+  const matrix = useAsync(() => fetchDependencyMatrix(repoId), [repoId]);
 
   return (
     <>
@@ -197,19 +199,47 @@ export function RepoOverview() {
       {/* git insights */}
       <h2 className="section-title">Git insights</h2>
       <div className="panel-grid">
-        <Panel title="Bus factor" to={`${base}/hotspots`}>
+        <Panel title="Churn distribution" to={`${base}/hotspots`}>
           <AsyncView state={gitInsights}>
             {(g) => (
-              <p className="big-stat">
-                {g.busFactor.atRisk}
-                <span className="muted small"> / {g.busFactor.total} files single-owner</span>
-              </p>
+              <Bars data={g.churnBuckets.map((b) => ({ label: b.label, value: b.count }))} graded />
             )}
           </AsyncView>
         </Panel>
-        <Panel title="Churn distribution" to={`${base}/hotspots`}>
+        <Panel title="Bus factor" to={`${base}/hotspots`}>
           <AsyncView state={gitInsights}>
-            {(g) => <Bars data={g.churnBuckets.map((b) => ({ label: b.label, value: b.count }))} />}
+            {(g) => (
+              <>
+                <div className="busfactor-legend">
+                  <span>
+                    <span className="dot good" /> Safe ≥3 <b>{g.busFactor.safe}</b>
+                  </span>
+                  <span>
+                    <span className="dot warn" /> Warning 2 <b>{g.busFactor.warning}</b>
+                  </span>
+                  <span>
+                    <span className="dot bad" /> Risk ≤1 <b>{g.busFactor.risk}</b>
+                  </span>
+                </div>
+                <div className="busfactor-track">
+                  <span className="seg good" style={segWidth(g.busFactor.safe, g.busFactor.total)} />
+                  <span className="seg warn" style={segWidth(g.busFactor.warning, g.busFactor.total)} />
+                  <span className="seg bad" style={segWidth(g.busFactor.risk, g.busFactor.total)} />
+                </div>
+                <ul className="mini-list" style={{ marginTop: 10 }}>
+                  {g.busFactor.riskFiles.map((f) => (
+                    <li key={f.path}>
+                      <span className="mono path" title={f.path}>
+                        {f.path}
+                      </span>
+                      <span className="muted">
+                        {f.contributors} contributor{f.contributors === 1 ? "" : "s"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </AsyncView>
         </Panel>
         <Panel title="Top contributors" to={`${base}/hotspots`}>
@@ -231,6 +261,23 @@ export function RepoOverview() {
           </AsyncView>
         </Panel>
       </div>
+
+      {/* dependency heatmap */}
+      <h2 className="section-title">Dependency heatmap</h2>
+      <section className="panel">
+        <p className="muted small" style={{ marginTop: 0 }}>
+          Module-to-module import density — brighter cells mean more dependencies.
+        </p>
+        <AsyncView state={matrix}>
+          {(m) =>
+            m.modules.length === 0 ? (
+              <p className="muted small">No import edges.</p>
+            ) : (
+              <Heatmap modules={m.modules} cells={m.cells} />
+            )
+          }
+        </AsyncView>
+      </section>
 
       {/* structure */}
       <h2 className="section-title">Structure</h2>
@@ -293,21 +340,40 @@ export function RepoOverview() {
   );
 }
 
-function Bars({ data }: { data: { label: string; value: number }[] }) {
+// gradeColor maps a 0..1 position to a green→yellow→orange→red hue, used to
+// color the churn-distribution bars (higher churn = hotter).
+function gradeColor(t: number): string {
+  if (t < 0.25) return "var(--good)";
+  if (t < 0.5) return "#b5b324";
+  if (t < 0.75) return "var(--warn)";
+  return "var(--bad)";
+}
+
+function Bars({ data, graded }: { data: { label: string; value: number }[]; graded?: boolean }) {
   const max = Math.max(1, ...data.map((d) => d.value));
   return (
     <div className="bars">
-      {data.map((d) => (
+      {data.map((d, i) => (
         <div className="bar-row" key={d.label}>
           <span className="bar-label muted">{d.label}</span>
           <span className="bar-track">
-            <span className="bar-fill" style={{ width: `${(d.value / max) * 100}%` }} />
+            <span
+              className="bar-fill"
+              style={{
+                width: `${(d.value / max) * 100}%`,
+                background: graded ? gradeColor(i / Math.max(1, data.length - 1)) : undefined,
+              }}
+            />
           </span>
           <span className="bar-value">{d.value}</span>
         </div>
       ))}
     </div>
   );
+}
+
+function segWidth(value: number, total: number): React.CSSProperties {
+  return { width: `${total > 0 ? (value / total) * 100 : 0}%` };
 }
 
 function FlowBranch({ node, depth }: { node: FlowNode; depth: number }) {
