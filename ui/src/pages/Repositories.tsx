@@ -1,59 +1,74 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchOverview, type RepoSummary } from "../api.ts";
-
-type LoadState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; repos: RepoSummary[] };
+import { fetchOverview, registerRepo, type RepoSummary } from "../api.ts";
+import { AsyncView, useAsync } from "../useAsync.tsx";
 
 export function Repositories() {
-  const [state, setState] = useState<LoadState>({ status: "loading" });
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchOverview()
-      .then((o) => {
-        if (!cancelled) setState({ status: "ready", repos: o.repos });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled)
-          setState({ status: "error", message: err instanceof Error ? err.message : String(err) });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [nonce, setNonce] = useState(0);
+  const state = useAsync(() => fetchOverview().then((o) => o.repos), [nonce]);
+  const reload = () => setNonce((n) => n + 1);
 
   return (
     <main className="content">
       <header className="page-header">
         <h1>
           Repositories
-          {state.status === "ready" && <span className="count">{state.repos.length}</span>}
+          {state.status === "ready" && <span className="count">{state.data.length}</span>}
         </h1>
       </header>
-      {state.status === "loading" && <p className="muted">Loading…</p>}
-      {state.status === "error" && <p className="error">Failed to load: {state.message}</p>}
-      {state.status === "ready" &&
-        (state.repos.length === 0 ? (
-          <p className="muted">
-            No repositories indexed yet. Run <code>vor ingest</code> to index one.
-          </p>
-        ) : (
-          <RepoGrid repos={state.repos} />
-        ))}
+
+      <AddRepo onAdded={reload} />
+
+      <AsyncView state={state}>
+        {(repos) =>
+          repos.length === 0 ? (
+            <p className="muted">No repositories indexed yet. Add one above.</p>
+          ) : (
+            <div className="repo-grid">
+              {repos.map((r) => (
+                <RepoCard key={r.id} repo={r} />
+              ))}
+            </div>
+          )
+        }
+      </AsyncView>
     </main>
   );
 }
 
-function RepoGrid({ repos }: { repos: RepoSummary[] }) {
+function AddRepo({ onAdded }: { onAdded: () => void }) {
+  const [path, setPath] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const p = path.trim();
+    if (!p) return;
+    setBusy(true);
+    setError(null);
+    registerRepo(p)
+      .then(() => {
+        setPath("");
+        onAdded();
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setBusy(false));
+  }
+
   return (
-    <div className="repo-grid">
-      {repos.map((r) => (
-        <RepoCard key={r.id} repo={r} />
-      ))}
-    </div>
+    <form className="add-repo" onSubmit={submit}>
+      <input
+        className="wiki-search"
+        placeholder="Absolute path to a repository…  (e.g. /Users/me/projects/app)"
+        value={path}
+        onChange={(e) => setPath(e.target.value)}
+      />
+      <button className="btn" type="submit" disabled={busy}>
+        {busy ? "Adding…" : "Add repository"}
+      </button>
+      {error && <span className="add-repo-error error">{error}</span>}
+    </form>
   );
 }
 

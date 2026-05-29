@@ -27,6 +27,21 @@ async function getJSON<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`${res.status} ${res.statusText}${detail ? `: ${detail.trim()}` : ""}`);
+  }
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
 export function fetchOverview(): Promise<Overview> {
   return getJSON<Overview>("/api/overview");
 }
@@ -46,6 +61,46 @@ export type RepoDetail = {
 
 export function fetchRepo(id: string): Promise<RepoDetail> {
   return getJSON<RepoDetail>(`/api/repos/${id}`);
+}
+
+export function registerRepo(path: string, ephemeral = false): Promise<RepoDetail> {
+  return send<RepoDetail>("POST", "/api/repos/register", { path, ephemeral });
+}
+
+export function deleteRepo(id: string): Promise<void> {
+  return send<void>("DELETE", `/api/repos/${id}`);
+}
+
+// ---- per-repo settings --------------------------------------------------
+
+export type HealthRule = {
+  pattern?: string;
+  path?: string;
+  overrides: Record<string, string>;
+};
+
+export type RepoSettings = {
+  effective: {
+    provider: string;
+    model: string;
+    reasoning: boolean;
+    health_rules: HealthRule[] | null;
+    [k: string]: unknown;
+  };
+  overridden: Record<string, boolean>;
+  biomarkers: string[];
+};
+
+export function fetchRepoSettings(id: string): Promise<RepoSettings> {
+  return getJSON<RepoSettings>(`/api/repos/${id}/settings`);
+}
+
+export function putRepoSetting(id: string, key: string, value: unknown): Promise<void> {
+  return send<void>("PUT", `/api/repos/${id}/settings/${key}`, value);
+}
+
+export function clearRepoSetting(id: string, key: string): Promise<void> {
+  return send<void>("DELETE", `/api/repos/${id}/settings/${key}`);
 }
 
 export type HealthSummary = {

@@ -19,6 +19,7 @@ const REPO_NAV: { to: string; label: string; soon?: boolean }[] = [
   { to: "costs", label: "Costs", soon: true },
   { to: "security", label: "Security", soon: true },
   { to: "activity", label: "Activity", soon: true },
+  { to: "settings", label: "Settings" },
 ];
 
 export function RepoLayout() {

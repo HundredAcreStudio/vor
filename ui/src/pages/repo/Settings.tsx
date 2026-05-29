@@ -1,0 +1,224 @@
+import { useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  clearRepoSetting,
+  deleteRepo,
+  fetchRepoSettings,
+  putRepoSetting,
+  type HealthRule,
+  type RepoSettings,
+} from "../../api.ts";
+import { AsyncView, useAsync } from "../../useAsync.tsx";
+
+export function Settings() {
+  const { repoId = "" } = useParams();
+  const [nonce, setNonce] = useState(0);
+  const state = useAsync(() => fetchRepoSettings(repoId), [repoId, nonce]);
+
+  return (
+    <>
+      <header className="page-header">
+        <h1>Settings</h1>
+      </header>
+      <AsyncView state={state}>
+        {(s) => <SettingsBody repoId={repoId} settings={s} reload={() => setNonce((n) => n + 1)} />}
+      </AsyncView>
+    </>
+  );
+}
+
+// EditRule is the editable form of a HealthRule: one match (a path prefix or a
+// glob pattern) plus the biomarkers it disables.
+type EditRule = { kind: "path" | "pattern"; match: string; biomarkers: string[] };
+
+function toEdit(rules: HealthRule[] | null): EditRule[] {
+  return (rules ?? []).map((r) => ({
+    kind: r.pattern ? "pattern" : "path",
+    match: r.pattern ?? r.path ?? "",
+    biomarkers: Object.keys(r.overrides ?? {}),
+  }));
+}
+
+function toRules(edits: EditRule[]): HealthRule[] {
+  return edits
+    .filter((e) => e.match.trim() && e.biomarkers.length > 0)
+    .map((e) => ({
+      [e.kind]: e.match.trim(),
+      overrides: Object.fromEntries(e.biomarkers.map((b) => [b, "disabled"])),
+    }));
+}
+
+function SettingsBody({
+  repoId,
+  settings,
+  reload,
+}: {
+  repoId: string;
+  settings: RepoSettings;
+  reload: () => void;
+}) {
+  const navigate = useNavigate();
+  const [rules, setRules] = useState<EditRule[]>(() => toEdit(settings.effective.health_rules));
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const overridden = !!settings.overridden["health_rules"];
+
+  function update(i: number, patch: Partial<EditRule>) {
+    setRules((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  function toggleBiomarker(i: number, b: string) {
+    setRules((rs) =>
+      rs.map((r, idx) =>
+        idx === i
+          ? {
+              ...r,
+              biomarkers: r.biomarkers.includes(b)
+                ? r.biomarkers.filter((x) => x !== b)
+                : [...r.biomarkers, b],
+            }
+          : r,
+      ),
+    );
+  }
+
+  function save() {
+    setSaving(true);
+    setMsg(null);
+    putRepoSetting(repoId, "health_rules", toRules(rules))
+      .then(() => {
+        setMsg("Saved. Re-index the repo for changes to take effect.");
+        reload();
+      })
+      .catch((e: unknown) => setMsg(e instanceof Error ? e.message : String(e)))
+      .finally(() => setSaving(false));
+  }
+
+  function resetToGlobal() {
+    setSaving(true);
+    clearRepoSetting(repoId, "health_rules")
+      .then(() => {
+        setMsg("Reset to global defaults.");
+        reload();
+      })
+      .catch((e: unknown) => setMsg(e instanceof Error ? e.message : String(e)))
+      .finally(() => setSaving(false));
+  }
+
+  return (
+    <>
+      <section className="settings-section">
+        <h2 className="section-title">Exclude files from health checks</h2>
+        <p className="muted small">
+          Each rule suppresses the selected biomarkers for files matching a path
+          prefix or a glob pattern.{" "}
+          {overridden ? "Customised for this repo." : "Currently using global defaults."}
+        </p>
+
+        <div className="rules">
+          {rules.map((r, i) => (
+            <div className="rule" key={i}>
+              <div className="rule-match">
+                <select
+                  value={r.kind}
+                  onChange={(e) => update(i, { kind: e.target.value as EditRule["kind"] })}
+                >
+                  <option value="path">path prefix</option>
+                  <option value="pattern">glob pattern</option>
+                </select>
+                <input
+                  className="wiki-search"
+                  placeholder={r.kind === "path" ? "internal/generated/" : "**/*_test.go"}
+                  value={r.match}
+                  onChange={(e) => update(i, { match: e.target.value })}
+                />
+                <button className="btn-ghost" onClick={() => setRules((rs) => rs.filter((_, idx) => idx !== i))}>
+                  Remove
+                </button>
+              </div>
+              <div className="rule-biomarkers">
+                {settings.biomarkers.map((b) => (
+                  <label key={b} className={"chip-toggle" + (r.biomarkers.includes(b) ? " chip-toggle-on" : "")}>
+                    <input
+                      type="checkbox"
+                      checked={r.biomarkers.includes(b)}
+                      onChange={() => toggleBiomarker(i, b)}
+                    />
+                    {b.replace(/_/g, " ")}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="settings-actions">
+          <button
+            className="btn-ghost"
+            onClick={() => setRules((rs) => [...rs, { kind: "path", match: "", biomarkers: [] }])}
+          >
+            + Add exclusion rule
+          </button>
+          <span className="spacer" />
+          {overridden && (
+            <button className="btn-ghost" onClick={resetToGlobal} disabled={saving}>
+              Reset to global
+            </button>
+          )}
+          <button className="btn" onClick={save} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+        {msg && <p className="muted small">{msg}</p>}
+      </section>
+
+      <section className="settings-section danger">
+        <h2 className="section-title">Danger zone</h2>
+        <DeleteRepo repoId={repoId} onDeleted={() => navigate("/repositories")} />
+      </section>
+    </>
+  );
+}
+
+function DeleteRepo({ repoId, onDeleted }: { repoId: string; onDeleted: () => void }) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function run() {
+    setBusy(true);
+    setError(null);
+    deleteRepo(repoId)
+      .then(onDeleted)
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e));
+        setBusy(false);
+      });
+  }
+
+  return (
+    <div className="danger-box">
+      <div>
+        <strong>Delete this repository</strong>
+        <p className="muted small">
+          Stops watching it and removes all indexed data (graph, health, decisions,
+          wiki). The files on disk are untouched. This can't be undone.
+        </p>
+      </div>
+      {!armed ? (
+        <button className="btn-danger" onClick={() => setArmed(true)}>
+          Delete…
+        </button>
+      ) : (
+        <span className="confirm">
+          <button className="btn-ghost" onClick={() => setArmed(false)} disabled={busy}>
+            Cancel
+          </button>
+          <button className="btn-danger" onClick={run} disabled={busy}>
+            {busy ? "Deleting…" : "Confirm delete"}
+          </button>
+        </span>
+      )}
+      {error && <span className="error small">{error}</span>}
+    </div>
+  );
+}

@@ -841,3 +841,198 @@ code {
 .small {
   font-size: 12px;
 }
+
+/* ---- add repo --------------------------------------------------------- */
+.add-repo {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.add-repo .wiki-search {
+  flex: 1;
+  min-width: 280px;
+}
+.add-repo-error {
+  flex-basis: 100%;
+  font-size: 12px;
+}
+
+/* ---- overview panels -------------------------------------------------- */
+.panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.panel-head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.panel-link {
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.panel-link:hover {
+  color: var(--accent);
+}
+.mini-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mini-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.big-stat {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 4px 0 0;
+}
+
+/* ---- settings: rules editor + danger zone ----------------------------- */
+.settings-section {
+  margin-bottom: 32px;
+  max-width: 760px;
+}
+.rules {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0;
+}
+.rule {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel);
+}
+.rule-match {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.rule-match .wiki-search {
+  flex: 1;
+}
+.rule-match select,
+.rule-match input {
+  height: 32px;
+}
+select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+.rule-biomarkers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.chip-toggle input {
+  margin: 0;
+}
+.chip-toggle-on {
+  background: rgba(248, 81, 73, 0.12);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.settings-actions .spacer {
+  flex: 1;
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn-ghost:hover {
+  border-color: var(--accent);
+}
+.btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.danger {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+.danger-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--bad);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.btn-danger {
+  background: var(--bad);
+  color: #1a0a0a;
+  border: none;
+  border-radius: 7px;
+  padding: 7px 14px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.confirm {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
