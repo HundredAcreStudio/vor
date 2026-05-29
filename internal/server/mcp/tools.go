@@ -30,6 +30,14 @@ func (s *Server) registerTools() {
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 	), s.wrap(s.toolStatus))
 
+	s.srv.AddTool(mcp.NewTool(
+		"vor_risk",
+		mcp.WithDescription("Modification risk assessment — CALL THIS BEFORE EDITING a file, especially shared utilities, core modules, or files the user didn't name. For each target returns: git hotspot status + churn, how many files depend on it (blast radius) with the top dependents, co-change partners you may also need to touch, ownership + bus factor, the architectural decisions that govern it, and a derived risk level (high/medium/low) with reasons. Pure indexed data, no LLM. Batch multiple files into one call."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+		mcp.WithArray("targets", mcp.Description("File paths to assess (e.g. 'internal/foo.go'). Multiple allowed in one call."), mcp.Items(map[string]any{"type": "string"})),
+		mcp.WithString("target", mcp.Description("Single-target convenience alternative to `targets`.")),
+	), s.wrap(s.toolRisk))
+
 	// --- task-oriented synthesis tools ---
 	s.srv.AddTool(mcp.NewTool(
 		"vor_get_context",

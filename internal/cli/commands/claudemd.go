@@ -260,9 +260,20 @@ func renderClaudeMdManaged(d claudeMdData) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "## IMPORTANT: Codebase Intelligence Instructions for %s\n\n", d.RepoName)
 	b.WriteString("> This repository is indexed by [Vor](https://github.com/HundredAcreStudio/vor).\n")
-	b.WriteString("> Use the MCP tools below for orientation, discovery, and enriched context\n")
-	b.WriteString("> (documentation, ownership, history, decisions). **Always verify against\n")
-	b.WriteString("> actual source files before making changes** — the index may be stale.\n\n")
+	b.WriteString("> The MCP tools below answer from the index in one call — use them instead of\n")
+	b.WriteString("> grepping or reading dozens of files to orient. **Always verify against the\n")
+	b.WriteString("> actual source before changing code** — the index may be stale.\n>\n")
+	b.WriteString("> **Reach for them proactively:**\n")
+	b.WriteString("> - **Before editing any file** (especially shared utilities or core modules, or\n")
+	b.WriteString(">   files the user didn't name): call `vor_risk` first — it reports the blast\n")
+	b.WriteString(">   radius (dependents), co-change partners, ownership/bus-factor, and the\n")
+	b.WriteString(">   architectural decisions that govern the file. Warn the user on high risk.\n")
+	b.WriteString("> - **Getting oriented / \"where is X\"**: `vor_status`, then `vor_get_context` on\n")
+	b.WriteString(">   the files you're about to touch.\n")
+	b.WriteString("> - **Before refactoring or diverging from a pattern**: `vor_get_why` to find the\n")
+	b.WriteString(">   decision behind the current shape.\n")
+	b.WriteString("> - **\"How does X work\" / \"where is Y handled\"**: `vor_get_answer`.\n")
+	b.WriteString("> - **Tracing impact / call flow**: `vor_get_dependency_path`, `vor_get_execution_flows`.\n\n")
 	fmt.Fprintf(&b, "Last indexed: %s", d.IndexedAt)
 	if d.IndexedCommit != "" {
 		fmt.Fprintf(&b, " (commit %s)", d.IndexedCommit)
@@ -342,11 +353,16 @@ to verify against source.
 
 | Tool                                  | What it answers                                                |
 |---------------------------------------|----------------------------------------------------------------|
+| ` + "`vor_risk`" + `                       | **Before editing:** blast radius, owners, governing decisions. |
+| ` + "`vor_get_context`" + `                | Triage card for files/symbols (summary, hotspot, decisions).   |
+| ` + "`vor_get_why`" + `                    | The architectural decision behind why code is shaped this way. |
+| ` + "`vor_get_answer`" + `                 | Synthesized answer to a natural-language question about code.  |
 | ` + "`vor_status`" + `                     | Repository summary (counts, hotspots, health average).         |
 | ` + "`vor_hotspots`" + `                   | High-churn files with owners and bus factor.                   |
 | ` + "`vor_dead_code`" + `                  | Unreachable files / symbols with safe-to-delete flags.         |
 | ` + "`vor_health` + `vor_health_findings`" + ` | Code-health scores and biomarker findings.            |
 | ` + "`vor_decisions`" + `                  | Architectural decisions from markers, ADRs, CHANGELOG, commits.|
+| ` + "`vor_get_dependency_path` + `vor_get_execution_flows`" + ` | Trace how code reaches / flows through other code. |
 | ` + "`vor_pages` + `vor_page`" + `    | Generated wiki page summaries and full content.                |
 | ` + "`vor_search`" + `                     | Find symbols by name across the indexed repo.                  |
 | ` + "`vor_pipeline_log`" + `               | Recent pipeline phase executions (observability).              |
