@@ -133,6 +133,83 @@ func (s *Server) assessRisk(ctx context.Context, rid, target string) riskTarget 
 	return rt
 }
 
+// attentionItem is one entry in the vor_attention digest.
+type attentionItem struct {
+	Category string `json:"category"` // knowledge_silo | ungoverned_hotspot | dead_code | needs_review
+	Title    string `json:"title"`
+	Detail   string `json:"detail"`
+}
+
+// toolAttention returns a prioritized "what should I look at" digest — the
+// same cross-cutting signal the dashboard's Attention panel shows: knowledge
+// silos, churn hotspots, dead code, and decisions awaiting review.
+func (s *Server) toolAttention(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rid, err := s.resolveRepoID(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	items := make([]attentionItem, 0, 16)
+
+	type fileRow struct {
+		path  string
+		owner string
+		n     int
+	}
+	scan := func(query string) []fileRow {
+		rows, qerr := s.opts.DB.QueryContext(ctx, query, rid)
+		if qerr != nil {
+			return nil
+		}
+		defer rows.Close()
+		var out []fileRow
+		for rows.Next() {
+			var f fileRow
+			if rows.Scan(&f.path, &f.owner, &f.n) == nil {
+				out = append(out, f)
+			}
+		}
+		return out
+	}
+
+	for _, f := range scan(`SELECT file_path, COALESCE(primary_owner_name,''), commit_count_90d
+		FROM git_metadata WHERE repository_id = ? AND bus_factor <= 1 AND commit_count_90d > 0
+		ORDER BY commit_count_90d DESC LIMIT 5`) {
+		owner := f.owner
+		if owner == "" {
+			owner = "unknown"
+		}
+		items = append(items, attentionItem{"knowledge_silo", f.path,
+			fmt.Sprintf("single owner: %s · %d commits/90d", owner, f.n)})
+	}
+	for _, f := range scan(`SELECT file_path, '', commit_count_90d
+		FROM git_metadata WHERE repository_id = ? AND is_hotspot = 1 AND bus_factor > 1
+		ORDER BY commit_count_90d DESC LIMIT 5`) {
+		items = append(items, attentionItem{"ungoverned_hotspot", f.path,
+			fmt.Sprintf("high churn · %d commits/90d", f.n)})
+	}
+	var dcCount, dcLines int
+	_ = s.opts.DB.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(lines),0)
+		FROM dead_code_findings WHERE repository_id = ? AND safe_to_delete = 1`, rid).Scan(&dcCount, &dcLines)
+	if dcCount > 0 {
+		items = append(items, attentionItem{"dead_code",
+			fmt.Sprintf("%d safe-to-delete findings", dcCount),
+			fmt.Sprintf("%d lines can be removed", dcLines)})
+	}
+	if rows, derr := s.opts.DB.QueryContext(ctx, `SELECT title, verification
+		FROM decision_records WHERE repository_id = ? AND verification IN ('unverified','proposed')
+		ORDER BY confidence DESC LIMIT 5`, rid); derr == nil {
+		for rows.Next() {
+			var title, verification string
+			if rows.Scan(&title, &verification) == nil {
+				items = append(items, attentionItem{"needs_review", title, verification})
+			}
+		}
+		rows.Close()
+	}
+
+	return jsonResult(map[string]any{"items": items})
+}
+
 // deriveRisk turns the gathered signals into a level + human reasons.
 func deriveRisk(rt riskTarget) (string, []string) {
 	if !rt.Indexed {

@@ -1,0 +1,20 @@
+{
+  "name": "vor",
+  "owner": {
+    "name": "HundredAcre Studio"
+  },
+  "metadata": {
+    "description": "Codebase intelligence layer — graph, git, docs, decisions, and modification-risk for AI coding agents.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "vor",
+      "source": ".",
+      "description": "Codebase intelligence for Claude Code. Understand architecture, ownership, hotspots, blast radius, and decisions before editing.",
+      "version": "0.1.0",
+      "category": "productivity",
+      "tags": ["codebase", "architecture", "mcp", "graph", "git-intelligence", "risk"]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "vor",
+  "description": "Codebase intelligence for Claude Code. Vor indexes your repo into a dependency graph, git history, generated docs, architectural decisions, and code-health signals, and exposes them as MCP tools so Claude understands architecture, ownership, hotspots, blast radius, and why code is built the way it is — before editing it.",
+  "version": "0.1.0",
+  "author": {
+    "name": "HundredAcre Studio"
+  },
+  "homepage": "https://github.com/HundredAcreStudio/vor",
+  "repository": "https://github.com/HundredAcreStudio/vor",
+  "keywords": ["codebase", "architecture", "mcp", "intelligence", "graph", "git", "risk"]
+}

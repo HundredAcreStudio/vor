@@ -38,6 +38,12 @@ func (s *Server) registerTools() {
 		mcp.WithString("target", mcp.Description("Single-target convenience alternative to `targets`.")),
 	), s.wrap(s.toolRisk))
 
+	s.srv.AddTool(mcp.NewTool(
+		"vor_attention",
+		mcp.WithDescription("A prioritized \"what should I look at\" digest for the repo: knowledge silos (single-owner active files), ungoverned churn hotspots, safe-to-delete dead code, and architectural decisions awaiting review. Call when onboarding to a repo or deciding where attention/cleanup is most warranted."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+	), s.wrap(s.toolAttention))
+
 	// --- task-oriented synthesis tools ---
 	s.srv.AddTool(mcp.NewTool(
 		"vor_get_context",
