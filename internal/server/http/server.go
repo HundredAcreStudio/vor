@@ -83,6 +83,8 @@ func New(opts Options) (*Server, error) {
 			reposR.Route("/{repoID}", func(per chi.Router) {
 				routes.MountRepoDetail(per, deps)
 				routes.MountSettings(per, deps)
+				routes.MountAttention(per, deps)
+				routes.MountLanguages(per, deps)
 				routes.MountGraph(per, deps)
 				routes.MountSymbols(per, deps)
 				routes.MountSearch(per, deps)
