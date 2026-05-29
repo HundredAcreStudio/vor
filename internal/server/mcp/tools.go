@@ -44,6 +44,49 @@ func (s *Server) registerTools() {
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),
 	), s.wrap(s.toolAttention))
 
+	// --- repo-level analytics (same data as the dashboard overview) ---
+	s.srv.AddTool(mcp.NewTool(
+		"vor_git_insights",
+		mcp.WithDescription("Repo git analytics: bus-factor distribution (safe ≥3 / warning 2 / risk ≤1 contributors) with the highest-risk files, the churn-percentile distribution, and the top contributors by commit count. Use to judge ownership concentration and where change is concentrated."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+	), s.wrap(s.toolGitInsights))
+
+	s.srv.AddTool(mcp.NewTool(
+		"vor_commit_categories",
+		mcp.WithDescription("How development effort splits across commit categories (feature / fix / refactor / docs / test / dependency / chore), from classifying commit subjects. Use to characterize what kind of work this repo sees."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+	), s.wrap(s.toolCommitCategories))
+
+	s.srv.AddTool(mcp.NewTool(
+		"vor_languages",
+		mcp.WithDescription("Language distribution by indexed file count. Use to understand the repo's tech stack at a glance."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+	), s.wrap(s.toolLanguages))
+
+	s.srv.AddTool(mcp.NewTool(
+		"vor_modules",
+		mcp.WithDescription("Per-module breakdown (by top two path segments): file and symbol counts, documentation coverage, and outgoing cross-module import dependencies. Use to see how the codebase is organized and which modules are under-documented or heavily coupled."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+	), s.wrap(s.toolModules))
+
+	s.srv.AddTool(mcp.NewTool(
+		"vor_packages",
+		mcp.WithDescription("Packages detected from dependency manifests (with each package's language), and whether the repo is a monorepo. Use to learn the project's package layout."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+	), s.wrap(s.toolPackages))
+
+	s.srv.AddTool(mcp.NewTool(
+		"vor_dependency_matrix",
+		mcp.WithDescription("Module×module import-density matrix: for the most-connected modules, how many import edges run from each module to each other. Use to spot tightly-coupled or central modules."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+	), s.wrap(s.toolDependencyMatrix))
+
+	s.srv.AddTool(mcp.NewTool(
+		"vor_entry_points",
+		mcp.WithDescription("The repo's indexed entry-point files (mains, servers, CLI roots), ranked by PageRank. Use to find where execution starts before tracing flows."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+	), s.wrap(s.toolEntryPoints))
+
 	// --- task-oriented synthesis tools ---
 	s.srv.AddTool(mcp.NewTool(
 		"vor_get_context",
