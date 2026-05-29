@@ -169,6 +169,16 @@ func TestReindex_RebuildsFromScratch(t *testing.T) {
 	_ = conn.QueryRowContext(context.Background(),
 		"SELECT id FROM repositories LIMIT 1").Scan(&oldID)
 
+	// A repo-scoped setting keyed on the repo id. It has no FK to
+	// repositories, so it must survive a reindex AND stay attached to the
+	// (preserved) id — otherwise it silently orphans.
+	if _, err := conn.ExecContext(context.Background(),
+		`INSERT INTO settings (repository_id, key, value) VALUES (?, ?, ?)`,
+		oldID, "health_rules", `[{"pattern":"**/*_test.go","overrides":{"brain_method":"disabled"}}]`,
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	stdout, _, err := runVorCmd(t, nil, "reindex", "--yes", tmp)
 	if err != nil {
 		t.Fatalf("reindex --yes: %v", err)
@@ -176,11 +186,20 @@ func TestReindex_RebuildsFromScratch(t *testing.T) {
 	if !strings.Contains(stdout, "reindex complete") {
 		t.Errorf("expected 'reindex complete', got %q", stdout)
 	}
+
+	// The rebuild must wipe derived state but PRESERVE the repo identity, so
+	// repo-scoped settings keep matching.
 	var newID string
 	_ = conn.QueryRowContext(context.Background(),
 		"SELECT id FROM repositories LIMIT 1").Scan(&newID)
-	if newID == "" || newID == oldID {
-		t.Errorf("expected fresh repo row after reindex (old=%s new=%s)", oldID, newID)
+	if newID == "" || newID != oldID {
+		t.Errorf("expected reindex to preserve the repo id (old=%s new=%s)", oldID, newID)
+	}
+	var settingRepoID string
+	_ = conn.QueryRowContext(context.Background(),
+		"SELECT repository_id FROM settings WHERE key = 'health_rules'").Scan(&settingRepoID)
+	if settingRepoID != oldID {
+		t.Errorf("health_rules setting orphaned by reindex: keyed to %q, repo is %q", settingRepoID, oldID)
 	}
 }
 

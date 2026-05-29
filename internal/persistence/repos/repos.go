@@ -102,6 +102,44 @@ func (s *Store) EnsureByLocalPath(ctx context.Context, localPath, name string) (
 	return s.EnsureByLocalPath(ctx, localPath, name)
 }
 
+// Reinsert recreates a repositories row from a prior snapshot, preserving its
+// id and tracked/ephemeral state. Used by `reindex` after a scorched-earth
+// delete so the repo keeps its identity across the rebuild.
+//
+// This matters because repo-scoped settings (config health_rules, provider
+// overrides, watch config) key on the repository id and have NO foreign key to
+// repositories — they survive the cascade delete, so minting a fresh id would
+// silently orphan them. Reusing the id keeps them attached. head_commit is
+// left to the pipeline to re-set; created_at carries over so the repo's age is
+// preserved.
+func (s *Store) Reinsert(ctx context.Context, prior *Repository) (*Repository, error) {
+	if prior == nil || prior.ID == "" || prior.LocalPath == "" {
+		return nil, errors.New("prior repository with id and localPath is required")
+	}
+	name := prior.Name
+	if name == "" {
+		name = inferRepoName(prior.LocalPath)
+	}
+	branch := prior.DefaultBranch
+	if branch == "" {
+		branch = "main"
+	}
+	settings := prior.SettingsJSON
+	if settings == "" {
+		settings = "{}"
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO repositories
+		   (id, name, url, local_path, default_branch, settings_json, tracked, ephemeral, tracked_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		prior.ID, name, prior.URL, prior.LocalPath, branch, settings,
+		b2i(prior.Tracked), b2i(prior.Ephemeral), prior.TrackedAt, prior.CreatedAt,
+	); err != nil {
+		return nil, fmt.Errorf("reinsert repository: %w", err)
+	}
+	return s.Get(ctx, prior.ID)
+}
+
 // UpdateHeadCommit sets head_commit and bumps updated_at.
 func (s *Store) UpdateHeadCommit(ctx context.Context, repoID, sha string) error {
 	_, err := s.db.ExecContext(ctx,

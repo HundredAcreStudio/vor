@@ -61,7 +61,12 @@ func newReindexCmd() *cobra.Command {
 			if err := store.Delete(ctx, existing.ID); err != nil {
 				return fmt.Errorf("delete repo row: %w", err)
 			}
-			fresh, err := store.EnsureByLocalPath(ctx, absRoot, "")
+			// Recreate with the SAME id (and tracked/ephemeral state) so the
+			// rebuild preserves the repo's identity. Repo-scoped settings
+			// (e.g. health_rules) key on the id and have no FK to repositories,
+			// so a fresh id would silently orphan them — and a tracked repo
+			// would lose its watch.
+			fresh, err := store.Reinsert(ctx, existing)
 			if err != nil {
 				return fmt.Errorf("recreate repo row: %w", err)
 			}
