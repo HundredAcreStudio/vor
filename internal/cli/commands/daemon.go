@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,7 +23,7 @@ func newDaemonCmd() *cobra.Command {
 		Use:   "daemon",
 		Short: "Start/stop/inspect the background serve daemon",
 	}
-	cmd.AddCommand(newDaemonStartCmd(), newDaemonStopCmd(), newDaemonStatusCmd(), newDaemonRestartCmd())
+	cmd.AddCommand(newDaemonStartCmd(), newDaemonStopCmd(), newDaemonStatusCmd(), newDaemonRestartCmd(), newDaemonLogsCmd())
 	return cmd
 }
 
@@ -158,9 +160,111 @@ func newDaemonStatusCmd() *cobra.Command {
 			if info.DatabaseURL != "" {
 				fmt.Fprintf(out, "  db:    %s\n", info.DatabaseURL)
 			}
+			if logPath, err := daemonLogPath(); err == nil {
+				fmt.Fprintf(out, "  logs:  %s\n", logPath)
+			}
 			return nil
 		},
 	}
+}
+
+func newDaemonLogsCmd() *cobra.Command {
+	var follow bool
+	var lines int
+	cmd := &cobra.Command{
+		Use:   "logs",
+		Short: "Print the background daemon's log file",
+		Long: "Print the daemon's captured stdout/stderr (the same file `vor serve` " +
+			"writes to when backgrounded). Use -f to stream new output as it arrives.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			out := cmd.OutOrStdout()
+			logPath, err := daemonLogPath()
+			if err != nil {
+				return err
+			}
+			f, err := os.Open(logPath)
+			if errors.Is(err, os.ErrNotExist) {
+				fmt.Fprintf(cmd.ErrOrStderr(), "no daemon log yet at %s\n", logPath)
+				return nil
+			}
+			if err != nil {
+				return fmt.Errorf("open daemon log: %w", err)
+			}
+			defer f.Close()
+
+			if lines > 0 {
+				if err := seekToLastLines(f, lines); err != nil {
+					return err
+				}
+			}
+			if _, err := io.Copy(out, f); err != nil {
+				return fmt.Errorf("read daemon log: %w", err)
+			}
+			if !follow {
+				return nil
+			}
+
+			// Follow mode: poll for appended bytes until the context is
+			// cancelled (Ctrl-C). io.Copy above left us at EOF.
+			ctx := cmd.Context()
+			ticker := time.NewTicker(250 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-ticker.C:
+					if _, err := io.Copy(out, f); err != nil {
+						return fmt.Errorf("read daemon log: %w", err)
+					}
+				}
+			}
+		},
+	}
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "stream new log output as it is written")
+	cmd.Flags().IntVarP(&lines, "lines", "n", 0, "print only the last N lines (0 = whole file)")
+	return cmd
+}
+
+// seekToLastLines positions f at the start of the last n lines by scanning
+// backward from EOF, so large logs aren't read into memory in full.
+func seekToLastLines(f *os.File, n int) error {
+	size, err := f.Seek(0, io.SeekEnd)
+	if err != nil {
+		return err
+	}
+	const chunk = 4096
+	var (
+		offset   = size
+		newlines int
+	)
+	buf := make([]byte, chunk)
+	for offset > 0 {
+		read := int64(chunk)
+		if offset < read {
+			read = offset
+		}
+		offset -= read
+		if _, err := f.ReadAt(buf[:read], offset); err != nil && !errors.Is(err, io.EOF) {
+			return err
+		}
+		for i := int(read) - 1; i >= 0; i-- {
+			if buf[i] != '\n' {
+				continue
+			}
+			newlines++
+			// The trailing newline doesn't begin a line; start counting
+			// once we've passed it.
+			if newlines > n {
+				_, err := f.Seek(offset+int64(i)+1, io.SeekStart)
+				return err
+			}
+		}
+	}
+	// Fewer than n lines in the file — start from the top.
+	_, err = f.Seek(0, io.SeekStart)
+	return err
 }
 
 func newDaemonRestartCmd() *cobra.Command {
