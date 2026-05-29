@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import {
   fetchAttention,
+  fetchCommitCategories,
   fetchCommunities,
   fetchDeadCode,
   fetchDecisions,
@@ -43,6 +44,7 @@ export function RepoOverview() {
   const matrix = useAsync(() => fetchDependencyMatrix(repoId), [repoId]);
   const mods = useAsync(() => fetchModules(repoId), [repoId]);
   const pkgs = useAsync(() => fetchPackages(repoId), [repoId]);
+  const commitCats = useAsync(() => fetchCommitCategories(repoId), [repoId]);
 
   return (
     <>
@@ -210,7 +212,54 @@ export function RepoOverview() {
 
       {/* git insights */}
       <h2 className="section-title">Git insights</h2>
-      <div className="panel-grid">
+      <section className="panel">
+        <header className="panel-head">
+          <h3>Commit activity</h3>
+        </header>
+        <AsyncView state={commitCats}>
+          {(cc) =>
+            cc.total === 0 ? (
+              <p className="muted small">No commit history.</p>
+            ) : (
+              <>
+                <div className="busfactor-track">
+                  {cc.categories.map((c) => (
+                    <span
+                      key={c.category}
+                      className="seg"
+                      title={`${c.category}: ${c.count}`}
+                      style={{ width: `${(c.count / cc.total) * 100}%`, background: categoryColor(c.category) }}
+                    />
+                  ))}
+                </div>
+                <div className="busfactor-legend" style={{ marginTop: 8 }}>
+                  {cc.categories.map((c) => (
+                    <span key={c.category}>
+                      <span className="dot" style={{ background: categoryColor(c.category) }} /> {c.category}{" "}
+                      <b>{c.count}</b>
+                    </span>
+                  ))}
+                </div>
+              </>
+            )
+          }
+        </AsyncView>
+      </section>
+      <div className="panel-grid" style={{ marginTop: 16 }}>
+        <Panel title="Commit categories" to={`${base}/hotspots`}>
+          <AsyncView state={commitCats}>
+            {(cc) =>
+              cc.total === 0 ? (
+                <p className="muted small">No commit history.</p>
+              ) : (
+                <Donut
+                  slices={cc.categories.map((c) => ({ label: c.category, value: c.count }))}
+                  colors={cc.categories.map((c) => categoryColor(c.category))}
+                />
+              )
+            }
+          </AsyncView>
+        </Panel>
         <Panel title="Churn distribution" to={`${base}/hotspots`}>
           <AsyncView state={gitInsights}>
             {(g) => (
@@ -441,6 +490,22 @@ function Bars({ data, graded }: { data: { label: string; value: number }[]; grad
 
 function segWidth(value: number, total: number): React.CSSProperties {
   return { width: `${total > 0 ? (value / total) * 100 : 0}%` };
+}
+
+// categoryColor maps a commit category to a stable, recognizable color.
+const CATEGORY_COLORS: Record<string, string> = {
+  feature: "#58a6ff",
+  fix: "#f85149",
+  refactor: "#bc8cff",
+  dependency: "#d29922",
+  docs: "#39c5cf",
+  test: "#3fb950",
+  chore: "#8b949e",
+  other: "#6e7681",
+};
+
+function categoryColor(category: string): string {
+  return CATEGORY_COLORS[category] ?? "#6e7681";
 }
 
 function scoreLabel(score: number): string {

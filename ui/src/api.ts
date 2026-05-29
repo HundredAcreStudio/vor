@@ -101,6 +101,15 @@ export function fetchGitInsights(id: string): Promise<GitInsights> {
   return getJSON<GitInsights>(`/api/repos/${id}/git-insights`);
 }
 
+export type CommitCategories = {
+  categories: { category: string; count: number }[];
+  total: number;
+};
+
+export function fetchCommitCategories(id: string): Promise<CommitCategories> {
+  return getJSON<CommitCategories>(`/api/repos/${id}/commit-categories`);
+}
+
 export type DependencyMatrix = { modules: string[]; cells: number[][] };
 
 export function fetchDependencyMatrix(id: string): Promise<DependencyMatrix> {

@@ -89,10 +89,20 @@ export function Heatmap({ modules, cells }: { modules: string[]; cells: number[]
 export type DonutSlice = { label: string; value: number };
 
 // Donut draws a ring chart with a legend. Slices are expected pre-sorted.
-export function Donut({ slices, size = 130 }: { slices: DonutSlice[]; size?: number }) {
+// `colors` overrides the default palette per slice (by index).
+export function Donut({
+  slices,
+  size = 130,
+  colors,
+}: {
+  slices: DonutSlice[];
+  size?: number;
+  colors?: string[];
+}) {
   const total = slices.reduce((s, x) => s + x.value, 0) || 1;
   const r = size / 2 - 6;
   const c = 2 * Math.PI * r;
+  const colorAt = (i: number) => colors?.[i] ?? PALETTE[i % PALETTE.length];
   let offset = 0;
   return (
     <div className="donut">
@@ -107,7 +117,7 @@ export function Donut({ slices, size = 130 }: { slices: DonutSlice[]; size?: num
                 cy={size / 2}
                 r={r}
                 fill="none"
-                stroke={PALETTE[i % PALETTE.length]}
+                stroke={colorAt(i)}
                 strokeWidth={12}
                 strokeDasharray={`${c * frac} ${c}`}
                 strokeDashoffset={-c * offset}
@@ -121,7 +131,7 @@ export function Donut({ slices, size = 130 }: { slices: DonutSlice[]; size?: num
       <ul className="donut-legend">
         {slices.map((s, i) => (
           <li key={s.label}>
-            <span className="swatch" style={{ background: PALETTE[i % PALETTE.length] }} />
+            <span className="swatch" style={{ background: colorAt(i) }} />
             <span className="ellipsis">{s.label}</span>
             <span className="muted">{Math.round((s.value / total) * 100)}%</span>
           </li>
