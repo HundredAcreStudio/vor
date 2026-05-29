@@ -85,6 +85,8 @@ func New(opts Options) (*Server, error) {
 				routes.MountSettings(per, deps)
 				routes.MountAttention(per, deps)
 				routes.MountLanguages(per, deps)
+				routes.MountInsights(per, deps)
+				routes.MountFlows(per, deps)
 				routes.MountGraph(per, deps)
 				routes.MountSymbols(per, deps)
 				routes.MountSearch(per, deps)
