@@ -6,112 +6,91 @@
 
 > Work in progress. See [PORTING_PLAN.md](./PORTING_PLAN.md) for the phased roadmap, library choices, and risk register.
 
-## Two components
+## Three roles, one binary
 
-vor-go is built as two cooperating components that share one database:
+The `vor` binary plays three roles over **one shared database**. Full detail in
+[docs/architecture.md](./docs/architecture.md).
+
+```
+                ┌──────────────────────────┐
+   vor (CLI) ───┤  global DB (sqlite/pg)   ├─── vor serve ── :7337
+   index/       │  ~/.config/vor/vor.db    │   (one daemon) ├── /            dashboard (embedded)
+   register     │  N repos, keyed by       │                ├── /api/...     REST
+                │  repository_id           │                └── /mcp         MCP (AI agents)
+                └──────────────────────────┘
+```
 
 ### 1. The CLI — `vor`
 
-A terminal tool for **indexing and inspecting** repositories. You run it interactively or from scripts and git hooks. It does the cheap, deterministic work (parse, graph, git, health, decisions) with zero LLM calls, plus the LLM-billed documentation generation on demand.
+A lean terminal tool for indexing and repo lifecycle, plus a couple of
+scriptable reads. The browsing surface lives in the dashboard, and the daemon
+keeps the index fresh, so there's no `update`/`watch`/`hook`. Full list in
+[docs/cli.md](./docs/cli.md).
 
 ```bash
-vor init <path>              # full index: traverse → parse → git → graph → deadcode → health → externals → decisions → persist
-vor update <path>            # re-index (incremental intent); auto-regenerates CLAUDE.md
-vor generate --provider anthropic   # LLM wiki pages (file / directory / symbol overviews)
-vor embed <path>             # index wiki pages into the vector store for semantic search
-vor status | health | hotspots | dead-code | decisions | externals | costs | pages   # read views
-vor coverage import <file>   # ingest LCOV/Cobertura → untested_hotspot
-vor security scan            # secrets / weak crypto / injection sinks
-vor search <query>           # substring search; add --semantic to rank pages by embedding
-vor watch <path>             # debounced auto-update on file change
-vor hook install             # post-commit auto-sync
-vor workspace add / register # multi-repo registries
+vor register .     # index a repo and have the daemon watch it
+vor init .         # index a repo once (standalone, no daemon); regenerates CLAUDE.md
+vor reindex .      # wipe + re-run the full pipeline
+vor status         # one-screen summary
+vor search <q>     # symbol search (--semantic ranks wiki pages by embedding)
+vor claude-md      # write the codebase-intelligence section into CLAUDE.md
+vor doctor         # config / DB / parsers / provider-key diagnostics
 ```
 
-Every read command accepts `--repo <path>` **or** `--repo-id <id>` so it can address any repo in a shared database without `cd`-ing into it.
+Reads/mutations accept `--repo <path>` or `--repo-id <id>` to address any repo
+in the shared database without `cd`-ing into it.
 
-### 2. The server — `vor serve`
+### 2. The daemon — `vor serve`
 
-A **long-running daemon** that exposes the indexed data over the network. Editor clients and dashboards attach to it instead of each spawning their own process. Two surfaces live on one port:
+A long-running process that serves three surfaces on one port. Clients attach
+to it instead of spawning their own.
 
-| Surface | Path | For |
-|---|---|---|
-| REST API | `/api/repos/{id}/*`, `/api/workspace*` | dashboards, scripts, automation |
-| MCP (Streamable HTTP) | `/mcp` | AI agents — Claude Code, Cursor, … |
+| Path        | Surface                  | For                          |
+| ----------- | ------------------------ | ---------------------------- |
+| `/`         | web dashboard (embedded) | humans, in a browser         |
+| `/api/...`  | REST                     | the dashboard, scripts       |
+| `/mcp`      | MCP (Streamable HTTP)    | AI agents (Claude Code, …)   |
 
 ```bash
-vor serve                       # single repo
-vor serve --workspace           # every repo in one workspace
-vor serve --auto                # every workspace in the user-global registry
+vor daemon start      # launch `vor serve` in the background → http://127.0.0.1:7337/
+vor daemon status     # pid, addr, db url
+vor daemon logs -f    # follow the daemon log
 ```
 
-MCP is also available over stdio (`vor mcp`) for editors that spawn a child process per repo. The HTTP transport is what makes the **daemon** model work — one process, many clients, optionally many repos.
+MCP is also available over stdio (`vor mcp`). The daemon's auto-indexer watches
+each tracked repo and re-runs an incremental pipeline on change.
 
-### How they share state
+### 3. The dashboard
 
-Both components read/write the same database, selected by `VOR_DB_URL` (or `~/.config/vor/config.yaml`, or per-repo `.vor/config.yaml`). Point every `init`/`update`/`serve` at one SQLite file — or a Postgres URL on a central host — and a single daemon serves every indexed repo. Each table is keyed by `repository_id`, so one database cleanly holds N repos.
-
-```
-                ┌─────────────────────────┐
-   vor ────┤  shared DB (sqlite/pg)  ├──── vor serve ──── /api  (dashboards)
-   (CLI:        │  N repos, 1 row each in │     (daemon)        └──── /mcp  (AI agents)
-    index/      │  repositories + per-    │
-    inspect)    │  repo analysis tables)  │
-                └─────────────────────────┘
-```
-
-### Deployment shapes
-
-```bash
-# Single workstation — one daemon for every local repo
-export VOR_DB_URL=sqlite:$HOME/.local/state/vor/all.db
-vor workspace add ~/projects/api  && vor workspace add ~/projects/web
-vor workspace register .          # remember this workspace root
-vor workspace update              # index all members
-vor serve --auto                  # one daemon, all repos, on :7337
-
-# Central host — shared Postgres, many developers attach
-export VOR_DB_URL=postgres://vor@db.internal/vor
-vor serve --auto --addr 0.0.0.0:7337
-```
-
-## User-global state
-
-The CLI tracks box-level state under XDG directories:
-
-| File | Purpose |
-|---|---|
-| `~/.config/vor/config.yaml` | user-global defaults (provider, model, health_rules) — slots into the merge chain `defaults → user → repo → env` |
-| `~/.local/state/vor/daemon.json` | the running `serve` instance (pid, addr); `vor status` reports it |
-| `~/.local/state/vor/workspaces.yaml` | registered workspace roots, consumed by `serve --auto` |
-| `~/.local/state/vor/watched.json` | per-repo watch + update history, shown by `vor watched list` |
+A React SPA **compiled into the binary** and served by the daemon at `/` — no
+separate server, no Node at runtime. Repo overview (health, attention, git
+insights, dependency graph, …), wiki, search, and per-repo settings. How it's
+built and served: [docs/dashboard.md](./docs/dashboard.md).
 
 ## Configuration
 
-Settings load through a merge chain — each layer overrides the previous:
+Configuration lives in the **database** (a `settings` table), not in YAML
+files. The database URL and provider API keys come from the environment /
+defaults (bootstrap); everything else resolves
+`defaults → global → per-repo → VOR_* env`. The dashboard's per-repo
+**Settings** page edits it (including code-health exclusions). Details and the
+full settings key list: [docs/configuration.md](./docs/configuration.md).
 
-```
-defaults → ~/.config/vor/config.yaml → <repo>/.vor/config.yaml → VOR_* env
-```
+- **Database:** `VOR_DB_URL` (e.g. a Postgres URL), else the global SQLite file
+  `~/.config/vor/vor.db`. One DB holds every repo.
+- **API keys:** `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` /
+  `OPENROUTER_API_KEY` — env only, never persisted.
 
-`vor init` writes a commented `<repo>/.vor/config.yaml` on first run (and never clobbers an existing one). Provider API keys are read from the environment only, never the file, so they can't be committed by accident.
+## Documentation
 
-### Code-health exclusions (`health_rules`)
-
-Suppress biomarker findings for files matching a glob (`pattern`, gitignore syntax) or a path prefix (`path`). `overrides` maps a biomarker name to an action — `disabled` (also `off` / `skip` / `ignore`) turns that check off, and the `"*"` key applies to every biomarker. Exclusions are **health-only**: matched files still appear in the dependency graph, search, and dead-code analysis — they just stop generating health findings (and stop dragging the file's score). Rules from the user-global and repo-local files are **additive**, so a global "ignore tests" rule and a repo-specific rule both apply.
-
-```yaml
-# <repo>/.vor/config.yaml
-health_rules:
-  - pattern: "**/*_test.go"        # table-driven tests aren't real complexity debt
-    overrides:
-      high_complexity: disabled
-      long_function: disabled
-      brain_method: disabled
-  - path: "internal/generated/"    # suppress every biomarker under a prefix
-    overrides:
-      "*": disabled
-```
+| Doc | What's in it |
+|---|---|
+| [docs/architecture.md](./docs/architecture.md) | CLI / daemon / dashboard, the shared DB, ports, migrations |
+| [docs/dashboard.md](./docs/dashboard.md) | how the UI is embedded + served by the daemon; the dev loop |
+| [docs/configuration.md](./docs/configuration.md) | DB-backed settings, bootstrap, health exclusions |
+| [docs/cli.md](./docs/cli.md) | the lean command set |
+| [docs/mcp.md](./docs/mcp.md) | MCP tools, transports, driving agent usage |
+| [PARITY.md](./PARITY.md) | feature-by-feature comparison vs. the Python original |
 
 ## Status
 
@@ -133,7 +112,7 @@ For a feature-by-feature comparison against the Python implementation
 | Dead code detection | ✅ |
 | Code health biomarkers (11: complexity, long_function, deep_nesting, god_class, untested_hotspot, brain_method, hidden_coupling, duplication, long_parameter_list, feature_envy, shotgun_surgery) | ✅ |
 | Community detection — Louvain modularity (gonum) | ✅ |
-| Coverage ingest — LCOV / Cobertura → untested_hotspot (`vor coverage import`) | ✅ |
+| Coverage-aware health — `untested_hotspot` biomarker from imported LCOV / Cobertura data | ✅ |
 | Security scan — secrets / weak crypto / injection sinks (`vor security`) | ✅ |
 | Config health exclusions — per-file / per-check via `health_rules` (gitignore globs) | ✅ |
 | LLM providers — Mock + **Anthropic / OpenAI / Gemini / Ollama / LiteLLM** + cost/ratelimit/retry middleware | ✅ |
@@ -141,9 +120,11 @@ For a feature-by-feature comparison against the Python implementation
 | Documentation generation — file / directory / symbol pages | ✅ |
 | Documentation generation — architecture page | ⏳ |
 | Decision intelligence — inline markers, ADR, CHANGELOG, commit archaeology | ✅ |
-| HTTP API (REST, `/api/repos/{id}/*` + `/api/workspace*`) | ✅ |
-| MCP server — stdio **and** Streamable HTTP, 25 tools (LLM-synthesis get_answer/get_why/get_context + graph-traversal community/dependency-path/flows/architecture + security + async reindex/security_scan mutations), per-call repo routing | ✅ |
-| Workspace / multi-repo — bulk ops, cross-repo co-change, `serve --auto` | ✅ |
+| HTTP API (REST, `/api/repos/{id}/*`) | ✅ |
+| Web dashboard — React SPA embedded via `go:embed`, served by the daemon at `/` | ✅ |
+| Database-backed configuration (`settings` table; global + per-repo) | ✅ |
+| MCP server — stdio **and** Streamable HTTP, 32 tools (incl. `vor_risk`, `vor_attention`, git/commit/module insights, LLM synthesis, graph traversal, security), per-call repo routing | ✅ |
+| Claude Code plugin — registers the MCP server + skills that drive tool usage | ✅ |
 | Pipeline orchestrator — phase tracking, run_id grouping, resume | ✅ |
 | `serve` prints MCP client-install instructions (Claude Code / mcp.json) at startup | ✅ |
 | Auto CLAUDE.md regeneration on init/update | ✅ |
@@ -152,19 +133,21 @@ For a feature-by-feature comparison against the Python implementation
 ## Quick start
 
 ```bash
-make build
-export VOR_DB_URL=sqlite:$PWD/.vor/wiki.db
-./bin/vor db migrate
-./bin/vor init .                       # index this repo
-./bin/vor status                       # one-screen summary (+ daemon state if running)
-./bin/vor health --refactoring-targets # ranked by impact / effort
-./bin/vor generate --provider mock     # wiki pages (use --provider anthropic with a key)
-./bin/vor embed .                       # index pages for semantic search
-./bin/vor search --semantic "auth flow" # rank pages by embedding similarity
-./bin/vor serve --addr :7337           # HTTP API + MCP daemon
+make all                 # build the UI (ui/dist) + the binaries
+make install             # install `vor` to $GOBIN
+
+vor daemon start         # start the daemon (migrates the global DB on startup)
+vor register .           # index this repo and have the daemon watch it
+open http://127.0.0.1:7337/   # the dashboard
+
+vor status               # one-screen summary
+vor search "auth"        # symbol search
 ```
 
-Requires Go 1.24+. cgo is needed for the tree-sitter parsers; the persistence, git, provider, server, and workspace packages are pure Go.
+`make build` alone is enough if you don't need to rebuild the UI — it embeds the
+committed `ui/dist`. Requires Go 1.25+ and (for `make ui`) Node. cgo is needed
+for the tree-sitter parsers; the persistence, git, provider, and server packages
+are pure Go.
 
 ## Layout
 
@@ -177,22 +160,26 @@ internal/
   analysis/
     deadcode/            # unreachable file/symbol detection
     decisions/           # inline / ADR / changelog / commit extractors
-    health/              # 8 code-health biomarkers
+    health/              # code-health biomarkers
+  insights/              # shared read layer (attention, risk, git/module insights) — HTTP + MCP
   generation/            # wiki page generation (context → templates → pages → wikistore)
-  providers/             # LLM interface + Mock/Anthropic/OpenAI/Gemini/Ollama/LiteLLM + cost/ratelimit/retry middleware
-  persistence/           # SQLite/Postgres schema, repository CRUD, per-domain stores
+  providers/             # LLM interface + Mock/Anthropic/OpenAI/Gemini/Ollama/LiteLLM + middleware
+  persistence/           # SQLite/Postgres schema, repository CRUD, per-domain stores, migrations
   pipeline/              # phase orchestrator (run_id grouping + resume)
   server/
-    http/                # chi REST API (mounts MCP at /mcp)
+    http/                # chi REST API; mounts MCP at /mcp and the dashboard at /
     mcp/                 # mark3labs/mcp-go server (stdio + Streamable HTTP)
-  workspace/             # multi-repo registry + cross-repo co-change
-  userconfig/            # ~/.config + ~/.local/state (config, daemon, workspaces, watched)
+    autoindex/           # daemon watcher: re-index tracked repos on change
+    registry/            # live register/unregister of tracked repos
+  userconfig/            # ~/.config + ~/.local/state (global DB path, daemon record)
   cli/commands/          # cobra subcommands
-  config/                # config merge chain (defaults → user → repo → env)
+  config/                # bootstrap + DB-backed settings resolution
+ui/                      # React + Vite dashboard; ui/dist is embedded via go:embed
+plugins/claude-code/     # Claude Code plugin: .mcp.json + tool-usage skills
 testdata/                # fixtures for ingest demos + integration tests
 ```
 
-See [PORTING_PLAN.md §2](./PORTING_PLAN.md#2-module-layout) for the full layout and library choices.
+See [docs/architecture.md](./docs/architecture.md) for how these fit together.
 
 ## Testing
 
