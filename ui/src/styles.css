@@ -1166,3 +1166,60 @@ select {
 .donut-legend .ellipsis {
   flex: 1;
 }
+
+/* ---- bars (churn distribution) --------------------------------------- */
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.bar-label {
+  width: 52px;
+  flex: none;
+  text-align: right;
+}
+.bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+}
+.bar-value {
+  width: 32px;
+  flex: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- execution flow tree --------------------------------------------- */
+.flow-tree {
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow: auto;
+}
+.flow-branch {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.flow-branch .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

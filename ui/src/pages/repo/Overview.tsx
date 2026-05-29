@@ -1,14 +1,19 @@
 import { Link, useParams } from "react-router-dom";
 import {
   fetchAttention,
+  fetchCommunities,
   fetchDeadCode,
   fetchDecisions,
+  fetchEntryPoints,
+  fetchExecutionFlows,
+  fetchGitInsights,
   fetchHealthSummary,
   fetchHotspots,
   fetchLanguages,
   fetchOverview,
   fetchRepo,
   type AttentionItem,
+  type FlowNode,
   type RepoSummary,
 } from "../../api.ts";
 import { Donut, HealthGauge } from "../../charts.tsx";
@@ -28,6 +33,10 @@ export function RepoOverview() {
   const hotspots = useAsync(() => fetchHotspots(repoId), [repoId]);
   const decisions = useAsync(() => fetchDecisions(repoId), [repoId]);
   const deadcode = useAsync(() => fetchDeadCode(repoId), [repoId]);
+  const communities = useAsync(() => fetchCommunities(repoId), [repoId]);
+  const entryPoints = useAsync(() => fetchEntryPoints(repoId), [repoId]);
+  const gitInsights = useAsync(() => fetchGitInsights(repoId), [repoId]);
+  const flows = useAsync(() => fetchExecutionFlows(repoId), [repoId]);
 
   return (
     <>
@@ -184,7 +193,135 @@ export function RepoOverview() {
           </AsyncView>
         </Panel>
       </div>
+
+      {/* git insights */}
+      <h2 className="section-title">Git insights</h2>
+      <div className="panel-grid">
+        <Panel title="Bus factor" to={`${base}/hotspots`}>
+          <AsyncView state={gitInsights}>
+            {(g) => (
+              <p className="big-stat">
+                {g.busFactor.atRisk}
+                <span className="muted small"> / {g.busFactor.total} files single-owner</span>
+              </p>
+            )}
+          </AsyncView>
+        </Panel>
+        <Panel title="Churn distribution" to={`${base}/hotspots`}>
+          <AsyncView state={gitInsights}>
+            {(g) => <Bars data={g.churnBuckets.map((b) => ({ label: b.label, value: b.count }))} />}
+          </AsyncView>
+        </Panel>
+        <Panel title="Top contributors" to={`${base}/hotspots`}>
+          <AsyncView state={gitInsights}>
+            {(g) =>
+              g.contributors.length === 0 ? (
+                <p className="muted small">No contributor data.</p>
+              ) : (
+                <ul className="mini-list">
+                  {g.contributors.map((c) => (
+                    <li key={c.name}>
+                      <span className="ellipsis">{c.name}</span>
+                      <span className="muted">{c.commits.toLocaleString()}</span>
+                    </li>
+                  ))}
+                </ul>
+              )
+            }
+          </AsyncView>
+        </Panel>
+      </div>
+
+      {/* structure */}
+      <h2 className="section-title">Structure</h2>
+      <div className="panel-grid">
+        <Panel title="Architecture communities" to={`${base}/graph`}>
+          <AsyncView state={communities}>
+            {(cs) =>
+              cs.length === 0 ? (
+                <p className="muted small">No communities detected.</p>
+              ) : (
+                <ul className="mini-list">
+                  {cs.slice(0, 8).map((c) => (
+                    <li key={c.communityId}>
+                      <span className="ellipsis">{c.label}</span>
+                      <span className="muted">{c.size} files</span>
+                    </li>
+                  ))}
+                </ul>
+              )
+            }
+          </AsyncView>
+        </Panel>
+        <Panel title="Entry points" to={`${base}/graph`}>
+          <AsyncView state={entryPoints}>
+            {(eps) =>
+              eps.length === 0 ? (
+                <p className="muted small">None indexed.</p>
+              ) : (
+                <ul className="mini-list">
+                  {eps.slice(0, 8).map((e) => (
+                    <li key={e.path}>
+                      <span className="mono path" title={e.path}>
+                        {e.path}
+                      </span>
+                      {e.language && <span className="muted">{e.language}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )
+            }
+          </AsyncView>
+        </Panel>
+        <Panel title="Execution flows" to={`${base}/graph`}>
+          <AsyncView state={flows}>
+            {(fs) =>
+              fs.length === 0 ? (
+                <p className="muted small">No entry points to trace.</p>
+              ) : (
+                <div className="flow-tree">
+                  {fs.slice(0, 3).map((f, i) => (
+                    <FlowBranch key={i} node={f} depth={0} />
+                  ))}
+                </div>
+              )
+            }
+          </AsyncView>
+        </Panel>
+      </div>
     </>
+  );
+}
+
+function Bars({ data }: { data: { label: string; value: number }[] }) {
+  const max = Math.max(1, ...data.map((d) => d.value));
+  return (
+    <div className="bars">
+      {data.map((d) => (
+        <div className="bar-row" key={d.label}>
+          <span className="bar-label muted">{d.label}</span>
+          <span className="bar-track">
+            <span className="bar-fill" style={{ width: `${(d.value / max) * 100}%` }} />
+          </span>
+          <span className="bar-value">{d.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FlowBranch({ node, depth }: { node: FlowNode; depth: number }) {
+  const short = node.node.split("/").pop() ?? node.node;
+  return (
+    <div className="flow-branch" style={{ paddingLeft: depth * 12 }}>
+      <span className="mono" title={node.node}>
+        {depth > 0 ? "└ " : ""}
+        {short}
+      </span>
+      {(node.children ?? []).slice(0, 4).map((c, i) => (
+        <FlowBranch key={i} node={c} depth={depth + 1} />
+      ))}
+    </div>
   );
 }
 

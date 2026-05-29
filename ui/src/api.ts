@@ -67,6 +67,40 @@ export function fetchLanguages(id: string): Promise<{ languages: LanguageSlice[]
   return getJSON<{ languages: LanguageSlice[]; total: number }>(`/api/repos/${id}/languages`);
 }
 
+export type Community = { communityId: number; label: string; size: number; top: string[] };
+
+export function fetchCommunities(id: string): Promise<Community[]> {
+  return getJSON<{ communities: Community[] }>(`/api/repos/${id}/communities`).then(
+    (r) => r.communities ?? [],
+  );
+}
+
+export type EntryPoint = { path: string; language?: string; pagerank: number };
+
+export function fetchEntryPoints(id: string): Promise<EntryPoint[]> {
+  return getJSON<{ entryPoints: EntryPoint[] }>(`/api/repos/${id}/entry-points`).then(
+    (r) => r.entryPoints ?? [],
+  );
+}
+
+export type GitInsights = {
+  busFactor: { atRisk: number; total: number };
+  churnBuckets: { label: string; count: number }[];
+  contributors: { name: string; commits: number }[];
+};
+
+export function fetchGitInsights(id: string): Promise<GitInsights> {
+  return getJSON<GitInsights>(`/api/repos/${id}/git-insights`);
+}
+
+export type FlowNode = { node: string; children?: FlowNode[] };
+
+export function fetchExecutionFlows(id: string): Promise<FlowNode[]> {
+  return getJSON<{ flows: FlowNode[] }>(`/api/repos/${id}/execution-flows`).then(
+    (r) => r.flows ?? [],
+  );
+}
+
 // ---- per-repo drill-down ------------------------------------------------
 
 export type RepoDetail = {
