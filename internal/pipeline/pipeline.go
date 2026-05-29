@@ -149,7 +149,8 @@ type Result struct {
 	Files          []models.FileInfo
 	Parsed         []models.ParsedFile
 	Graph          *graph.Graph
-	GitRecords     []git.PerFile
+	GitRecords       []git.PerFile
+	CommitCategories map[string]int
 	DeadCode       []deadcode.Finding
 	HealthResult   health.Result
 	Externals      []external.Record
@@ -374,12 +375,13 @@ func newCacheEntry(fi models.FileInfo, hash string, pf models.ParsedFile) (parse
 // returns nil so the run continues.
 func phaseGit(ctx context.Context, opts Options, res *Result) error {
 	ix := &git.Indexer{MaxCommits: opts.GitMaxCommits}
-	recs, err := ix.Index(ctx, opts.RepoPath)
+	result, err := ix.IndexResult(ctx, opts.RepoPath)
 	if err != nil {
 		opts.Logger.Warn("git intelligence skipped", "err", err)
 		return nil
 	}
-	res.GitRecords = recs
+	res.GitRecords = result.Files
+	res.CommitCategories = result.CommitCategories
 	return nil
 }
 
@@ -539,6 +541,9 @@ func phasePersist(ctx context.Context, opts Options, res *Result) error {
 	}
 	if err := gitstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.GitRecords); err != nil {
 		return fmt.Errorf("git_metadata: %w", err)
+	}
+	if err := gitstore.New(opts.DB).ReplaceCommitCategories(ctx, opts.RepositoryID, res.CommitCategories); err != nil {
+		return fmt.Errorf("commit_categories: %w", err)
 	}
 	if err := deadstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.DeadCode); err != nil {
 		return fmt.Errorf("dead_code: %w", err)

@@ -81,28 +81,28 @@ func TestUp_SQLite(t *testing.T) {
 	}
 
 	// Down rolls back the most-recent migration only (goose semantics), so
-	// the latest change (the settings table from 0005) should disappear
-	// while the earlier ones remain.
+	// the latest change (the commit_categories table from 0006) should
+	// disappear while the earlier ones remain.
 	if err := Down(ctx, conn, dialect); err != nil {
 		t.Fatalf("Down: %v", err)
 	}
+	var latestTbl int
+	if err := conn.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = 'commit_categories'`).Scan(&latestTbl); err != nil {
+		t.Fatalf("probe commit_categories table: %v", err)
+	}
+	if latestTbl != 0 {
+		t.Errorf("commit_categories table still present after one Down")
+	}
+	// An earlier migration's table (settings, 0005) should survive a
+	// single-step Down.
 	var settingsTbl int
 	if err := conn.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = 'settings'`).Scan(&settingsTbl); err != nil {
 		t.Fatalf("probe settings table: %v", err)
 	}
-	if settingsTbl != 0 {
-		t.Errorf("settings table still present after one Down")
-	}
-	// The previous migration's change (the tracked column from 0004) should
-	// survive a single-step Down.
-	var trackedCols int
-	if err := conn.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM pragma_table_info('repositories') WHERE name = 'tracked'`).Scan(&trackedCols); err != nil {
-		t.Fatalf("probe tracked column: %v", err)
-	}
-	if trackedCols == 0 {
-		t.Errorf("repositories.tracked should survive a single-step Down (it predates 0005)")
+	if settingsTbl == 0 {
+		t.Errorf("settings table should survive a single-step Down (it predates 0006)")
 	}
 	// The previous migration's table (parse_cache, 0003) should survive a
 	// single-step Down.

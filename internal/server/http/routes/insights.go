@@ -24,6 +24,42 @@ func MountInsights(r chi.Router, deps Deps) {
 	r.Get("/entry-points", entryPoints(deps))
 	r.Get("/git-insights", gitInsights(deps))
 	r.Get("/dependency-matrix", dependencyMatrix(deps))
+	r.Get("/commit-categories", commitCategories(deps))
+}
+
+// commitCategories returns the repo-level commit category tally (feature/fix/
+// refactor/...), for the overview's Commit Categories donut + Activity bar.
+func commitCategories(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rows, err := deps.DB.QueryContext(r.Context(),
+			`SELECT category, count FROM commit_categories
+			  WHERE repository_id = ? ORDER BY count DESC`, httpx.URLParam(r, "repoID"))
+		if err != nil {
+			httpx.Internal(w, err)
+			return
+		}
+		defer rows.Close()
+		type catDTO struct {
+			Category string `json:"category"`
+			Count    int    `json:"count"`
+		}
+		out := make([]catDTO, 0, 8)
+		total := 0
+		for rows.Next() {
+			var c catDTO
+			if err := rows.Scan(&c.Category, &c.Count); err != nil {
+				httpx.Internal(w, err)
+				return
+			}
+			out = append(out, c)
+			total += c.Count
+		}
+		if err := rows.Err(); err != nil {
+			httpx.Internal(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"categories": out, "total": total})
+	}
 }
 
 // dependencyMatrix returns a module×module import-density matrix. Modules are

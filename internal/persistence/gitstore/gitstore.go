@@ -122,6 +122,27 @@ func (s *Store) ReplaceAll(ctx context.Context, repoID string, records []git.Per
 	return nil
 }
 
+// ReplaceCommitCategories overwrites the repo's commit-category tally.
+func (s *Store) ReplaceCommitCategories(ctx context.Context, repoID string, categories map[string]int) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after commit
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM commit_categories WHERE repository_id = ?`, repoID); err != nil {
+		return err
+	}
+	for category, count := range categories {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO commit_categories (repository_id, category, count) VALUES (?, ?, ?)`,
+			repoID, category, count); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // Count returns the number of git_metadata rows for repoID.
 func (s *Store) Count(ctx context.Context, repoID string) (int, error) {
 	var n int

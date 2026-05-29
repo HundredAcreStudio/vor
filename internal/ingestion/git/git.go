@@ -88,8 +88,13 @@ type PerFile struct {
 // Index walks the repo at path and returns one PerFile per file ever
 // touched by a commit on the default branch (or HEAD).
 func (ix *Indexer) Index(ctx context.Context, repoPath string) ([]PerFile, error) {
+	files, _, err := ix.index(ctx, repoPath)
+	return files, err
+}
+
+func (ix *Indexer) index(ctx context.Context, repoPath string) ([]PerFile, map[string]int, error) {
 	if repoPath == "" {
-		return nil, errors.New("repoPath is required")
+		return nil, nil, errors.New("repoPath is required")
 	}
 
 	now := ix.Now
@@ -111,17 +116,17 @@ func (ix *Indexer) Index(ctx context.Context, repoPath string) ([]PerFile, error
 
 	repo, err := gogit.PlainOpenWithOptions(repoPath, &gogit.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
-		return nil, fmt.Errorf("open git repo at %s: %w", repoPath, err)
+		return nil, nil, fmt.Errorf("open git repo at %s: %w", repoPath, err)
 	}
 
 	head, err := repo.Head()
 	if err != nil {
-		return nil, fmt.Errorf("read HEAD: %w", err)
+		return nil, nil, fmt.Errorf("read HEAD: %w", err)
 	}
 
 	logIter, err := repo.Log(&gogit.LogOptions{From: head.Hash()})
 	if err != nil {
-		return nil, fmt.Errorf("log: %w", err)
+		return nil, nil, fmt.Errorf("log: %w", err)
 	}
 	defer logIter.Close()
 
@@ -141,11 +146,105 @@ func (ix *Indexer) Index(ctx context.Context, repoPath string) ([]PerFile, error
 		return nil
 	})
 	if walkErr != nil && !errors.Is(walkErr, errStopWalk) {
-		return nil, fmt.Errorf("walk commits: %w", walkErr)
+		return nil, nil, fmt.Errorf("walk commits: %w", walkErr)
 	}
 
 	out := walker.flush(now, hotPctl, stablePctl)
-	return out, nil
+	return out, walker.categories, nil
+}
+
+// IndexResult bundles the per-file records with repo-level aggregates.
+type IndexResult struct {
+	Files            []PerFile
+	CommitCategories map[string]int
+}
+
+// IndexResult walks history once and returns both the per-file records and
+// repo-level aggregates (commit categories). Index is a thin wrapper that
+// returns only the files, for callers that don't need the aggregates.
+func (ix *Indexer) IndexResult(ctx context.Context, repoPath string) (*IndexResult, error) {
+	files, cats, err := ix.index(ctx, repoPath)
+	if err != nil {
+		return nil, err
+	}
+	return &IndexResult{Files: files, CommitCategories: cats}, nil
+}
+
+// classifyCommit maps a commit message to a category, preferring a
+// conventional-commit "type(scope): " prefix, then falling back to keywords.
+// Returns "other" when nothing matches.
+func classifyCommit(message string) string {
+	subject := message
+	if i := strings.IndexByte(subject, '\n'); i >= 0 {
+		subject = subject[:i]
+	}
+	subject = strings.ToLower(strings.TrimSpace(subject))
+	if subject == "" {
+		return "other"
+	}
+
+	// Conventional-commit prefix: type or type(scope) before a colon.
+	if colon := strings.IndexByte(subject, ':'); colon > 0 {
+		typ := subject[:colon]
+		if p := strings.IndexByte(typ, '('); p >= 0 {
+			typ = typ[:p]
+		}
+		typ = strings.TrimSpace(strings.TrimSuffix(typ, "!"))
+		if cat, ok := conventionalType[typ]; ok {
+			return cat
+		}
+	}
+
+	// Keyword fallback.
+	switch {
+	case containsAny(subject, "revert"):
+		return "other"
+	case containsAny(subject, "bump", "upgrade", "dependenc", "dependabot", "deps"):
+		return "dependency"
+	case containsAny(subject, "fix", "bug", "patch", "hotfix"):
+		return "fix"
+	case containsAny(subject, "refactor", "rename", "cleanup", "clean up", "simplif"):
+		return "refactor"
+	case containsAny(subject, "test", "spec"):
+		return "test"
+	case containsAny(subject, "doc", "readme", "comment"):
+		return "docs"
+	case containsAny(subject, "add", "implement", "introduce", "support", "feature", "feat"):
+		return "feature"
+	case containsAny(subject, "chore", "ci", "build", "release"):
+		return "chore"
+	default:
+		return "other"
+	}
+}
+
+// conventionalType maps conventional-commit types to display categories.
+var conventionalType = map[string]string{
+	"feat":     "feature",
+	"feature":  "feature",
+	"fix":      "fix",
+	"bugfix":   "fix",
+	"refactor": "refactor",
+	"perf":     "refactor",
+	"docs":     "docs",
+	"doc":      "docs",
+	"test":     "test",
+	"tests":    "test",
+	"build":    "dependency",
+	"deps":     "dependency",
+	"chore":    "chore",
+	"ci":       "chore",
+	"style":    "chore",
+	"revert":   "other",
+}
+
+func containsAny(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
 }
 
 // errStopWalk is a sentinel for "we've hit the cap, stop without erroring".
@@ -163,6 +262,10 @@ type walker struct {
 
 	// per-commit-pair co-change accumulation: outer key = file, inner = partner
 	cochange map[string]map[string]int
+
+	// repo-level commit category tally (feature/fix/refactor/...), keyed by
+	// category name. Counts non-merge commits.
+	categories map[string]int
 }
 
 type fileAcc struct {
@@ -189,8 +292,9 @@ func newWalker(now time.Time) *walker {
 		now:      now,
 		cutoff90: now.AddDate(0, 0, -90),
 		cutoff30: now.AddDate(0, 0, -30),
-		files:    map[string]*fileAcc{},
-		cochange: map[string]map[string]int{},
+		files:      map[string]*fileAcc{},
+		cochange:   map[string]map[string]int{},
+		categories: map[string]int{},
 	}
 }
 
@@ -202,6 +306,10 @@ func (w *walker) absorb(c *object.Commit) error {
 	if c.NumParents() > 1 {
 		return nil
 	}
+
+	// Categorize every non-merge commit by its subject (before the
+	// stats-availability checks below, which can skip otherwise-real commits).
+	w.categories[classifyCommit(c.Message)]++
 
 	stats, err := c.Stats()
 	if err != nil {
