@@ -6,5 +6,6 @@ package commands
 // file changes, the HTTP server lists them for the dashboard, and the generate
 // command triggers them on demand.
 import (
+	_ "github.com/HundredAcreStudio/vor/internal/generation/embedtask"
 	_ "github.com/HundredAcreStudio/vor/internal/generation/wikitask"
 )
