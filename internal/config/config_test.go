@@ -117,6 +117,9 @@ func TestResolve_LayersDefaultsGlobalRepoEnv(t *testing.T) {
 	if cfg.Provider != "anthropic" || cfg.Port != 7337 {
 		t.Fatalf("defaults wrong: provider=%q port=%d", cfg.Provider, cfg.Port)
 	}
+	if cfg.Model != "claude-haiku-4-5" {
+		t.Errorf("default model = %q, want claude-haiku-4-5", cfg.Model)
+	}
 
 	// 2. Global settings override defaults.
 	set(t, ctx, conn, settingsstore.Global, config.KeyProvider, `"openai"`)

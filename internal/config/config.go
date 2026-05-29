@@ -141,7 +141,7 @@ func ValidateSetting(key, raw string) error {
 func Defaults() Config {
 	return Config{
 		Provider:       "anthropic",
-		Model:          "claude-3-5-sonnet-latest",
+		Model:          "claude-haiku-4-5",
 		Languages:      LanguagesConfig{},
 		Reasoning:      false,
 		Embedder:       "mock",
