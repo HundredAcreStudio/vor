@@ -178,6 +178,11 @@ export type HealthRule = {
   overrides: Record<string, string>;
 };
 
+// ModelCatalog maps a provider/embedder name to its default model and the full
+// list of selectable models. A provider may be absent (no enumerable catalog),
+// in which case the UI falls back to a free-text model input.
+export type ModelCatalog = Record<string, { default: string; models: string[] }>;
+
 export type RepoSettings = {
   effective: {
     provider: string;
@@ -193,6 +198,8 @@ export type RepoSettings = {
   global: { providerConfigured: boolean; embedderConfigured: boolean };
   providerOptions: string[];
   embedderOptions: string[];
+  providerCatalog: ModelCatalog;
+  embedderCatalog: ModelCatalog;
 };
 
 export function fetchRepoSettings(id: string): Promise<RepoSettings> {
@@ -222,6 +229,8 @@ export type GlobalSettings = {
   embedderOptions: string[];
   providerKeys: Record<string, boolean>;
   global: { providerConfigured: boolean; embedderConfigured: boolean };
+  providerCatalog: ModelCatalog;
+  embedderCatalog: ModelCatalog;
 };
 
 export function fetchGlobalSettings(): Promise<GlobalSettings> {

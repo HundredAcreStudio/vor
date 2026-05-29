@@ -3,8 +3,62 @@ import {
   fetchGlobalSettings,
   putGlobalSetting,
   type GlobalSettings,
+  type ModelCatalog,
 } from "../api.ts";
 import { AsyncView, useAsync } from "../useAsync.tsx";
+
+// ModelField renders either a catalog-driven <select> (when the chosen
+// provider/embedder has a catalog entry) or a free-text <input> fallback (when
+// it doesn't — e.g. litellm has no enumerable model list).
+function ModelField({
+  catalog,
+  provider,
+  value,
+  onChange,
+  placeholder,
+}: {
+  catalog: ModelCatalog;
+  provider: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  const entry = catalog[provider];
+  if (!entry) {
+    return (
+      <input
+        className="wiki-search"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    );
+  }
+  // Ensure the current value is selectable even if it isn't in the catalog
+  // (e.g. a previously-saved custom model).
+  const models = entry.models.includes(value) || !value
+    ? entry.models
+    : [value, ...entry.models];
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      {models.map((m) => (
+        <option key={m} value={m}>
+          {m}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// pickModel chooses the model to show after a provider changes: keep the
+// current value if that provider can serve it, otherwise fall back to the
+// provider's catalog default (or current value when there's no catalog).
+function pickModel(catalog: ModelCatalog, provider: string, current: string): string {
+  const entry = catalog[provider];
+  if (!entry) return current;
+  if (current && entry.models.includes(current)) return current;
+  return entry.default;
+}
 
 export function Settings() {
   const [nonce, setNonce] = useState(0);
@@ -30,12 +84,14 @@ function SettingsBody({
   reload: () => void;
 }) {
   const { effective, providerOptions, embedderOptions, providerKeys, global } = settings;
+  const { providerCatalog, embedderCatalog } = settings;
 
   return (
     <>
       <ProviderSection
         reload={reload}
         options={providerOptions}
+        catalog={providerCatalog}
         provider={effective.provider}
         model={effective.model}
         ready={global.providerConfigured}
@@ -43,6 +99,7 @@ function SettingsBody({
       <EmbedderSection
         reload={reload}
         options={embedderOptions}
+        catalog={embedderCatalog}
         embedder={effective.embedder}
         embeddingModel={effective.embedding_model}
         ready={global.embedderConfigured}
@@ -55,12 +112,14 @@ function SettingsBody({
 function ProviderSection({
   reload,
   options,
+  catalog,
   provider,
   model,
   ready,
 }: {
   reload: () => void;
   options: string[];
+  catalog: ModelCatalog;
   provider: string;
   model: string;
   ready: boolean;
@@ -69,6 +128,11 @@ function ProviderSection({
   const [mdl, setMdl] = useState(model);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  function changeProvider(next: string) {
+    setSel(next);
+    setMdl(pickModel(catalog, next, mdl));
+  }
 
   function save() {
     setSaving(true);
@@ -91,18 +155,19 @@ function ProviderSection({
       </p>
       <div className="rule">
         <div className="rule-match">
-          <select value={sel} onChange={(e) => setSel(e.target.value)}>
+          <select value={sel} onChange={(e) => changeProvider(e.target.value)}>
             {options.map((o) => (
               <option key={o} value={o}>
                 {o}
               </option>
             ))}
           </select>
-          <input
-            className="wiki-search"
-            placeholder="model"
+          <ModelField
+            catalog={catalog}
+            provider={sel}
             value={mdl}
-            onChange={(e) => setMdl(e.target.value)}
+            onChange={setMdl}
+            placeholder="model"
           />
         </div>
         <p className="muted small">
@@ -125,12 +190,14 @@ function ProviderSection({
 function EmbedderSection({
   reload,
   options,
+  catalog,
   embedder,
   embeddingModel,
   ready,
 }: {
   reload: () => void;
   options: string[];
+  catalog: ModelCatalog;
   embedder: string;
   embeddingModel: string;
   ready: boolean;
@@ -139,6 +206,11 @@ function EmbedderSection({
   const [mdl, setMdl] = useState(embeddingModel);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  function changeEmbedder(next: string) {
+    setSel(next);
+    setMdl(pickModel(catalog, next, mdl));
+  }
 
   function save() {
     setSaving(true);
@@ -164,18 +236,19 @@ function EmbedderSection({
       </p>
       <div className="rule">
         <div className="rule-match">
-          <select value={sel} onChange={(e) => setSel(e.target.value)}>
+          <select value={sel} onChange={(e) => changeEmbedder(e.target.value)}>
             {options.map((o) => (
               <option key={o} value={o}>
                 {o}
               </option>
             ))}
           </select>
-          <input
-            className="wiki-search"
-            placeholder="embedding model"
+          <ModelField
+            catalog={catalog}
+            provider={sel}
             value={mdl}
-            onChange={(e) => setMdl(e.target.value)}
+            onChange={setMdl}
+            placeholder="embedding model"
           />
         </div>
         <p className="muted small">

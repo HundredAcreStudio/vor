@@ -8,6 +8,7 @@ import {
   putRepoSetting,
   setTask,
   type HealthRule,
+  type ModelCatalog,
   type RepoSettings,
   type TaskInfo,
   type TasksResponse,
@@ -284,6 +285,7 @@ function GenerationSection({
   reload: () => void;
 }) {
   const { global, providerOptions, embedderOptions, effective, overridden } = settings;
+  const { providerCatalog, embedderCatalog } = settings;
 
   if (!global.providerConfigured && !global.embedderConfigured) {
     return (
@@ -311,6 +313,7 @@ function GenerationSection({
           label="Provider"
           selectKey="provider"
           selectOptions={providerOptions}
+          catalog={providerCatalog}
           selectValue={overridden["provider"] ? effective.provider : ""}
           selectOverridden={!!overridden["provider"]}
           modelKey="model"
@@ -326,6 +329,7 @@ function GenerationSection({
           label="Embedder"
           selectKey="embedder"
           selectOptions={embedderOptions}
+          catalog={embedderCatalog}
           selectValue={overridden["embedder"] ? effective.embedder : ""}
           selectOverridden={!!overridden["embedder"]}
           modelKey="embedding_model"
@@ -344,6 +348,7 @@ function OverrideGroup({
   label,
   selectKey,
   selectOptions,
+  catalog,
   selectValue,
   selectOverridden,
   modelKey,
@@ -356,6 +361,7 @@ function OverrideGroup({
   label: string;
   selectKey: string;
   selectOptions: string[];
+  catalog: ModelCatalog;
   selectValue: string;
   selectOverridden: boolean;
   modelKey: string;
@@ -368,6 +374,31 @@ function OverrideGroup({
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const customised = selectOverridden || modelOverridden;
+  const inherit = sel === "";
+  const entry = catalog[sel];
+
+  // Changing the provider repopulates the model: "Inherit global" clears the
+  // model override; a specific provider resets to its catalog default (keeping
+  // the current model if that provider already serves it). Providers without a
+  // catalog entry fall back to free-text.
+  function changeProvider(next: string) {
+    setSel(next);
+    if (next === "") {
+      setModel("");
+      return;
+    }
+    const nextEntry = catalog[next];
+    if (!nextEntry) return; // free-text: leave whatever the user typed
+    setModel(model && nextEntry.models.includes(model) ? model : nextEntry.default);
+  }
+
+  // Models selectable for the chosen provider, always including the current
+  // value so a previously-saved custom model stays visible.
+  const models = entry
+    ? entry.models.includes(model) || !model
+      ? entry.models
+      : [model, ...entry.models]
+    : [];
 
   function persist(key: string, value: string): Promise<void> {
     return value.trim()
@@ -409,7 +440,7 @@ function OverrideGroup({
         <span className="spacer" />
       </div>
       <div className="rule-match">
-        <select value={sel} onChange={(e) => setSel(e.target.value)}>
+        <select value={sel} onChange={(e) => changeProvider(e.target.value)}>
           <option value="">Inherit global</option>
           {selectOptions.map((o) => (
             <option key={o} value={o}>
@@ -417,12 +448,30 @@ function OverrideGroup({
             </option>
           ))}
         </select>
-        <input
-          className="wiki-search"
-          placeholder={modelPlaceholder}
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-        />
+        {inherit ? (
+          <input
+            className="wiki-search"
+            placeholder="Inherits global model"
+            value=""
+            disabled
+            onChange={() => {}}
+          />
+        ) : entry ? (
+          <select value={model} onChange={(e) => setModel(e.target.value)}>
+            {models.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            className="wiki-search"
+            placeholder={modelPlaceholder}
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+          />
+        )}
       </div>
       <div className="settings-actions">
         <span className="spacer" />
