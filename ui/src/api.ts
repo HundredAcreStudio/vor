@@ -415,6 +415,25 @@ export function fetchHealthHistory(id: string): Promise<HealthSnapshot[]> {
   );
 }
 
+export type FileDelta = { path: string; before: number; after: number; delta: number };
+
+export type HealthDiff = {
+  hasBaseline: boolean;
+  baselineCommit: string;
+  baselineBranch: string;
+  baselineAvg: number;
+  currentAvg: number;
+  delta: number;
+  regressions: FileDelta[];
+  improvements: FileDelta[];
+  newFiles: string[];
+  removedFiles: string[];
+};
+
+export function fetchHealthDiff(id: string): Promise<HealthDiff> {
+  return getJSON<HealthDiff>(`/api/repos/${id}/health/diff`);
+}
+
 export type Hotspot = {
   path: string;
   churnPercentile: number;

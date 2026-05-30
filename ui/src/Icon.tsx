@@ -16,6 +16,8 @@ import lightbulb from "@material-symbols/svg-400/outlined/lightbulb.svg?raw";
 import local_fire_department from "@material-symbols/svg-400/outlined/local_fire_department.svg?raw";
 import settings from "@material-symbols/svg-400/outlined/settings.svg?raw";
 import shield from "@material-symbols/svg-400/outlined/shield.svg?raw";
+import trending_down from "@material-symbols/svg-400/outlined/trending_down.svg?raw";
+import trending_up from "@material-symbols/svg-400/outlined/trending_up.svg?raw";
 import vital_signs from "@material-symbols/svg-400/outlined/vital_signs.svg?raw";
 import widgets from "@material-symbols/svg-400/outlined/widgets.svg?raw";
 
@@ -38,6 +40,8 @@ const ICONS: Record<string, string> = {
   local_fire_department,
   settings,
   shield,
+  trending_down,
+  trending_up,
   vital_signs,
   widgets,
 };

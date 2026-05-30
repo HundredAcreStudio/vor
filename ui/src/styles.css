@@ -1428,6 +1428,60 @@ select {
 .trend-panel {
   margin-top: 16px;
 }
+.diff-panel {
+  margin-top: 16px;
+}
+.diff-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.diff-summary b {
+  font-weight: 600;
+}
+.diff-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+@media (max-width: 640px) {
+  .diff-cols {
+    grid-template-columns: 1fr;
+  }
+}
+.diff-col-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.diff-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.diff-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+.diff-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diff-nums {
+  flex: none;
+  font-size: 12px;
+}
 .trend-svg {
   display: block;
 }
