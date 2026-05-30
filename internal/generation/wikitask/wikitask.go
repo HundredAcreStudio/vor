@@ -50,6 +50,9 @@ func (Task) DefaultEnabled() bool { return true }
 // embedding generation), so on a single index pass pages exist to be embedded.
 func (Task) Order() int { return 10 }
 
+// Requires an LLM provider — the task self-skips without one.
+func (Task) Requires() []string { return []string{tasks.RequiresProvider} }
+
 // Run generates wiki pages for the repo. It skips (without error) when no LLM
 // provider is configured. Generation is incremental — the runner skips pages
 // whose source hash is unchanged — so running after every index is cheap.

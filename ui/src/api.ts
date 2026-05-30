@@ -263,11 +263,13 @@ export type TaskInfo = {
   default: boolean;
   enabled: boolean;
   overridden: boolean;
+  requires: string[];
 };
 
 export type TasksResponse = {
   tasks: TaskInfo[];
   providerConfigured: boolean;
+  embedderConfigured: boolean;
 };
 
 export function fetchTasks(id: string): Promise<TasksResponse> {

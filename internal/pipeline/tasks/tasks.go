@@ -39,6 +39,26 @@ type Task interface {
 	Run(ctx context.Context, tc Context) (Result, error)
 }
 
+// Requirement labels a capability a task needs to do real work. A task that
+// requires one self-skips at Run time when it isn't configured; the dashboard
+// uses the same labels to explain why a task won't run yet.
+const (
+	RequiresProvider = "provider" // an LLM provider (wiki generation, etc.)
+	RequiresEmbedder = "embedder" // an embedding model (semantic embeddings)
+)
+
+// Requirer is an optional interface a Task may implement to declare what it
+// needs to run. Tasks that don't implement it are assumed to require nothing.
+type Requirer interface{ Requires() []string }
+
+// RequirementsOf returns a task's declared requirements, or nil.
+func RequirementsOf(t Task) []string {
+	if r, ok := t.(Requirer); ok {
+		return r.Requires()
+	}
+	return nil
+}
+
 // Ordered is an optional interface a Task may implement to control run order.
 // Tasks run in ascending Order; ties (and tasks that don't implement it,
 // treated as defaultOrder) break by ID. Use it when one task's output feeds

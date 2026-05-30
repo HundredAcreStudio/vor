@@ -29,12 +29,13 @@ func MountTasks(r chi.Router, deps Deps) {
 }
 
 type taskDTO struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Default     bool   `json:"default"`
-	Enabled     bool   `json:"enabled"`    // effective, after overrides
-	Overridden  bool   `json:"overridden"` // explicitly set at this repo's scope
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Default     bool     `json:"default"`
+	Enabled     bool     `json:"enabled"`    // effective, after overrides
+	Overridden  bool     `json:"overridden"` // explicitly set at this repo's scope
+	Requires    []string `json:"requires"`   // capabilities the task needs (provider/embedder)
 }
 
 func listTasks(deps Deps) http.HandlerFunc {
@@ -54,6 +55,7 @@ func listTasks(deps Deps) http.HandlerFunc {
 		}
 
 		provider, _ := providerfactory.Optional(cfg)
+		embedder := providerfactory.OptionalEmbedder(cfg)
 		out := make([]taskDTO, 0)
 		for _, t := range tasks.Registered() {
 			_, overridden := repoOverrides[t.ID()]
@@ -64,11 +66,13 @@ func listTasks(deps Deps) http.HandlerFunc {
 				Default:     t.DefaultEnabled(),
 				Enabled:     tasks.Enabled(t, cfg.Tasks),
 				Overridden:  overridden,
+				Requires:    tasks.RequirementsOf(t),
 			})
 		}
 		httpx.JSON(w, http.StatusOK, map[string]any{
 			"tasks":              out,
 			"providerConfigured": provider != nil,
+			"embedderConfigured": embedder != nil,
 		})
 	}
 }

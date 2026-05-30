@@ -72,6 +72,9 @@ func TestTask_Metadata(t *testing.T) {
 	if tk.Order() <= 10 {
 		t.Errorf("Order = %d, want > 10 (after wiki generation)", tk.Order())
 	}
+	if req := tk.Requires(); len(req) != 1 || req[0] != tasks.RequiresEmbedder {
+		t.Errorf("Requires = %v, want [embedder]", req)
+	}
 }
 
 func TestTask_RegisteredViaInit(t *testing.T) {

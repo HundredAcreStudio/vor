@@ -18,6 +18,9 @@ func TestTask_Metadata(t *testing.T) {
 	if !tk.DefaultEnabled() {
 		t.Error("wiki generation should be enabled by default")
 	}
+	if req := tk.Requires(); len(req) != 1 || req[0] != tasks.RequiresProvider {
+		t.Errorf("Requires = %v, want [provider]", req)
+	}
 }
 
 func TestTask_RegisteredViaInit(t *testing.T) {

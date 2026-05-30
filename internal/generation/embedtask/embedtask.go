@@ -55,6 +55,9 @@ func (Task) DefaultEnabled() bool { return true }
 // available to embed in the same pass.
 func (Task) Order() int { return 20 }
 
+// Requires an embedder — the task self-skips without one.
+func (Task) Requires() []string { return []string{tasks.RequiresEmbedder} }
+
 // Run embeds every wiki page whose text changed since the last run.
 func (Task) Run(ctx context.Context, tc tasks.Context) (tasks.Result, error) {
 	if tc.Embedder == nil {

@@ -238,8 +238,27 @@ function TasksBody({
       .finally(() => setBusy(null));
   }
 
-  // Wiki generation (and similar LLM tasks) need a provider to actually run.
-  const needsProvider = (id: string) => id === "wiki_generation";
+  // A requirement is met when its corresponding capability is configured.
+  // Drive everything off `t.requires` so new tasks/requirements work without
+  // any task-ID special-casing.
+  const REQUIREMENT_LABELS: Record<string, string> = {
+    provider: "an LLM provider",
+    embedder: "an embedder",
+  };
+  const configured: Record<string, boolean> = {
+    provider: data.providerConfigured,
+    embedder: data.embedderConfigured,
+  };
+  function unmetHint(req: string[]): string | null {
+    const labels = req
+      .filter((r) => !configured[r])
+      .map((r) => REQUIREMENT_LABELS[r] ?? r);
+    if (labels.length === 0) return null;
+    const joined =
+      labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+    const them = labels.length === 1 ? "one" : "them";
+    return `Needs ${joined} — configure ${them} in Settings; this task is skipped until then.`;
+  }
 
   return (
     <>
@@ -261,12 +280,10 @@ function TasksBody({
               <span className="spacer" />
             </div>
             <p className="muted small">{t.description}</p>
-            {!data.providerConfigured && needsProvider(t.id) && (
-              <p className="muted small">
-                No LLM provider configured — this task will be skipped until one is
-                set up.
-              </p>
-            )}
+            {(() => {
+              const hint = unmetHint(t.requires);
+              return hint ? <p className="muted small">{hint}</p> : null;
+            })()}
           </div>
         ))}
       </div>
