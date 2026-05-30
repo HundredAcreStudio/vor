@@ -101,6 +101,23 @@ export function fetchGitInsights(id: string): Promise<GitInsights> {
   return getJSON<GitInsights>(`/api/repos/${id}/git-insights`);
 }
 
+export type RiskData = {
+  counts: {
+    hotspots: number;
+    silos: number;
+    deadCode: number;
+    staleDecisions: number;
+    securityHigh: number;
+  };
+  busFactor: BusFactor;
+  churnBuckets: { label: string; count: number }[];
+  topContributors: { name: string; commits: number }[];
+};
+
+export function fetchRisk(id: string): Promise<RiskData> {
+  return getJSON<RiskData>(`/api/repos/${id}/risk`);
+}
+
 export type CommitCategories = {
   categories: { category: string; count: number }[];
   total: number;

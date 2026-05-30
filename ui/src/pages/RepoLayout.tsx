@@ -8,6 +8,7 @@ const REPO_NAV: { to: string; label: string; soon?: boolean }[] = [
   { to: "wiki", label: "Wiki" },
   { to: "search", label: "Search" },
   { to: "risk", label: "Risk" },
+  { to: "health", label: "Health" },
   { to: "hotspots", label: "Hotspots" },
   { to: "dead-code", label: "Dead code" },
   { to: "graph", label: "Graph" },

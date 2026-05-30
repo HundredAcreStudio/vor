@@ -8,6 +8,7 @@ import { RepoOverview } from "./pages/repo/Overview.tsx";
 import { Wiki } from "./pages/repo/Wiki.tsx";
 import { Search } from "./pages/repo/Search.tsx";
 import { RepoHealth } from "./pages/repo/Health.tsx";
+import { RepoRisk } from "./pages/repo/Risk.tsx";
 import { RepoHotspots } from "./pages/repo/Hotspots.tsx";
 import { Graph } from "./pages/repo/Graph.tsx";
 import { Symbols } from "./pages/repo/Symbols.tsx";
@@ -35,7 +36,8 @@ createRoot(document.getElementById("root")!).render(
             <Route path="overview" element={<RepoOverview />} />
             <Route path="wiki" element={<Wiki />} />
             <Route path="search" element={<Search />} />
-            <Route path="risk" element={<RepoHealth />} />
+            <Route path="risk" element={<RepoRisk />} />
+            <Route path="health" element={<RepoHealth />} />
             <Route path="hotspots" element={<RepoHotspots />} />
             <Route path="graph" element={<Graph />} />
             <Route path="symbols" element={<Symbols />} />

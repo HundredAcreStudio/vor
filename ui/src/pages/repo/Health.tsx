@@ -10,7 +10,7 @@ export function RepoHealth() {
   return (
     <>
       <header className="page-header">
-        <h1>Risk</h1>
+        <h1>Health</h1>
       </header>
 
       <AsyncView state={summary}>
