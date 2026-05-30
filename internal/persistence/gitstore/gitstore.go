@@ -151,6 +151,35 @@ func (s *Store) Count(ctx context.Context, repoID string) (int, error) {
 	return n, err
 }
 
+// LoadAll reconstructs the per-file git records needed by downstream phases
+// (path, hotspot flag, co-change partners) from the stored git_metadata. Used
+// to skip the commit-history walk when HEAD is unchanged: the git signals are
+// commit-boundary, so the stored rows are still valid. Only the fields the
+// health phase consumes are populated.
+func (s *Store) LoadAll(ctx context.Context, repoID string) ([]git.PerFile, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT file_path, is_hotspot, COALESCE(co_change_partners_json, '')
+		 FROM git_metadata WHERE repository_id = ?`, repoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []git.PerFile
+	for rows.Next() {
+		var path, coJSON string
+		var hot int
+		if err := rows.Scan(&path, &hot, &coJSON); err != nil {
+			return nil, err
+		}
+		pf := git.PerFile{Path: path, IsHotspot: hot != 0}
+		if coJSON != "" {
+			_ = json.Unmarshal([]byte(coJSON), &pf.CoChangePartners)
+		}
+		out = append(out, pf)
+	}
+	return out, rows.Err()
+}
+
 // Hotspots returns the file paths flagged as hotspots, ordered by churn
 // percentile descending. Limit caps the result.
 func (s *Store) Hotspots(ctx context.Context, repoID string, limit int) ([]string, error) {

@@ -152,6 +152,10 @@ type Result struct {
 	Graph            *graph.Graph
 	GitRecords       []git.PerFile
 	CommitCategories map[string]int
+	// GitReused is set when the git phase skipped the history walk because
+	// HEAD was unchanged since the last index (commit-boundary task), reusing
+	// the stored git_metadata. Persist then leaves the git tables untouched.
+	GitReused bool
 	DeadCode         []deadcode.Finding
 	HealthResult     health.Result
 	Externals        []external.Record
@@ -375,6 +379,19 @@ func newCacheEntry(fi models.FileInfo, hash string, pf models.ParsedFile) (parse
 // phaseGit is best-effort — not all dirs are git repos. A failure logs and
 // returns nil so the run continues.
 func phaseGit(ctx context.Context, opts Options, res *Result) error {
+	// Git signals are a commit-boundary task: they only change when HEAD
+	// moves. When the current HEAD matches the commit we last indexed, skip
+	// the (expensive) history walk and reuse the stored git_metadata — the
+	// common case for working-tree edits that don't create a commit.
+	if sha, _, err := git.ResolveHead(opts.RepoPath); err == nil && sha != "" && sha == storedHeadCommit(ctx, opts) {
+		if recs, lerr := gitstore.New(opts.DB).LoadAll(ctx, opts.RepositoryID); lerr == nil && len(recs) > 0 {
+			res.GitRecords = recs
+			res.GitReused = true
+			opts.Logger.Info("git: HEAD unchanged, reusing stored metadata", "commit", short(sha))
+			return nil
+		}
+	}
+
 	ix := &git.Indexer{MaxCommits: opts.GitMaxCommits}
 	result, err := ix.IndexResult(ctx, opts.RepoPath)
 	if err != nil {
@@ -384,6 +401,25 @@ func phaseGit(ctx context.Context, opts Options, res *Result) error {
 	res.GitRecords = result.Files
 	res.CommitCategories = result.CommitCategories
 	return nil
+}
+
+// storedHeadCommit returns the commit the repo was last indexed at (empty on
+// first index or any lookup error).
+func storedHeadCommit(ctx context.Context, opts Options) string {
+	if opts.DB == nil || opts.RepositoryID == "" {
+		return ""
+	}
+	if r, err := repos.New(opts.DB).Get(ctx, opts.RepositoryID); err == nil && r != nil {
+		return r.HeadCommit
+	}
+	return ""
+}
+
+func short(sha string) string {
+	if len(sha) > 10 {
+		return sha[:10]
+	}
+	return sha
 }
 
 // phaseGraph builds the dependency graph using the per-language resolver
@@ -541,11 +577,15 @@ func phasePersist(ctx context.Context, opts Options, res *Result) error {
 	if err := graphstore.New(opts.DB).ReplaceGraph(ctx, opts.RepositoryID, res.Graph); err != nil {
 		return fmt.Errorf("graph: %w", err)
 	}
-	if err := gitstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.GitRecords); err != nil {
-		return fmt.Errorf("git_metadata: %w", err)
-	}
-	if err := gitstore.New(opts.DB).ReplaceCommitCategories(ctx, opts.RepositoryID, res.CommitCategories); err != nil {
-		return fmt.Errorf("commit_categories: %w", err)
+	// Skip the git tables when the phase reused stored metadata (HEAD
+	// unchanged) — re-writing identical rows is pure churn.
+	if !res.GitReused {
+		if err := gitstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.GitRecords); err != nil {
+			return fmt.Errorf("git_metadata: %w", err)
+		}
+		if err := gitstore.New(opts.DB).ReplaceCommitCategories(ctx, opts.RepositoryID, res.CommitCategories); err != nil {
+			return fmt.Errorf("commit_categories: %w", err)
+		}
 	}
 	if err := deadstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.DeadCode); err != nil {
 		return fmt.Errorf("dead_code: %w", err)
