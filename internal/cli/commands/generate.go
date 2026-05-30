@@ -136,12 +136,14 @@ func dryRunNote(dryRun bool, n int) string {
 func parsePageKinds(in []string) ([]gmodels.PageKind, error) {
 	if len(in) == 0 {
 		return []gmodels.PageKind{
+			gmodels.PageKindArchitecture,
 			gmodels.PageKindFileOverview,
 			gmodels.PageKindDirectoryOverview,
 			gmodels.PageKindSymbolDetail,
 		}, nil
 	}
 	valid := map[string]gmodels.PageKind{
+		string(gmodels.PageKindArchitecture):      gmodels.PageKindArchitecture,
 		string(gmodels.PageKindFileOverview):      gmodels.PageKindFileOverview,
 		string(gmodels.PageKindDirectoryOverview): gmodels.PageKindDirectoryOverview,
 		string(gmodels.PageKindSymbolDetail):      gmodels.PageKindSymbolDetail,
@@ -150,7 +152,7 @@ func parsePageKinds(in []string) ([]gmodels.PageKind, error) {
 	for _, s := range in {
 		k, ok := valid[strings.TrimSpace(s)]
 		if !ok {
-			return nil, fmt.Errorf("unknown page kind %q (valid: file_overview, directory_overview, symbol_detail)", s)
+			return nil, fmt.Errorf("unknown page kind %q (valid: architecture, file_overview, directory_overview, symbol_detail)", s)
 		}
 		out = append(out, k)
 	}

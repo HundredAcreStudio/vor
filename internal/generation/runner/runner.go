@@ -128,6 +128,8 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 			err = runDirectoryOverviews(ctx, opts, store, &summary)
 		case models.PageKindSymbolDetail:
 			err = runSymbolDetails(ctx, opts, store, &summary)
+		case models.PageKindArchitecture:
+			err = runArchitecture(ctx, opts, store, &summary)
 		default:
 			err = fmt.Errorf("runner: unsupported kind %q", kind)
 		}

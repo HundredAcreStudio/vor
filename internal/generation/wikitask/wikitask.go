@@ -27,6 +27,7 @@ const TaskID = "wiki_generation"
 // architecture kind is defined in the models but not yet implemented, so it is
 // intentionally excluded.
 var defaultKinds = []gmodels.PageKind{
+	gmodels.PageKindArchitecture, // repo-wide overview (the wiki's landing page)
 	gmodels.PageKindFileOverview,
 	gmodels.PageKindDirectoryOverview,
 	gmodels.PageKindSymbolDetail,
