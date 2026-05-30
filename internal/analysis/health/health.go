@@ -221,57 +221,124 @@ type Result struct {
 // Analyze runs all biomarkers over the parsed files and returns Findings +
 // per-file aggregates.
 func (a *Analyzer) Analyze(files []models.ParsedFile) Result {
-	thresholds := a.Thresholds
-	if thresholds == (Thresholds{}) {
-		thresholds = DefaultThresholds()
-	}
-
-	var findings []Finding
-	metrics := make([]FileMetric, 0, len(files))
-
-	// retain drops findings suppressed by the configured exclude rules
-	// (config health_rules). Applied before fileMetric sums impact, so an
-	// excluded finding doesn't drag the file's score either.
-	excludes := compileExcludes(a.Exclude)
-	retain := func(fs []Finding) []Finding {
-		if len(excludes) == 0 {
-			return fs
-		}
-		kept := fs[:0:0]
-		for _, f := range fs {
-			if !excluded(excludes, f.FilePath, f.BiomarkerType) {
-				kept = append(kept, f)
-			}
-		}
-		return kept
-	}
-
-	// Pre-compute "files that have a paired test file" so untested_hotspot
-	// can skip well-covered hotspots.
+	t := a.resolveThresholds()
 	testPairs := buildTestPairs(files)
 
-	// hidden_coupling: one finding per unique unordered (a, b) pair. Track
-	// emitted pairs so we don't double-flag from both sides.
-	emittedPairs := map[string]bool{}
-	findings = append(findings, retain(a.computeHiddenCoupling(files, emittedPairs))...)
-
-	// duplication: cross-file Rabin-Karp on normalized line windows.
-	// Skipped silently when SourceLoader is nil.
-	findings = append(findings, retain(a.computeDuplication(files))...)
-
+	findings := a.globalFindings(files, testPairs, t)
 	for _, pf := range files {
-		findings = append(findings, retain(a.fileFindings(pf, testPairs, thresholds))...)
+		findings = append(findings, a.localFindings(pf, t)...)
+	}
+	findings = a.applyExcludes(findings)
+	return Result{Findings: findings, FileMetrics: a.fileMetrics(files, testPairs, findings)}
+}
 
-		methodsByParent := methodCounts(pf)
-		callsByCaller := groupCallsByCaller(pf)
-		for _, sym := range pf.Symbols {
-			findings = append(findings, retain(a.symbolFindings(pf, sym, methodsByParent, callsByCaller, thresholds))...)
+// fileLocalBiomarkers are the biomarkers whose findings depend only on a single
+// file's own parse (no git, no graph, no cross-file comparison). They can be
+// recomputed per changed file independently. The rest — duplication,
+// hidden_coupling, untested_hotspot, shotgun_surgery — couple files together or
+// depend on commit-boundary git data, so they're recomputed globally.
+var fileLocalBiomarkers = map[string]bool{
+	BiomarkerHighComplexity:    true,
+	BiomarkerLongFunction:      true,
+	BiomarkerDeepNesting:       true,
+	BiomarkerGodClass:          true,
+	BiomarkerLongParameterList: true,
+	BiomarkerFeatureEnvy:       true,
+	BiomarkerBrainMethod:       true,
+}
+
+// IsFileLocalBiomarker reports whether a biomarker is recomputed per-file (vs
+// globally) by AnalyzeIncremental.
+func IsFileLocalBiomarker(biomarker string) bool { return fileLocalBiomarkers[biomarker] }
+
+// AnalyzeIncremental produces the same Result as Analyze(files) but reuses the
+// prior run's file-local findings for files NOT in `changed`, only re-running
+// the per-file biomarkers for changed files. Global (cross-file / git-derived)
+// findings are always recomputed since one file's change can shift them
+// anywhere. Metrics are recomputed from the merged finding set.
+//
+// Invariant (covered by tests): when `changed` is exactly the set of files
+// whose parse differs from the run that produced `prior`, the result equals
+// Analyze(files). Exclude rules are re-applied to reused findings; a change to
+// the exclude rules themselves should trigger a full Analyze.
+func (a *Analyzer) AnalyzeIncremental(files []models.ParsedFile, changed map[string]bool, prior Result) Result {
+	t := a.resolveThresholds()
+	testPairs := buildTestPairs(files)
+
+	findings := a.globalFindings(files, testPairs, t)
+
+	priorLocal := map[string][]Finding{}
+	for _, f := range prior.Findings {
+		if fileLocalBiomarkers[f.BiomarkerType] {
+			priorLocal[f.FilePath] = append(priorLocal[f.FilePath], f)
 		}
+	}
+	for _, pf := range files {
+		if path := pf.FileInfo.Path; changed[path] {
+			findings = append(findings, a.localFindings(pf, t)...)
+		} else {
+			findings = append(findings, priorLocal[path]...)
+		}
+	}
+	findings = a.applyExcludes(findings)
+	return Result{Findings: findings, FileMetrics: a.fileMetrics(files, testPairs, findings)}
+}
 
+func (a *Analyzer) resolveThresholds() Thresholds {
+	if a.Thresholds == (Thresholds{}) {
+		return DefaultThresholds()
+	}
+	return a.Thresholds
+}
+
+// globalFindings computes the cross-file / git-derived biomarkers over the
+// whole file set: hidden_coupling, duplication, and the per-file git findings
+// (untested_hotspot, shotgun_surgery).
+func (a *Analyzer) globalFindings(files []models.ParsedFile, testPairs map[string]bool, t Thresholds) []Finding {
+	emittedPairs := map[string]bool{}
+	out := a.computeHiddenCoupling(files, emittedPairs)
+	out = append(out, a.computeDuplication(files)...)
+	for _, pf := range files {
+		out = append(out, a.fileFindings(pf, testPairs, t)...)
+	}
+	return out
+}
+
+// localFindings computes the file-local per-symbol biomarkers for one file.
+func (a *Analyzer) localFindings(pf models.ParsedFile, t Thresholds) []Finding {
+	methodsByParent := methodCounts(pf)
+	callsByCaller := groupCallsByCaller(pf)
+	var out []Finding
+	for _, sym := range pf.Symbols {
+		out = append(out, a.symbolFindings(pf, sym, methodsByParent, callsByCaller, t)...)
+	}
+	return out
+}
+
+// applyExcludes drops findings suppressed by the configured exclude rules
+// (config health_rules), so they don't surface or drag a file's score.
+func (a *Analyzer) applyExcludes(findings []Finding) []Finding {
+	excludes := compileExcludes(a.Exclude)
+	if len(excludes) == 0 {
+		return findings
+	}
+	kept := findings[:0:0]
+	for _, f := range findings {
+		if !excluded(excludes, f.FilePath, f.BiomarkerType) {
+			kept = append(kept, f)
+		}
+	}
+	return kept
+}
+
+// fileMetrics computes the per-file aggregate metric for every file from the
+// final (excluded-filtered) finding set.
+func (a *Analyzer) fileMetrics(files []models.ParsedFile, testPairs map[string]bool, findings []Finding) []FileMetric {
+	metrics := make([]FileMetric, 0, len(files))
+	for _, pf := range files {
 		metrics = append(metrics, fileMetric(pf, testPairs[pf.FileInfo.Path], findings))
 	}
-
-	return Result{Findings: findings, FileMetrics: metrics}
+	return metrics
 }
 
 // fileFindings runs the per-file biomarkers (untested_hotspot, shotgun_surgery).
