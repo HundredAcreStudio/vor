@@ -51,6 +51,48 @@ func TestCompute_NoBaseline(t *testing.T) {
 	}
 }
 
+func TestCompareBranches(t *testing.T) {
+	ctx, conn, repoID := setup(t)
+	store := snapshotstore.New(conn)
+
+	// main snapshot.
+	if err := store.Insert(ctx, snapshotstore.Snapshot{
+		RepositoryID: repoID, CommitSHA: "main1", Branch: "main", AverageHealth: 7.0,
+		PerFileScores: map[string]float64{"a.go": 8, "b.go": 6},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// feature snapshot: a.go worse, c.go added, b.go gone.
+	if err := store.Insert(ctx, snapshotstore.Snapshot{
+		RepositoryID: repoID, CommitSHA: "feat1", Branch: "feature", AverageHealth: 6.0,
+		PerFileScores: map[string]float64{"a.go": 5, "c.go": 7},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	d, err := healthdiff.CompareBranches(ctx, conn, repoID, "main", "feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.HasBaseline || d.BaselineBranch != "main" || d.BaselineCommit != "main1" {
+		t.Fatalf("baseline meta wrong: %+v", d)
+	}
+	if len(d.Regressions) != 1 || d.Regressions[0].Path != "a.go" || d.Regressions[0].Delta != -3 {
+		t.Errorf("regressions = %+v, want [a.go -3]", d.Regressions)
+	}
+	if len(d.NewFiles) != 1 || d.NewFiles[0] != "c.go" {
+		t.Errorf("newFiles = %v, want [c.go]", d.NewFiles)
+	}
+	if len(d.RemovedFiles) != 1 || d.RemovedFiles[0] != "b.go" {
+		t.Errorf("removedFiles = %v, want [b.go]", d.RemovedFiles)
+	}
+
+	// Unknown branch → no baseline.
+	if missing, _ := healthdiff.CompareBranches(ctx, conn, repoID, "main", "nope"); missing.HasBaseline {
+		t.Error("comparing against a branch with no snapshot should not have a baseline")
+	}
+}
+
 func TestCompute_RegressionsImprovementsNewRemoved(t *testing.T) {
 	ctx, conn, repoID := setup(t)
 

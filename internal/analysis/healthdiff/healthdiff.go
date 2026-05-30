@@ -60,10 +60,45 @@ func Compute(ctx context.Context, db *sql.DB, repoID string) (Diff, error) {
 	d.BaselineBranch = baseline.Branch
 	d.BaselineAvg = baseline.AverageHealth
 	d.Delta = round2(d.CurrentAvg - d.BaselineAvg)
+	fillFileDeltas(&d, baseline.PerFileScores, current)
+	return d, nil
+}
 
-	base := baseline.PerFileScores
+// CompareBranches diffs the latest health snapshot of headBranch against the
+// latest snapshot of baseBranch (e.g. a feature branch vs main). HasBaseline is
+// false when either branch has no snapshot. The "Baseline" side is baseBranch;
+// "Current" is headBranch.
+func CompareBranches(ctx context.Context, db *sql.DB, repoID, baseBranch, headBranch string) (Diff, error) {
+	store := snapshotstore.New(db)
+	base, err := store.LatestForBranch(ctx, repoID, baseBranch)
+	if err != nil {
+		return Diff{}, err
+	}
+	head, err := store.LatestForBranch(ctx, repoID, headBranch)
+	if err != nil {
+		return Diff{}, err
+	}
+	if base == nil || head == nil {
+		return Diff{}, nil // one side hasn't been indexed yet
+	}
+	d := Diff{
+		HasBaseline:    true,
+		BaselineCommit: base.CommitSHA,
+		BaselineBranch: baseBranch,
+		BaselineAvg:    base.AverageHealth,
+		CurrentAvg:     head.AverageHealth,
+		Delta:          round2(head.AverageHealth - base.AverageHealth),
+	}
+	fillFileDeltas(&d, base.PerFileScores, head.PerFileScores)
+	return d, nil
+}
+
+// fillFileDeltas categorizes per-file changes from base→head scores into the
+// regressions/improvements/new/removed buckets (sorted), the shared core of
+// Compute and CompareBranches.
+func fillFileDeltas(d *Diff, base, head map[string]float64) {
 	const eps = 0.01
-	for path, after := range current {
+	for path, after := range head {
 		before, ok := base[path]
 		if !ok {
 			d.NewFiles = append(d.NewFiles, path)
@@ -77,17 +112,14 @@ func Compute(ctx context.Context, db *sql.DB, repoID string) (Diff, error) {
 		}
 	}
 	for path := range base {
-		if _, ok := current[path]; !ok {
+		if _, ok := head[path]; !ok {
 			d.RemovedFiles = append(d.RemovedFiles, path)
 		}
 	}
-
-	// Worst regressions and biggest improvements first; stable file ordering.
 	sort.Slice(d.Regressions, func(i, j int) bool { return d.Regressions[i].Delta < d.Regressions[j].Delta })
 	sort.Slice(d.Improvements, func(i, j int) bool { return d.Improvements[i].Delta > d.Improvements[j].Delta })
 	sort.Strings(d.NewFiles)
 	sort.Strings(d.RemovedFiles)
-	return d, nil
 }
 
 func mean(m map[string]float64) float64 {

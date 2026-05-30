@@ -24,6 +24,42 @@ func MountHealth(r chi.Router, deps Deps) {
 	r.Get("/health/files", healthFiles(deps))
 	r.Get("/health/history", healthHistory(deps))
 	r.Get("/health/diff", healthDiff(deps))
+	r.Get("/health/branches", healthBranches(deps))
+	r.Get("/health/compare", healthCompare(deps))
+}
+
+// healthBranches lists the branches that have health snapshots (for a
+// compare picker).
+func healthBranches(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		repoID := httpx.URLParam(r, "repoID")
+		branches, err := snapshotstore.New(deps.DB).Branches(r.Context(), repoID)
+		if err != nil {
+			httpx.Internal(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"branches": branches})
+	}
+}
+
+// healthCompare diffs the latest snapshot of ?head against the latest snapshot
+// of ?base (e.g. a feature branch vs main).
+func healthCompare(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		repoID := httpx.URLParam(r, "repoID")
+		base := r.URL.Query().Get("base")
+		head := r.URL.Query().Get("head")
+		if base == "" || head == "" {
+			httpx.BadRequest(w, "both 'base' and 'head' branch query params are required")
+			return
+		}
+		diff, err := healthdiff.CompareBranches(r.Context(), deps.DB, repoID, base, head)
+		if err != nil {
+			httpx.Internal(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, diff)
+	}
 }
 
 // healthDiff reports how the current per-file health compares to the last

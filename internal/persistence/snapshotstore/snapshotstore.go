@@ -50,6 +50,45 @@ func (s *Store) Latest(ctx context.Context, repoID string) (*Snapshot, error) {
 	return snap, err
 }
 
+// LatestForBranch returns the most recent snapshot taken on the given branch,
+// or (nil, nil) when none exist. Used for branch-vs-branch health comparison.
+func (s *Store) LatestForBranch(ctx context.Context, repoID, branch string) (*Snapshot, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, repository_id, taken_at, commit_sha, branch,
+		       hotspot_health, average_health,
+		       COALESCE(worst_performer_path,''), COALESCE(worst_performer_score,0),
+		       per_file_scores_json
+		FROM health_snapshots WHERE repository_id = ? AND branch = ?
+		ORDER BY taken_at DESC LIMIT 1`, repoID, branch)
+	snap, err := scan(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return snap, err
+}
+
+// Branches returns the distinct branches that have at least one snapshot,
+// most-recently-seen first.
+func (s *Store) Branches(ctx context.Context, repoID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT branch FROM health_snapshots
+		WHERE repository_id = ? AND branch <> ''
+		GROUP BY branch ORDER BY MAX(taken_at) DESC`, repoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var b string
+		if err := rows.Scan(&b); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
 // Insert appends a snapshot. ID/TakenAt are filled when empty.
 func (s *Store) Insert(ctx context.Context, snap Snapshot) error {
 	if snap.ID == "" {
