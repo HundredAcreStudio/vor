@@ -251,6 +251,19 @@ var fileLocalBiomarkers = map[string]bool{
 // globally) by AnalyzeIncremental.
 func IsFileLocalBiomarker(biomarker string) bool { return fileLocalBiomarkers[biomarker] }
 
+// GlobalBiomarkers returns the biomarker types that are NOT file-local — the
+// cross-file / git-derived ones that AnalyzeIncremental recomputes globally.
+// Used by incremental persistence to know which finding rows to fully replace.
+func GlobalBiomarkers() []string {
+	var out []string
+	for _, b := range AllBiomarkers() {
+		if !fileLocalBiomarkers[b] {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
 // AnalyzeIncremental produces the same Result as Analyze(files) but reuses the
 // prior run's file-local findings for files NOT in `changed`, only re-running
 // the per-file biomarkers for changed files. Global (cross-file / git-derived)

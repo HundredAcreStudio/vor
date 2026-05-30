@@ -160,6 +160,13 @@ type Result struct {
 	// index. The analysis phases and persist short-circuit: the stored index
 	// is already current, so there's nothing to recompute or rewrite.
 	Unchanged bool
+	// ChangedFiles are the repo-relative paths re-parsed this run (content
+	// changed or new). Drives file-boundary incremental health.
+	ChangedFiles []string
+	// HealthIncremental is set when the health phase reused unchanged files'
+	// file-local findings (health.AnalyzeIncremental); persist then writes
+	// only the changed/global rows instead of ReplaceAll.
+	HealthIncremental bool
 	DeadCode         []deadcode.Finding
 	HealthResult     health.Result
 	Externals        []external.Record
@@ -332,6 +339,7 @@ func phaseParse(ctx context.Context, opts Options, res *Result) error {
 		}
 		res.Parsed = append(res.Parsed, pf)
 		stats.Parsed++
+		res.ChangedFiles = append(res.ChangedFiles, fi.Path)
 		if e, ok := newCacheEntry(fi, h, pf); ok {
 			dirty = append(dirty, e)
 		}
@@ -486,8 +494,36 @@ func phaseHealth(ctx context.Context, opts Options, res *Result) error {
 			analyzer.Coverage = cov
 		}
 	}
+
+	// File-boundary incremental: when only some files changed and we have a
+	// prior result, reuse unchanged files' file-local findings and recompute
+	// just the changed files (global/cross-file findings are recomputed in
+	// full inside AnalyzeIncremental). Falls back to a full Analyze on the
+	// first index or when no prior exists.
+	if prior, ok := priorHealth(ctx, opts); ok {
+		changed := make(map[string]bool, len(res.ChangedFiles))
+		for _, p := range res.ChangedFiles {
+			changed[p] = true
+		}
+		res.HealthResult = analyzer.AnalyzeIncremental(res.Parsed, changed, prior)
+		res.HealthIncremental = true
+		return nil
+	}
 	res.HealthResult = analyzer.Analyze(res.Parsed)
 	return nil
+}
+
+// priorHealth loads the previously-persisted health result, if any, for the
+// incremental path. Returns ok=false on the first index (nothing stored).
+func priorHealth(ctx context.Context, opts Options) (health.Result, bool) {
+	if opts.DB == nil || opts.RepositoryID == "" {
+		return health.Result{}, false
+	}
+	prior, err := healthstore.New(opts.DB).Load(ctx, opts.RepositoryID)
+	if err != nil || (len(prior.Findings) == 0 && len(prior.FileMetrics) == 0) {
+		return health.Result{}, false
+	}
+	return prior, true
 }
 
 // healthExcludesFor resolves the repo's config from the DB and projects its
@@ -616,7 +652,15 @@ func phasePersist(ctx context.Context, opts Options, res *Result) error {
 	if err := deadstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.DeadCode); err != nil {
 		return fmt.Errorf("dead_code: %w", err)
 	}
-	if err := healthstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.HealthResult); err != nil {
+	if res.HealthIncremental {
+		changed := make(map[string]bool, len(res.ChangedFiles))
+		for _, p := range res.ChangedFiles {
+			changed[p] = true
+		}
+		if err := healthstore.New(opts.DB).ApplyIncremental(ctx, opts.RepositoryID, res.HealthResult, changed); err != nil {
+			return fmt.Errorf("health (incremental): %w", err)
+		}
+	} else if err := healthstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.HealthResult); err != nil {
 		return fmt.Errorf("health: %w", err)
 	}
 	if err := externalstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.Externals); err != nil {

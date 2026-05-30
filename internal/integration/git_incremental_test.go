@@ -70,9 +70,10 @@ func TestPipeline_GitReusedWhenHeadUnchanged(t *testing.T) {
 		return res
 	}
 
-	// First index: walks history, full analysis.
-	if first := run(pipeline.ModeInit); first.GitReused || first.Unchanged {
-		t.Errorf("first index: GitReused=%v Unchanged=%v, want both false", first.GitReused, first.Unchanged)
+	// First index: walks history, full analysis (no prior → not incremental).
+	if first := run(pipeline.ModeInit); first.GitReused || first.Unchanged || first.HealthIncremental {
+		t.Errorf("first index: GitReused=%v Unchanged=%v HealthIncremental=%v, want all false",
+			first.GitReused, first.Unchanged, first.HealthIncremental)
 	}
 
 	// Re-index with nothing changed: git reused AND whole index unchanged
@@ -87,8 +88,9 @@ func TestPipeline_GitReusedWhenHeadUnchanged(t *testing.T) {
 		[]byte("package main\n\nfunc main() { _ = 1 }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if edit := run(pipeline.ModeUpdate); !edit.GitReused || edit.Unchanged {
-		t.Errorf("working-tree edit: GitReused=%v Unchanged=%v, want true/false", edit.GitReused, edit.Unchanged)
+	if edit := run(pipeline.ModeUpdate); !edit.GitReused || edit.Unchanged || !edit.HealthIncremental {
+		t.Errorf("working-tree edit: GitReused=%v Unchanged=%v HealthIncremental=%v, want true/false/true",
+			edit.GitReused, edit.Unchanged, edit.HealthIncremental)
 	}
 
 	// A new commit moves HEAD: fresh git walk, not unchanged.
