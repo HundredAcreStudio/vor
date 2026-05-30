@@ -378,6 +378,8 @@ export type WikiPage = {
   modelName: string;
   providerName: string;
   updatedAt: string;
+  inputTokens?: number;
+  outputTokens?: number;
 };
 
 export function fetchPages(id: string): Promise<WikiPage[]> {
