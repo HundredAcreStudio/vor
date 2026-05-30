@@ -289,9 +289,9 @@ type fileAcc struct {
 
 func newWalker(now time.Time) *walker {
 	return &walker{
-		now:      now,
-		cutoff90: now.AddDate(0, 0, -90),
-		cutoff30: now.AddDate(0, 0, -30),
+		now:        now,
+		cutoff90:   now.AddDate(0, 0, -90),
+		cutoff30:   now.AddDate(0, 0, -30),
 		files:      map[string]*fileAcc{},
 		cochange:   map[string]map[string]int{},
 		categories: map[string]int{},
@@ -476,6 +476,23 @@ func ResolveHeadCommit(path string) (plumbing.Hash, error) {
 		return plumbing.ZeroHash, err
 	}
 	return head.Hash(), nil
+}
+
+// ResolveHead returns the HEAD commit SHA and the current branch name (short,
+// e.g. "main"). branch is "" when HEAD is detached.
+func ResolveHead(path string) (sha string, branch string, err error) {
+	repo, err := gogit.PlainOpenWithOptions(path, &gogit.PlainOpenOptions{DetectDotGit: true})
+	if err != nil {
+		return "", "", err
+	}
+	head, err := repo.Head()
+	if err != nil {
+		return "", "", err
+	}
+	if head.Name().IsBranch() {
+		branch = head.Name().Short()
+	}
+	return head.Hash().String(), branch, nil
 }
 
 // ---- helpers ---------------------------------------------------------------

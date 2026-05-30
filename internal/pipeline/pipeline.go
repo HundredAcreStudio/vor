@@ -67,6 +67,7 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/persistence/parsestore"
 	"github.com/HundredAcreStudio/vor/internal/persistence/pipelinestore"
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/snapshotstore"
 )
 
 // Mode enumerates the pipeline execution modes. Mirrors the Python
@@ -146,16 +147,16 @@ type Options struct {
 
 // Result is the bundle the caller can persist or inspect after Run.
 type Result struct {
-	Files          []models.FileInfo
-	Parsed         []models.ParsedFile
-	Graph          *graph.Graph
+	Files            []models.FileInfo
+	Parsed           []models.ParsedFile
+	Graph            *graph.Graph
 	GitRecords       []git.PerFile
 	CommitCategories map[string]int
-	DeadCode       []deadcode.Finding
-	HealthResult   health.Result
-	Externals      []external.Record
-	Decisions      []decisions.Record
-	TraversalStats models.TraversalStats
+	DeadCode         []deadcode.Finding
+	HealthResult     health.Result
+	Externals        []external.Record
+	Decisions        []decisions.Record
+	TraversalStats   models.TraversalStats
 
 	// ParseStats reports incremental-parse outcomes for the run: how many
 	// files were freshly parsed vs reused from the cache, and how many
@@ -533,8 +534,9 @@ func phaseDecisions(ctx context.Context, opts Options, res *Result) error {
 // phasePersist writes every store (one ReplaceAll per table).
 func phasePersist(ctx context.Context, opts Options, res *Result) error {
 	repoStore := repos.New(opts.DB)
-	if head, err := git.ResolveHeadCommit(opts.RepoPath); err == nil {
-		_ = repoStore.UpdateHeadCommit(ctx, opts.RepositoryID, head.String())
+	sha, branch, _ := git.ResolveHead(opts.RepoPath)
+	if sha != "" {
+		_ = repoStore.UpdateHeadCommit(ctx, opts.RepositoryID, sha)
 	}
 	if err := graphstore.New(opts.DB).ReplaceGraph(ctx, opts.RepositoryID, res.Graph); err != nil {
 		return fmt.Errorf("graph: %w", err)
@@ -557,7 +559,71 @@ func phasePersist(ctx context.Context, opts Options, res *Result) error {
 	if err := decisionstore.New(opts.DB).ReplaceAll(ctx, opts.RepositoryID, res.Decisions); err != nil {
 		return fmt.Errorf("decisions: %w", err)
 	}
+
+	// Append a health snapshot for this commit (per-commit history; the
+	// latest-only health tables get wiped each run, so snapshots are the
+	// durable timeline). Best-effort — never fail the index over it.
+	writeHealthSnapshot(ctx, opts, res, sha, branch)
 	return nil
+}
+
+// writeHealthSnapshot appends one health_snapshots row per distinct indexed
+// commit (skips when the latest snapshot already covers this commit). It
+// aggregates the per-file health scores into average/hotspot/worst figures.
+func writeHealthSnapshot(ctx context.Context, opts Options, res *Result, sha, branch string) {
+	if sha == "" {
+		return // no commit to key the snapshot on (not a git repo / detached pre-commit)
+	}
+	store := snapshotstore.New(opts.DB)
+	if latest, err := store.Latest(ctx, opts.RepositoryID); err == nil && latest != nil && latest.CommitSHA == sha {
+		return // already snapshotted this commit
+	}
+
+	scores := make(map[string]float64, len(res.HealthResult.FileMetrics))
+	var sum float64
+	worstPath, worstScore := "", 11.0
+	for _, m := range res.HealthResult.FileMetrics {
+		scores[m.FilePath] = m.Score
+		sum += m.Score
+		if m.Score < worstScore {
+			worstScore, worstPath = m.Score, m.FilePath
+		}
+	}
+	avg := 10.0
+	if n := len(scores); n > 0 {
+		avg = sum / float64(n)
+	}
+
+	// Hotspot health: average score over files flagged as hotspots.
+	var hSum float64
+	var hN int
+	for _, g := range res.GitRecords {
+		if g.IsHotspot {
+			if s, ok := scores[g.Path]; ok {
+				hSum += s
+				hN++
+			}
+		}
+	}
+	hotspot := avg
+	if hN > 0 {
+		hotspot = hSum / float64(hN)
+	}
+	if worstPath == "" {
+		worstScore = avg
+	}
+
+	_ = store.Insert(ctx, snapshotstore.Snapshot{
+		RepositoryID:  opts.RepositoryID,
+		CommitSHA:     sha,
+		Branch:        branch,
+		AverageHealth: avg,
+		HotspotHealth: hotspot,
+		WorstPath:     worstPath,
+		WorstScore:    worstScore,
+		PerFileScores: scores,
+	})
+	_ = store.Prune(ctx, opts.RepositoryID, 500)
 }
 
 // runPhase is the small helper that handles the start/complete/fail

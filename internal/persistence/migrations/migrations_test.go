@@ -81,18 +81,28 @@ func TestUp_SQLite(t *testing.T) {
 	}
 
 	// Down rolls back the most-recent migration only (goose semantics), so
-	// the latest change (the commit_categories table from 0006) should
-	// disappear while the earlier ones remain.
+	// the latest change (commit_sha/branch columns on health_snapshots from
+	// 0007) should disappear while earlier ones remain.
 	if err := Down(ctx, conn, dialect); err != nil {
 		t.Fatalf("Down: %v", err)
 	}
-	var latestTbl int
+	var latestCol int
 	if err := conn.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = 'commit_categories'`).Scan(&latestTbl); err != nil {
+		`SELECT COUNT(*) FROM pragma_table_info('health_snapshots') WHERE name = 'commit_sha'`).Scan(&latestCol); err != nil {
+		t.Fatalf("probe health_snapshots.commit_sha: %v", err)
+	}
+	if latestCol != 0 {
+		t.Errorf("health_snapshots.commit_sha still present after one Down")
+	}
+	// An earlier migration's table (commit_categories, 0006) should survive a
+	// single-step Down.
+	var prevTbl int
+	if err := conn.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = 'commit_categories'`).Scan(&prevTbl); err != nil {
 		t.Fatalf("probe commit_categories table: %v", err)
 	}
-	if latestTbl != 0 {
-		t.Errorf("commit_categories table still present after one Down")
+	if prevTbl == 0 {
+		t.Errorf("commit_categories should survive a single-step Down (it predates 0007)")
 	}
 	// An earlier migration's table (settings, 0005) should survive a
 	// single-step Down.
