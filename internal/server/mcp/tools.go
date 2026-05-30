@@ -39,6 +39,12 @@ func (s *Server) registerTools() {
 	), s.wrap(s.toolRisk))
 
 	s.srv.AddTool(mcp.NewTool(
+		"vor_health_diff",
+		mcp.WithDescription("Did my changes help or hurt? Compares the repo's CURRENT per-file code-health scores against the last committed snapshot and returns the net average delta plus the files that regressed or improved. Call after editing to check whether the change degraded the codebase before committing. Pure indexed data, no LLM."),
+		mcp.WithString("repo", mcp.Description(repoArgDesc)),
+	), s.wrap(s.toolHealthDiff))
+
+	s.srv.AddTool(mcp.NewTool(
 		"vor_attention",
 		mcp.WithDescription("A prioritized \"what should I look at\" digest for the repo: knowledge silos (single-owner active files), ungoverned churn hotspots, safe-to-delete dead code, and architectural decisions awaiting review. Call when onboarding to a repo or deciding where attention/cleanup is most warranted."),
 		mcp.WithString("repo", mcp.Description(repoArgDesc)),

@@ -128,6 +128,28 @@ func (s *Store) CountFindings(ctx context.Context, repoID string) (int, error) {
 	return n, err
 }
 
+// FileScores returns the current per-file health score (0–10) for every file
+// with a metric row — the "current" side of a health diff against a baseline
+// snapshot.
+func (s *Store) FileScores(ctx context.Context, repoID string) (map[string]float64, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT file_path, score FROM health_file_metrics WHERE repository_id = ?`, repoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]float64{}
+	for rows.Next() {
+		var path string
+		var score float64
+		if err := rows.Scan(&path, &score); err != nil {
+			return nil, err
+		}
+		out[path] = score
+	}
+	return out, rows.Err()
+}
+
 // CountByBiomarker tallies health_findings rows per biomarker_type.
 func (s *Store) CountByBiomarker(ctx context.Context, repoID string) (map[string]int, error) {
 	rows, err := s.db.QueryContext(ctx,

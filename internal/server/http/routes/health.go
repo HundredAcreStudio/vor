@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/HundredAcreStudio/vor/internal/analysis/healthdiff"
 	"github.com/HundredAcreStudio/vor/internal/persistence/healthstore"
 	"github.com/HundredAcreStudio/vor/internal/persistence/snapshotstore"
 	"github.com/HundredAcreStudio/vor/internal/server/http/httpx"
@@ -22,6 +23,21 @@ func MountHealth(r chi.Router, deps Deps) {
 	r.Get("/health/findings", healthFindings(deps))
 	r.Get("/health/files", healthFiles(deps))
 	r.Get("/health/history", healthHistory(deps))
+	r.Get("/health/diff", healthDiff(deps))
+}
+
+// healthDiff reports how the current per-file health compares to the last
+// committed snapshot — the regressions/improvements introduced since then.
+func healthDiff(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		repoID := httpx.URLParam(r, "repoID")
+		diff, err := healthdiff.Compute(r.Context(), deps.DB, repoID)
+		if err != nil {
+			httpx.Internal(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, diff)
+	}
 }
 
 type healthSnapshotDTO struct {
