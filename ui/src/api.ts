@@ -118,6 +118,51 @@ export function fetchRisk(id: string): Promise<RiskData> {
   return getJSON<RiskData>(`/api/repos/${id}/risk`);
 }
 
+// ---- risk drill-downs: ownership treemap + contributor network ----------
+
+export type OwnershipCell = {
+  name: string;
+  value: number; // size weight used for treemap area
+  files: number;
+  risk: number; // 0..1, drives the color scale
+  hotspots: number;
+  owner: string;
+};
+
+export function fetchRiskOwnership(
+  id: string,
+  by: "module" | "file",
+): Promise<{ by: string; cells: OwnershipCell[] }> {
+  return getJSON<{ by: string; cells: OwnershipCell[] }>(
+    `/api/repos/${id}/risk/ownership?by=${by}`,
+  );
+}
+
+export type ContribNode = { name: string; files: number; commits: number };
+export type ContribEdge = { source: string; target: string; weight: number };
+
+export function fetchRiskContributors(
+  id: string,
+): Promise<{ nodes: ContribNode[]; edges: ContribEdge[] }> {
+  return getJSON<{ nodes: ContribNode[]; edges: ContribEdge[] }>(
+    `/api/repos/${id}/risk/contributors`,
+  );
+}
+
+export type SecurityFinding = {
+  filePath: string;
+  kind: string;
+  severity: string;
+  snippet: string;
+  line: number;
+};
+
+export function fetchSecurity(id: string): Promise<SecurityFinding[]> {
+  return getJSON<{ findings: SecurityFinding[] }>(`/api/repos/${id}/security`).then(
+    (r) => r.findings ?? [],
+  );
+}
+
 export type CommitCategories = {
   categories: { category: string; count: number }[];
   total: number;

@@ -1842,3 +1842,90 @@ a.module-card:hover {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- risk: tab bar -------------------------------------------------- */
+.risk-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 24px 0 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+.risk-tab-body > .panel {
+  margin-bottom: 16px;
+}
+.risk-tab-body .risk-cols {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+.chip-row {
+  display: flex;
+  gap: 6px;
+}
+
+/* ---- risk: ownership treemap --------------------------------------- */
+.treemap-wrap {
+  width: 100%;
+}
+.treemap {
+  display: block;
+  width: 100%;
+  height: 420px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.treemap-label {
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+.treemap-sub {
+  font-size: 11px;
+  opacity: 0.75;
+  pointer-events: none;
+}
+.treemap-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.treemap-legend-bar {
+  display: inline-flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.treemap-legend-bar span {
+  display: block;
+  width: 26px;
+  height: 100%;
+}
+
+/* ---- risk: contributor network ------------------------------------- */
+.risk-network-panel {
+  margin-top: 0;
+}
+.contrib-graph {
+  display: block;
+  width: 100%;
+  height: 420px;
+}
+.contrib-graph-label {
+  font-size: 11px;
+  pointer-events: none;
+}
+
+/* ---- risk: security severity badge --------------------------------- */
+.sev-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #0e1116;
+  text-transform: capitalize;
+}

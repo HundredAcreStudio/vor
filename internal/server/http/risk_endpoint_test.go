@@ -40,3 +40,32 @@ func TestRiskEndpoint(t *testing.T) {
 		t.Error("topContributors should include the seeded author")
 	}
 }
+
+func TestRiskOwnershipAndContributors(t *testing.T) {
+	srv, repoID := fixtureRepo(t)
+
+	// Ownership treemap (module mode): cells aggregated from git_metadata.
+	var own struct {
+		By    string `json:"by"`
+		Cells []struct {
+			Name  string `json:"name"`
+			Files int    `json:"files"`
+		} `json:"cells"`
+	}
+	hitJSON(t, srv.URL, "/api/repos/"+repoID+"/risk/ownership", &own)
+	if own.By != "module" || len(own.Cells) == 0 {
+		t.Errorf("ownership = %+v, want module cells", own)
+	}
+
+	// Contributor network: the seeded author appears as a node.
+	var net struct {
+		Nodes []struct {
+			Name  string `json:"name"`
+			Files int    `json:"files"`
+		} `json:"nodes"`
+	}
+	hitJSON(t, srv.URL, "/api/repos/"+repoID+"/risk/contributors", &net)
+	if len(net.Nodes) == 0 {
+		t.Errorf("contributors network has no nodes: %+v", net)
+	}
+}

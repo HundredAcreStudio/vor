@@ -93,6 +93,7 @@ func New(opts Options) (*Server, error) {
 				routes.MountSymbols(per, deps)
 				routes.MountSearch(per, deps)
 				routes.MountRisk(per, deps)
+				routes.MountSecurity(per, deps)
 				routes.MountHotspots(per, deps)
 				routes.MountDeadCode(per, deps)
 				routes.MountHealth(per, deps)
