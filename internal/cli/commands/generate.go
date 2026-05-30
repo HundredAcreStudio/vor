@@ -135,11 +135,12 @@ func dryRunNote(dryRun bool, n int) string {
 // the three implemented kinds.
 func parsePageKinds(in []string) ([]gmodels.PageKind, error) {
 	if len(in) == 0 {
+		// Symbol detail is omitted by default — file pages document their own
+		// symbols. Pass --kinds symbol_detail to generate standalone ones.
 		return []gmodels.PageKind{
 			gmodels.PageKindArchitecture,
-			gmodels.PageKindFileOverview,
 			gmodels.PageKindDirectoryOverview,
-			gmodels.PageKindSymbolDetail,
+			gmodels.PageKindFileOverview,
 		}, nil
 	}
 	valid := map[string]gmodels.PageKind{

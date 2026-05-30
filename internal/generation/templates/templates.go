@@ -23,26 +23,33 @@ import (
 // with a verbose neighbor list. Tunable per-call via the public API.
 const MaxPromptSourceBytes = 60_000
 
-// fileOverviewSystem is the static system prompt for per-file pages.
-const fileOverviewSystem = `You are a senior software engineer documenting a code repository.
+// fileOverviewSystem is the static system prompt for per-file pages. This page
+// is the single, comprehensive entry for a file — symbols are documented inline
+// here rather than as separate pages.
+const fileOverviewSystem = `You are a senior software engineer writing the wiki page for a single source file. This page is the ONE place a developer learns what this file does and how to use it — be comprehensive but strictly grounded. Use only what the supplied source, symbols, imports, and signals show; never invent APIs, parameters, or behavior. When something is genuinely unclear, say so rather than guessing.
 
-Write a concise overview of the supplied source file. Your audience is
-another engineer who has never seen this file. Stay grounded in what
-the code actually does — do not speculate about features that aren't
-visible, and if a section's purpose is unclear, write "unclear" rather
-than inventing rationale.
+Output these markdown sections, in order. Omit an OPTIONAL section when there is nothing grounded to say.
 
-Output exactly these markdown sections, in order:
+# Title (one line, sentence case — the file's role)
 
-# Title (one line, sentence case)
-## Summary (two to four sentences)
-## Responsibilities (bulleted, what this file owns)
-## Key symbols (bulleted, name — one-line role)
-## Notable signals (only if hotspot / dead-code / health markers present)
-## Caveats (optional — surprising decisions, footguns, dependencies)
+## Overview
+Two to four sentences: what this file is, what it does, and where it sits in the system.
 
-Do not include code blocks unless quoting one or two lines is essential.
-Do not restate metadata (path, language) that's already shown to the user.`
+(Hotspot/health callout — only if the Signals say this file is a hotspot and/or carries a high-complexity or other health biomarker: immediately after the Overview, add a paragraph beginning "**Important:**" that states the risk — high change frequency and/or complexity — and what to be careful about when modifying it. Omit entirely when no such signal is present.)
+
+## Public API
+Document the public/exported symbols. For each, lead with its name (bold or as a sub-heading), say what it does, and — for functions/methods — list parameters as "name (type) — meaning" and the return value/effects; for a class, give its responsibility and key methods. Derive signatures and parameters from the source. Skip trivial private helpers.
+
+## Dependencies (optional)
+From the imports, the notable modules/packages this file depends on and what each is used for; group related ones.
+
+## Usage Notes (optional)
+Concrete usage evident from the code — how it's invoked, flags/options, short examples.
+
+## Troubleshooting (optional)
+Footguns, best-effort/try-except behavior, edge cases, or gotchas visible in the code.
+
+Use code blocks sparingly — short snippets only when they materially help. Do not restate the path/language metadata already shown to the user.`
 
 // FileOverviewRequest builds a providers.Request that generates a
 // PageKindFileOverview for the supplied bundle. Operation is set to
@@ -107,7 +114,7 @@ func FileOverviewRequest(bundle gctx.FileBundle, model string) providers.Request
 		Model:     model,
 		System:    fileOverviewSystem,
 		Messages:  []providers.Message{msg},
-		MaxTokens: 1500,
+		MaxTokens: 2800, // richer single-entry page (overview, API, deps, usage)
 		Operation: "file_overview",
 		FilePath:  bundle.RelPath,
 	}

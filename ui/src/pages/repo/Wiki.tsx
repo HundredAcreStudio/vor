@@ -71,17 +71,21 @@ const DOMAINS: Domain[] = [
     key: "reference",
     label: "Reference",
     glyph: "description",
-    kinds: ["file_overview", "symbol_detail"],
+    kinds: ["file_overview"],
     defaultOpen: false,
   },
 ];
 
 type ViewMode = "folder" | "domain";
 
-// A file entry inside the Reference domain, with its nested symbol pages.
-type RefFile = { path: string; filePage?: WikiPage; symbols: WikiPage[] };
-
-function WikiBrowser({ repoId, pages }: { repoId: string; pages: WikiPage[] }) {
+function WikiBrowser({ repoId, pages: allPages }: { repoId: string; pages: WikiPage[] }) {
+  // Symbols are documented inline on each file's page, not as separate wiki
+  // pages, so symbol_detail pages never appear in the sidebar. Existing repos
+  // may still have them in the DB; drop them from the working set up front.
+  const pages = useMemo(
+    () => allPages.filter((p) => p.pageType !== "symbol_detail"),
+    [allPages],
+  );
   const [filter, setFilter] = useState("");
   const [freshness, setFreshness] = useState<string>("");
   const [kindFilter, setKindFilter] = useState<string>("");
@@ -142,29 +146,6 @@ function WikiBrowser({ repoId, pages }: { repoId: string; pages: WikiPage[] }) {
     return m;
   }, [visible]);
 
-  // Reference files: file_overview pages with symbol_detail pages nested under
-  // their owning file (symbol targetPath split on "::"). Files with only
-  // symbols still appear as a container row.
-  const refFiles = useMemo(() => {
-    const map = new Map<string, RefFile>();
-    const get = (path: string) => {
-      let f = map.get(path);
-      if (!f) {
-        f = { path, symbols: [] };
-        map.set(path, f);
-      }
-      return f;
-    };
-    for (const p of byKind.get("file_overview") ?? []) get(p.targetPath).filePage = p;
-    for (const p of byKind.get("symbol_detail") ?? []) {
-      const [filePath] = p.targetPath.split("::");
-      get(filePath).symbols.push(p);
-    }
-    const files = Array.from(map.values()).sort((a, b) => a.path.localeCompare(b.path));
-    for (const f of files) f.symbols.sort((a, b) => a.targetPath.localeCompare(b.targetPath));
-    return files;
-  }, [byKind]);
-
   // ---- By folder data ----------------------------------------------------
   const tree = useMemo(() => buildTree(visible), [visible]);
 
@@ -174,10 +155,8 @@ function WikiBrowser({ repoId, pages }: { repoId: string; pages: WikiPage[] }) {
   );
 
   // Which domains have content under the current filters.
-  const domainHasContent = (d: Domain): boolean => {
-    if (d.key === "reference") return refFiles.length > 0;
-    return d.kinds.some((k) => (byKind.get(k)?.length ?? 0) > 0);
-  };
+  const domainHasContent = (d: Domain): boolean =>
+    d.kinds.some((k) => (byKind.get(k)?.length ?? 0) > 0);
   const activeDomains = DOMAINS.filter(domainHasContent);
 
   const hasResults =
@@ -198,6 +177,27 @@ function WikiBrowser({ repoId, pages }: { repoId: string; pages: WikiPage[] }) {
       <span className={`fresh-dot fresh-${p.freshness}`} title={p.freshness} />
     </button>
   );
+
+  // Reference row: file basename as the primary label, the LLM one-liner title
+  // as the muted secondary line, full path kept as the tooltip.
+  const fileRow = (p: WikiPage, indent: number) => {
+    const base = p.targetPath.split("/").filter(Boolean).pop() ?? p.targetPath;
+    return (
+      <button
+        key={p.id}
+        className={"wiki-page-item" + (p.id === selectedId ? " wiki-page-item-on" : "")}
+        onClick={() => setSelectedId(p.id)}
+        title={p.targetPath}
+        style={{ paddingLeft: 8 + indent }}
+      >
+        <span className="wiki-page-lines">
+          <span className="wiki-page-title">{base}</span>
+          {p.title && <span className="wiki-page-sub">{p.title}</span>}
+        </span>
+        <span className={`fresh-dot fresh-${p.freshness}`} title={p.freshness} />
+      </button>
+    );
+  };
 
   return (
     <div className="wiki">
@@ -306,24 +306,10 @@ function WikiBrowser({ repoId, pages }: { repoId: string; pages: WikiPage[] }) {
                   {open && (
                     <>
                       {d.key === "reference"
-                        ? refFiles.map((f) => (
-                            <div key={f.path} className="wiki-ref-file">
-                              {f.filePage
-                                ? pageRow(f.filePage, 12)
-                                : (
-                                  <div
-                                    className="wiki-page-item wiki-ref-stub"
-                                    style={{ paddingLeft: 20 }}
-                                    title={f.path}
-                                  >
-                                    <span className="wiki-page-lines">
-                                      <span className="wiki-page-title">{f.path}</span>
-                                    </span>
-                                  </div>
-                                )}
-                              {f.symbols.map((s) => pageRow(s, 24))}
-                            </div>
-                          ))
+                        ? (byKind.get("file_overview") ?? [])
+                            .slice()
+                            .sort((a, b) => a.targetPath.localeCompare(b.targetPath))
+                            .map((p) => fileRow(p, 12))
                         : d.kinds.flatMap((k) =>
                             (byKind.get(k) ?? [])
                               .slice()
@@ -373,19 +359,16 @@ type TreeNode = {
   dirPage?: WikiPage;
   // A file_overview page bound to this leaf, if any.
   filePage?: WikiPage;
-  // symbol_detail pages owned by this file node.
-  symbols: WikiPage[];
   children: Map<string, TreeNode>;
 };
 
 function newNode(path: string, name: string): TreeNode {
-  return { path, name, symbols: [], children: new Map() };
+  return { path, name, children: new Map() };
 }
 
 // Build a nested folder tree from page targetPaths. file_overview pages become
-// leaf nodes; directory_overview pages attach to their folder node; symbol_detail
-// pages nest under their owning file node (split on "::"). File nodes are created
-// as containers even when no file_overview page exists.
+// leaf nodes; directory_overview pages attach to their folder node. Files are
+// plain leaves (symbols are documented inline, not as separate pages).
 function buildTree(pages: WikiPage[]): TreeNode {
   const root = newNode("", "");
 
@@ -412,10 +395,6 @@ function buildTree(pages: WikiPage[]): TreeNode {
     } else if (p.pageType === "file_overview") {
       const node = descend(p.targetPath.split("/").filter(Boolean));
       node.filePage = p;
-    } else if (p.pageType === "symbol_detail") {
-      const [filePath] = p.targetPath.split("::");
-      const node = descend(filePath.split("/").filter(Boolean));
-      node.symbols.push(p);
     } else {
       // Unknown kinds: treat targetPath as a path leaf so they remain reachable.
       const node = descend(p.targetPath.split("/").filter(Boolean));
@@ -423,19 +402,13 @@ function buildTree(pages: WikiPage[]): TreeNode {
     }
   }
 
-  // Stable sort of symbols by name.
-  const sortNode = (n: TreeNode) => {
-    n.symbols.sort((a, b) => a.targetPath.localeCompare(b.targetPath));
-    for (const c of n.children.values()) sortNode(c);
-  };
-  sortNode(root);
   return root;
 }
 
-// A node is a "file" (leaf) when it carries a file_overview page or symbols and
-// has no child folders. Otherwise it's a folder container.
+// A node is a "file" (leaf) when it carries a file_overview page and has no
+// child folders. Otherwise it's a folder container.
 function isFileNode(n: TreeNode): boolean {
-  return n.children.size === 0 && (!!n.filePage || n.symbols.length > 0);
+  return n.children.size === 0 && !!n.filePage;
 }
 
 // Sort children: folders first (alphabetical), then files (alphabetical).
@@ -518,71 +491,31 @@ function TreeRow({
 }) {
   const fileLeaf = isFileNode(node);
 
-  // A file node is expandable if it owns symbols.
+  // File nodes are plain leaves: symbols are documented inline on the file's
+  // page, not nested as separate rows.
   if (fileLeaf) {
-    const hasSymbols = node.symbols.length > 0;
-    const open = isOpen(node.path);
     const page = node.filePage;
     return (
-      <>
-        <div className="wiki-tree-row" style={{ paddingLeft: depth * 12 }}>
-          {hasSymbols ? (
-            <button
-              className="wiki-tree-caret"
-              onClick={() => toggle(node.path)}
-              title={open ? "Collapse" : "Expand"}
-            >
-              <Icon name={open ? "expand_more" : "chevron_right"} size={16} />
-            </button>
-          ) : (
-            <span className="wiki-tree-caret wiki-tree-caret-empty" />
-          )}
-          <button
-            className={
-              "wiki-page-item wiki-tree-item" +
-              (page && page.id === selectedId ? " wiki-page-item-on" : "")
-            }
-            onClick={() => {
-              if (page) onSelect(page.id);
-              else if (hasSymbols) toggle(node.path);
-            }}
-            title={node.path}
-            disabled={!page && !hasSymbols}
-          >
-            <Icon name="description" size={16} />
-            <span className="wiki-page-title">{node.name}</span>
-            {page ? (
-              <span className={`fresh-dot fresh-${page.freshness}`} title={page.freshness} />
-            ) : null}
-          </button>
-        </div>
-        {hasSymbols &&
-          open &&
-          node.symbols.map((s) => {
-            const sym = s.targetPath.split("::")[1] ?? s.targetPath;
-            return (
-              <div
-                key={s.id}
-                className="wiki-tree-row"
-                style={{ paddingLeft: (depth + 1) * 12 }}
-              >
-                <span className="wiki-tree-caret wiki-tree-caret-empty" />
-                <button
-                  className={
-                    "wiki-page-item wiki-tree-item" +
-                    (s.id === selectedId ? " wiki-page-item-on" : "")
-                  }
-                  onClick={() => onSelect(s.id)}
-                  title={s.targetPath}
-                >
-                  <Icon name="data_object" size={16} />
-                  <span className="wiki-page-title wiki-tree-symbol">{sym}</span>
-                  <span className={`fresh-dot fresh-${s.freshness}`} title={s.freshness} />
-                </button>
-              </div>
-            );
-          })}
-      </>
+      <div className="wiki-tree-row" style={{ paddingLeft: depth * 12 }}>
+        <span className="wiki-tree-caret wiki-tree-caret-empty" />
+        <button
+          className={
+            "wiki-page-item wiki-tree-item" +
+            (page && page.id === selectedId ? " wiki-page-item-on" : "")
+          }
+          onClick={() => {
+            if (page) onSelect(page.id);
+          }}
+          title={node.path}
+          disabled={!page}
+        >
+          <Icon name="description" size={16} />
+          <span className="wiki-page-title">{node.name}</span>
+          {page ? (
+            <span className={`fresh-dot fresh-${page.freshness}`} title={page.freshness} />
+          ) : null}
+        </button>
+      </div>
     );
   }
 

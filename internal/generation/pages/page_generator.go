@@ -94,11 +94,13 @@ func extractTitleAndSummary(content, fallback string) (title, summary string) {
 		title = fallback
 	}
 
-	// Look for a "## Summary" section and grab its first non-blank paragraph.
+	// Grab the first non-blank paragraph of the lead section ("## Summary"
+	// or "## Overview") as the summary.
 	inSummary := false
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(strings.ToLower(trimmed), "## summary") {
+		low := strings.ToLower(trimmed)
+		if strings.HasPrefix(low, "## summary") || strings.HasPrefix(low, "## overview") {
 			inSummary = true
 			continue
 		}
