@@ -22,6 +22,7 @@ func MountOverview(r chi.Router, deps Deps) {
 
 type repoOverviewDTO struct {
 	ID           string  `json:"id"`
+	Slug         string  `json:"slug"`
 	Name         string  `json:"name"`
 	LocalPath    string  `json:"localPath"`
 	HeadCommit   string  `json:"headCommit,omitempty"`
@@ -43,6 +44,7 @@ func overview(deps Deps) http.HandlerFunc {
 			return
 		}
 
+		slugs := repos.UniqueSlugs(rows)
 		out := make([]repoOverviewDTO, 0, len(rows))
 		for _, repo := range rows {
 			files, symbols, err := nodeCounts(ctx, deps.DB, repo.ID)
@@ -62,6 +64,7 @@ func overview(deps Deps) http.HandlerFunc {
 			}
 			out = append(out, repoOverviewDTO{
 				ID:           repo.ID,
+				Slug:         slugs[repo.ID],
 				Name:         repo.Name,
 				LocalPath:    repo.LocalPath,
 				HeadCommit:   repo.HeadCommit,

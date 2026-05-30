@@ -4,6 +4,7 @@
 
 export type RepoSummary = {
   id: string;
+  slug: string;
   name: string;
   localPath: string;
   headCommit: string;
@@ -233,6 +234,7 @@ export function fetchExecutionFlows(id: string): Promise<FlowNode[]> {
 
 export type RepoDetail = {
   id: string;
+  slug: string;
   name: string;
   url: string;
   localPath: string;

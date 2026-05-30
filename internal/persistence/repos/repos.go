@@ -232,6 +232,73 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	return err
 }
 
+// Slug converts a repository name into a URL-safe slug (lowercase, runs of
+// non-alphanumerics collapsed to single hyphens, trimmed). Used for
+// human-readable dashboard URLs (/repositories/<slug>/...).
+func Slug(name string) string {
+	var b strings.Builder
+	prevDash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			prevDash = false
+		} else if b.Len() > 0 && !prevDash {
+			b.WriteByte('-')
+			prevDash = true
+		}
+	}
+	s := strings.Trim(b.String(), "-")
+	if s == "" {
+		return "repo"
+	}
+	return s
+}
+
+// UniqueSlugs returns id→slug for the given repositories, disambiguating
+// collisions deterministically (the first repo by the slice's order keeps the
+// clean slug; later collisions get a short id suffix). Callers pass the
+// name-ordered List so the mapping is stable across calls.
+func UniqueSlugs(rs []Repository) map[string]string {
+	out := make(map[string]string, len(rs))
+	taken := map[string]bool{}
+	for _, r := range rs {
+		s := Slug(r.Name)
+		if taken[s] {
+			s = s + "-" + shortID(r.ID)
+		}
+		taken[s] = true
+		out[r.ID] = s
+	}
+	return out
+}
+
+func shortID(id string) string {
+	if len(id) > 6 {
+		return id[:6]
+	}
+	return id
+}
+
+// ResolveRef returns the repository identified by ref, which may be either a
+// repository id or a slug (see UniqueSlugs). Returns sql.ErrNoRows when no
+// repo matches.
+func (s *Store) ResolveRef(ctx context.Context, ref string) (*Repository, error) {
+	if r, err := s.Get(ctx, ref); err == nil {
+		return r, nil // ref is a valid id
+	}
+	list, err := s.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	slugs := UniqueSlugs(list)
+	for i := range list {
+		if slugs[list[i].ID] == ref {
+			return &list[i], nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
+
 // inferRepoName takes the last path segment.
 func inferRepoName(localPath string) string {
 	trimmed := strings.TrimRight(localPath, "/")

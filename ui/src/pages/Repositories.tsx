@@ -74,7 +74,7 @@ function AddRepo({ onAdded }: { onAdded: () => void }) {
 
 function RepoCard({ repo }: { repo: RepoSummary }) {
   return (
-    <Link to={`/repositories/${repo.id}/overview`} className="repo-card">
+    <Link to={`/repositories/${repo.slug}/overview`} className="repo-card">
       <div className="repo-card-head">
         <h3 title={repo.localPath}>{repo.name}</h3>
         <HealthBadge score={repo.healthAvg} />

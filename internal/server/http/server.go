@@ -83,6 +83,9 @@ func New(opts Options) (*Server, error) {
 		api.Route("/repos", func(reposR chi.Router) {
 			routes.MountRepos(reposR, deps)
 			reposR.Route("/{repoID}", func(per chi.Router) {
+				// Resolve {repoID} (id or slug) to the canonical id before any
+				// handler runs, so the whole per-repo API accepts both.
+				per.Use(routes.ResolveRepoRef(deps))
 				routes.MountRepoDetail(per, deps)
 				routes.MountSettings(per, deps)
 				routes.MountAttention(per, deps)

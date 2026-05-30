@@ -131,6 +131,7 @@ func listTracked(deps Deps) http.HandlerFunc {
 
 type repoDTO struct {
 	ID            string `json:"id"`
+	Slug          string `json:"slug"`
 	Name          string `json:"name"`
 	URL           string `json:"url"`
 	LocalPath     string `json:"localPath"`
@@ -140,9 +141,10 @@ type repoDTO struct {
 	UpdatedAt     string `json:"updatedAt"`
 }
 
-func toRepoDTO(r repos.Repository) repoDTO {
+func toRepoDTO(r repos.Repository, slug string) repoDTO {
 	return repoDTO{
 		ID:            r.ID,
+		Slug:          slug,
 		Name:          r.Name,
 		URL:           r.URL,
 		LocalPath:     r.LocalPath,
@@ -160,9 +162,10 @@ func listRepos(store *repos.Store) http.HandlerFunc {
 			httpx.Internal(w, err)
 			return
 		}
+		slugs := repos.UniqueSlugs(rows)
 		out := make([]repoDTO, 0, len(rows))
 		for _, row := range rows {
-			out = append(out, toRepoDTO(row))
+			out = append(out, toRepoDTO(row, slugs[row.ID]))
 		}
 		httpx.JSON(w, http.StatusOK, map[string]any{"repos": out})
 	}
@@ -180,6 +183,13 @@ func getRepo(store *repos.Store) http.HandlerFunc {
 			httpx.Internal(w, err)
 			return
 		}
-		httpx.JSON(w, http.StatusOK, toRepoDTO(*row))
+		// Compute the slug consistently with the list/resolver.
+		slug := repos.Slug(row.Name)
+		if all, err := store.List(r.Context()); err == nil {
+			if s, ok := repos.UniqueSlugs(all)[row.ID]; ok {
+				slug = s
+			}
+		}
+		httpx.JSON(w, http.StatusOK, toRepoDTO(*row, slug))
 	}
 }
