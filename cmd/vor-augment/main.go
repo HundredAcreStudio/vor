@@ -47,8 +47,9 @@ type hookPayload struct {
 }
 
 type toolInput struct {
-	Pattern string `json:"pattern"`
-	Command string `json:"command"`
+	Pattern  string `json:"pattern"`
+	Command  string `json:"command"`
+	FilePath string `json:"file_path"`
 }
 
 func main() {
@@ -102,6 +103,8 @@ func run() string {
 		return searchEnrich(ctx, conn, repoID, p)
 	case "Bash":
 		return bashStaleness(ctx, conn, repoID, repoRoot, p)
+	case "Read", "Edit", "Write", "MultiEdit":
+		return fileEnrich(ctx, conn, repoID, repoRoot, p)
 	}
 	return ""
 }
@@ -289,6 +292,113 @@ func short(c string) string {
 		return c[:8]
 	}
 	return c
+}
+
+// ---- Read / Edit enrichment: a file's wiki page + risk signal ------------
+
+// fileEnrich injects the file's wiki summary and a hotspot warning when the
+// agent reads or edits it, so the curated overview and risk signal travel
+// alongside the raw source. Deduped per (file, HEAD) so it fires once per file
+// per commit-state rather than on every edit.
+func fileEnrich(ctx context.Context, conn *sql.DB, repoID, repoRoot string, p hookPayload) string {
+	abs := strings.TrimSpace(p.ToolInput.FilePath)
+	if abs == "" {
+		return ""
+	}
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(repoRoot, abs)
+	}
+	rel, err := filepath.Rel(repoRoot, abs)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "" // outside the repo
+	}
+	rel = filepath.ToSlash(rel)
+
+	head := gitHead(ctx, repoRoot)
+	if fileEnriched(repoID, rel, head) {
+		return ""
+	}
+
+	var title, summary string
+	_ = conn.QueryRowContext(ctx,
+		`SELECT COALESCE(title,''), COALESCE(summary,'') FROM wiki_pages
+		 WHERE repository_id = ? AND page_type = 'file_overview' AND target_path = ?`,
+		repoID, rel).Scan(&title, &summary)
+
+	var isHotspot, commits90 int
+	_ = conn.QueryRowContext(ctx,
+		`SELECT is_hotspot, commit_count_90d FROM git_metadata
+		 WHERE repository_id = ? AND file_path = ?`, repoID, rel).Scan(&isHotspot, &commits90)
+
+	if summary == "" && isHotspot == 0 {
+		return "" // nothing worth saying
+	}
+
+	var b strings.Builder
+	b.WriteString("[vor] ")
+	b.WriteString(rel)
+	if summary != "" {
+		b.WriteString(" — ")
+		b.WriteString(summary)
+	}
+	if isHotspot != 0 {
+		fmt.Fprintf(&b, "\n  ⚠ Hotspot: high-churn file (%d commits in 90d). Change carefully and check its callers.", commits90)
+	}
+	fmt.Fprintf(&b, "\n  Full wiki page: vor_page(target=%q).", rel)
+
+	recordFileEnriched(repoID, rel, head)
+	return b.String()
+}
+
+// fileEnrichMarker holds, per repo, the HEAD it was written for plus the set of
+// files already enriched at that HEAD (one "<head>" line then one path/line).
+func fileEnrichMarker(repoID string) string {
+	dir, err := userconfig.StateDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "augment-files-"+repoID)
+}
+
+func fileEnriched(repoID, rel, head string) bool {
+	m := fileEnrichMarker(repoID)
+	if m == "" || head == "" {
+		return false
+	}
+	b, err := os.ReadFile(m)
+	if err != nil {
+		return false
+	}
+	lines := strings.Split(string(b), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != head {
+		return false // marker is for a different HEAD — treat as not enriched
+	}
+	for _, l := range lines[1:] {
+		if strings.TrimSpace(l) == rel {
+			return true
+		}
+	}
+	return false
+}
+
+func recordFileEnriched(repoID, rel, head string) {
+	m := fileEnrichMarker(repoID)
+	if m == "" || head == "" {
+		return
+	}
+	// Reset the file when HEAD changed; otherwise append this path.
+	content := head + "\n" + rel + "\n"
+	if b, err := os.ReadFile(m); err == nil {
+		lines := strings.Split(string(b), "\n")
+		if len(lines) > 0 && strings.TrimSpace(lines[0]) == head {
+			content = string(b)
+			if !strings.HasSuffix(content, "\n") {
+				content += "\n"
+			}
+			content += rel + "\n"
+		}
+	}
+	_ = os.WriteFile(m, []byte(content), 0o644)
 }
 
 func warnMarker(repoID string) string {
