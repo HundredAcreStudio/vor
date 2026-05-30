@@ -143,6 +143,14 @@ func printRunSummary(cmd *cobra.Command, r *pipeline.Result, failed bool) {
 		fmt.Fprintln(out, "\npipeline halted on failure; see logs above")
 		return
 	}
+	if r.Unchanged {
+		fmt.Fprintln(out, "\nno changes since last index — stored data is current")
+		return
+	}
+	nodes := 0
+	if r.Graph != nil {
+		nodes = r.Graph.NodeCount()
+	}
 	fmt.Fprintf(out, "\n%d files indexed, %d graph nodes, %d health findings\n",
-		r.TraversalStats.Included, r.Graph.NodeCount(), len(r.HealthResult.Findings))
+		r.TraversalStats.Included, nodes, len(r.HealthResult.Findings))
 }

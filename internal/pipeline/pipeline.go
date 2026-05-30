@@ -156,6 +156,10 @@ type Result struct {
 	// HEAD was unchanged since the last index (commit-boundary task), reusing
 	// the stored git_metadata. Persist then leaves the git tables untouched.
 	GitReused bool
+	// Unchanged is set when neither HEAD nor any file changed since the last
+	// index. The analysis phases and persist short-circuit: the stored index
+	// is already current, so there's nothing to recompute or rewrite.
+	Unchanged bool
 	DeadCode         []deadcode.Finding
 	HealthResult     health.Result
 	Externals        []external.Record
@@ -387,7 +391,10 @@ func phaseGit(ctx context.Context, opts Options, res *Result) error {
 		if recs, lerr := gitstore.New(opts.DB).LoadAll(ctx, opts.RepositoryID); lerr == nil && len(recs) > 0 {
 			res.GitRecords = recs
 			res.GitReused = true
-			opts.Logger.Info("git: HEAD unchanged, reusing stored metadata", "commit", short(sha))
+			// HEAD unchanged + no files re-parsed/pruned ⇒ the whole index is
+			// already current; the downstream analysis phases will no-op.
+			res.Unchanged = res.ParseStats.Parsed == 0 && res.ParseStats.Pruned == 0
+			opts.Logger.Info("git: HEAD unchanged, reusing stored metadata", "commit", short(sha), "unchanged", res.Unchanged)
 			return nil
 		}
 	}
@@ -426,6 +433,9 @@ func short(sha string) string {
 // registry, reading go.mod / Cargo.toml so resolvers can translate
 // module-path imports into file paths.
 func phaseGraph(_ context.Context, opts Options, res *Result) error {
+	if res.Unchanged {
+		return nil
+	}
 	rctx := resolver.Context{}
 	if modPath, err := gomod.ParseModulePath(opts.RepoPath); err == nil && modPath != "" {
 		rctx.GoModulePath = modPath
@@ -446,6 +456,9 @@ func phaseGraph(_ context.Context, opts Options, res *Result) error {
 }
 
 func phaseDeadCode(res *Result) error {
+	if res.Unchanged {
+		return nil
+	}
 	res.DeadCode = (&deadcode.Analyzer{MinConfidence: 0.5}).Analyze(res.Graph)
 	return nil
 }
@@ -453,6 +466,9 @@ func phaseDeadCode(res *Result) error {
 // phaseHealth weaves hotspot paths + co-change partners + graph edges +
 // imported coverage into the analyzer so cross-cutting biomarkers fire.
 func phaseHealth(ctx context.Context, opts Options, res *Result) error {
+	if res.Unchanged {
+		return nil
+	}
 	analyzer := &health.Analyzer{
 		SourceLoader: func(rel string) ([]byte, error) {
 			return readFile(filepath.Join(opts.RepoPath, rel))
@@ -549,6 +565,9 @@ func graphEdgeSet(g *graph.Graph) map[string]map[string]bool {
 }
 
 func phaseExternals(ctx context.Context, opts Options, res *Result) error {
+	if res.Unchanged {
+		return nil
+	}
 	recs, err := external.ScanRoot(ctx, opts.RepoPath)
 	if err != nil {
 		return err
@@ -560,6 +579,9 @@ func phaseExternals(ctx context.Context, opts Options, res *Result) error {
 // phaseDecisions runs every registered decision-source Extractor and
 // collects records de-duplicated by source + evidence location.
 func phaseDecisions(ctx context.Context, opts Options, res *Result) error {
+	if res.Unchanged {
+		return nil
+	}
 	res.Decisions = decisions.Engine{}.Run(ctx, decisions.Input{
 		RepoRoot:    opts.RepoPath,
 		ParsedFiles: res.Parsed,
@@ -569,6 +591,10 @@ func phaseDecisions(ctx context.Context, opts Options, res *Result) error {
 
 // phasePersist writes every store (one ReplaceAll per table).
 func phasePersist(ctx context.Context, opts Options, res *Result) error {
+	if res.Unchanged {
+		opts.Logger.Info("persist: no changes since last index, stored data is current")
+		return nil
+	}
 	repoStore := repos.New(opts.DB)
 	sha, branch, _ := git.ResolveHead(opts.RepoPath)
 	if sha != "" {

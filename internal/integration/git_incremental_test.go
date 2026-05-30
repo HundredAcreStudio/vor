@@ -70,19 +70,30 @@ func TestPipeline_GitReusedWhenHeadUnchanged(t *testing.T) {
 		return res
 	}
 
-	// First index: walks history.
-	if first := run(pipeline.ModeInit); first.GitReused {
-		t.Error("first index should walk git history, not reuse")
+	// First index: walks history, full analysis.
+	if first := run(pipeline.ModeInit); first.GitReused || first.Unchanged {
+		t.Errorf("first index: GitReused=%v Unchanged=%v, want both false", first.GitReused, first.Unchanged)
 	}
 
-	// Re-index at the same HEAD: reuses stored git metadata.
-	if second := run(pipeline.ModeUpdate); !second.GitReused {
-		t.Error("re-index at unchanged HEAD should reuse stored git metadata")
+	// Re-index with nothing changed: git reused AND whole index unchanged
+	// (analysis + persist short-circuit).
+	if second := run(pipeline.ModeUpdate); !second.GitReused || !second.Unchanged {
+		t.Errorf("no-op re-index: GitReused=%v Unchanged=%v, want both true", second.GitReused, second.Unchanged)
 	}
 
-	// A new commit moves HEAD: walk again.
+	// Working-tree edit without a commit (the watcher's common case): HEAD is
+	// unchanged so git is reused, but the file changed so analysis must re-run.
+	if err := os.WriteFile(filepath.Join(dir, "main.go"),
+		[]byte("package main\n\nfunc main() { _ = 1 }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if edit := run(pipeline.ModeUpdate); !edit.GitReused || edit.Unchanged {
+		t.Errorf("working-tree edit: GitReused=%v Unchanged=%v, want true/false", edit.GitReused, edit.Unchanged)
+	}
+
+	// A new commit moves HEAD: fresh git walk, not unchanged.
 	commit("other.go", "package main\n\nfunc Other() {}\n", "second")
-	if third := run(pipeline.ModeUpdate); third.GitReused {
-		t.Error("new commit should force a fresh git walk")
+	if third := run(pipeline.ModeUpdate); third.GitReused || third.Unchanged {
+		t.Errorf("new commit: GitReused=%v Unchanged=%v, want both false", third.GitReused, third.Unchanged)
 	}
 }
