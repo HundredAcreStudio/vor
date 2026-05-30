@@ -15,6 +15,22 @@
   box-sizing: border-box;
 }
 
+.micon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 1;
+  user-select: none;
+}
+
+.micon svg {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+  display: block;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -695,6 +711,122 @@ code {
 
 .wiki-section + .wiki-section {
   margin-top: 10px;
+}
+
+/* ---- search bar with funnel toggle ------------------------------------ */
+.wiki-searchbar {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.wiki-searchbar .wiki-search {
+  flex: 1;
+}
+
+.wiki-funnel {
+  flex: none;
+  width: 34px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.wiki-funnel:hover {
+  color: var(--text);
+}
+
+.wiki-funnel-on {
+  background: rgba(88, 166, 255, 0.14);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---- filter panel ----------------------------------------------------- */
+.wiki-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.wiki-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.wiki-filter-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.wiki-summary {
+  margin: -2px 0 2px;
+}
+
+.wiki-glyph {
+  margin-right: 3px;
+  opacity: 0.85;
+}
+
+/* ---- by-domain section headers ---------------------------------------- */
+.wiki-domain-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.wiki-domain-head:hover {
+  color: var(--text);
+}
+
+.wiki-domain-chevron {
+  flex: none;
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wiki-domain-num {
+  flex: none;
+  opacity: 0.7;
+}
+
+.wiki-domain-glyph {
+  flex: none;
+  opacity: 0.85;
+}
+
+.wiki-domain-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.wiki-ref-stub {
+  cursor: default;
+  opacity: 0.7;
 }
 
 .wiki-section-head {

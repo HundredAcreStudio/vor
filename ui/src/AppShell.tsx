@@ -1,10 +1,11 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { Icon } from "./Icon.tsx";
 
 // The far-left icon rail. Each entry is a top-level area of the app. The
 // contextual sidebar (repo menu / repo list) is rendered by the routed pages.
 const RAIL: { to: string; icon: string; title: string }[] = [
-  { to: "/repositories", icon: "▤", title: "Repositories" },
-  { to: "/settings", icon: "⚙", title: "Settings" },
+  { to: "/repositories", icon: "folder", title: "Repositories" },
+  { to: "/settings", icon: "settings", title: "Settings" },
 ];
 
 export function AppShell() {
@@ -21,7 +22,7 @@ export function AppShell() {
             title={item.title}
             className={({ isActive }) => "rail-icon" + (isActive ? " rail-icon-active" : "")}
           >
-            {item.icon}
+            <Icon name={item.icon} size={22} />
           </NavLink>
         ))}
       </nav>

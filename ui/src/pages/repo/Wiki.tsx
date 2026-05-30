@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { fetchPage, fetchPages, type WikiPage } from "../../api.ts";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
+import { Icon } from "../../Icon.tsx";
 
 export function Wiki() {
   const { repoId = "" } = useParams();
@@ -27,184 +28,313 @@ export function Wiki() {
   );
 }
 
-// Ordered, labeled sections keyed by pageType. Anything not listed here gets a
-// section derived from its kind (underscores -> spaces). Overview is pinned
-// first so the architecture page anchors the tree.
-const SECTION_ORDER: { kind: string; label: string }[] = [
-  { kind: "architecture", label: "Overview" },
-  { kind: "directory_overview", label: "Modules" },
-  { kind: "file_overview", label: "Files" },
-  { kind: "symbol_detail", label: "Symbols" },
-];
-
-type Section = { kind: string; label: string; pages: WikiPage[] };
-
-function groupSections(pages: WikiPage[]): Section[] {
-  const byKind = new Map<string, WikiPage[]>();
-  for (const p of pages) {
-    const list = byKind.get(p.pageType);
-    if (list) list.push(p);
-    else byKind.set(p.pageType, [p]);
-  }
-
-  const sections: Section[] = [];
-  const seen = new Set<string>();
-  for (const { kind, label } of SECTION_ORDER) {
-    const ps = byKind.get(kind);
-    if (ps && ps.length) {
-      sections.push({ kind, label, pages: ps });
-      seen.add(kind);
-    }
-  }
-  // Unknown kinds, in stable alphabetical order.
-  for (const kind of Array.from(byKind.keys()).sort()) {
-    if (seen.has(kind)) continue;
-    const ps = byKind.get(kind)!;
-    sections.push({ kind, label: kind.replace(/_/g, " "), pages: ps });
-  }
-
-  // Sort within each section by targetPath ascending.
-  for (const s of sections) {
-    s.pages = [...s.pages].sort((a, b) => a.targetPath.localeCompare(b.targetPath));
-  }
-  return sections;
-}
-
+// Filter pills for the STATUS (freshness) row. "" == All.
 const FRESHNESS_FILTERS = ["", "fresh", "stale", "outdated"];
 
-type ViewMode = "folder" | "type";
+// Human label per page kind, used by the TYPE filter pills.
+const KIND_LABELS: Record<string, string> = {
+  architecture: "Overview",
+  directory_overview: "Module",
+  file_overview: "File",
+  symbol_detail: "Symbol",
+};
+
+function kindLabel(kind: string): string {
+  return KIND_LABELS[kind] ?? kind.replace(/_/g, " ");
+}
+
+// Order the TYPE pills follow Overview -> Module -> File -> Symbol -> rest.
+const KIND_ORDER = ["architecture", "directory_overview", "file_overview", "symbol_detail"];
+
+function orderedKinds(pages: WikiPage[]): string[] {
+  const present = new Set(pages.map((p) => p.pageType));
+  const out: string[] = [];
+  for (const k of KIND_ORDER) if (present.has(k)) out.push(k);
+  for (const k of Array.from(present).sort()) if (!out.includes(k)) out.push(k);
+  return out;
+}
+
+// The "By domain" tree groups page kinds into three domains. Each domain owns
+// one or more kinds; a section renders only when it has matching pages.
+type Domain = {
+  key: string;
+  label: string;
+  glyph: string;
+  kinds: string[];
+  defaultOpen: boolean;
+};
+
+const DOMAINS: Domain[] = [
+  { key: "tour", label: "Guided Tour", glyph: "explore", kinds: ["architecture"], defaultOpen: true },
+  { key: "modules", label: "Modules", glyph: "widgets", kinds: ["directory_overview"], defaultOpen: false },
+  {
+    key: "reference",
+    label: "Reference",
+    glyph: "description",
+    kinds: ["file_overview", "symbol_detail"],
+    defaultOpen: false,
+  },
+];
+
+type ViewMode = "folder" | "domain";
+
+// A file entry inside the Reference domain, with its nested symbol pages.
+type RefFile = { path: string; filePage?: WikiPage; symbols: WikiPage[] };
 
 function WikiBrowser({ repoId, pages }: { repoId: string; pages: WikiPage[] }) {
   const [filter, setFilter] = useState("");
   const [freshness, setFreshness] = useState<string>("");
-  const [view, setView] = useState<ViewMode>("folder");
+  const [kindFilter, setKindFilter] = useState<string>("");
+  const [view, setView] = useState<ViewMode>("domain");
+  const [showFilters, setShowFilters] = useState(true);
   // Default selection: the architecture page if present, else the first page.
   const [selectedId, setSelectedId] = useState<string>(
     () => (pages.find((p) => p.pageType === "architecture") ?? pages[0])?.id ?? "",
   );
-
-  // The architecture / overview page is pinned at the very top in both views.
-  const overview = useMemo(
-    () => pages.find((p) => p.pageType === "architecture"),
-    [pages],
+  // Domain section collapse state, seeded from each domain's default.
+  const [openDomains, setOpenDomains] = useState<Set<string>>(
+    () => new Set(DOMAINS.filter((d) => d.defaultOpen).map((d) => d.key)),
   );
-  // Everything else feeds the type sections / folder tree.
-  const rest = useMemo(
-    () => pages.filter((p) => p.pageType !== "architecture"),
-    [pages],
-  );
+  const toggleDomain = (key: string) =>
+    setOpenDomains((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const q = filter.toLowerCase();
   const matches = (p: WikiPage) =>
     (!freshness || p.freshness === freshness) &&
+    (!kindFilter || p.pageType === kindFilter) &&
     (!q ||
       p.targetPath.toLowerCase().includes(q) ||
       p.title.toLowerCase().includes(q));
 
-  const overviewVisible = overview ? matches(overview) : false;
+  // Count summary reflects the FULL page set (not the filtered subset).
+  const summary = useMemo(() => {
+    let fresh = 0;
+    let needAttention = 0;
+    for (const p of pages) {
+      if (p.freshness === "fresh") fresh++;
+      else if (p.freshness === "stale" || p.freshness === "outdated") needAttention++;
+    }
+    return { total: pages.length, fresh, needAttention };
+  }, [pages]);
 
-  const sections = useMemo(() => {
-    return groupSections(rest)
-      .map((s) => ({ ...s, pages: s.pages.filter(matches) }))
-      .filter((s) => s.pages.length > 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rest, filter, freshness]);
+  // TYPE pills: one per kind present in the data.
+  const kinds = useMemo(() => orderedKinds(pages), [pages]);
 
-  const tree = useMemo(() => buildTree(rest.filter(matches)), [
+  // ---- By domain data ----------------------------------------------------
+  const visible = useMemo(
+    () => pages.filter(matches),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    rest,
-    filter,
-    freshness,
-  ]);
+    [pages, filter, freshness, kindFilter],
+  );
+
+  const byKind = useMemo(() => {
+    const m = new Map<string, WikiPage[]>();
+    for (const p of visible) {
+      const list = m.get(p.pageType);
+      if (list) list.push(p);
+      else m.set(p.pageType, [p]);
+    }
+    return m;
+  }, [visible]);
+
+  // Reference files: file_overview pages with symbol_detail pages nested under
+  // their owning file (symbol targetPath split on "::"). Files with only
+  // symbols still appear as a container row.
+  const refFiles = useMemo(() => {
+    const map = new Map<string, RefFile>();
+    const get = (path: string) => {
+      let f = map.get(path);
+      if (!f) {
+        f = { path, symbols: [] };
+        map.set(path, f);
+      }
+      return f;
+    };
+    for (const p of byKind.get("file_overview") ?? []) get(p.targetPath).filePage = p;
+    for (const p of byKind.get("symbol_detail") ?? []) {
+      const [filePath] = p.targetPath.split("::");
+      get(filePath).symbols.push(p);
+    }
+    const files = Array.from(map.values()).sort((a, b) => a.path.localeCompare(b.path));
+    for (const f of files) f.symbols.sort((a, b) => a.targetPath.localeCompare(b.targetPath));
+    return files;
+  }, [byKind]);
+
+  // ---- By folder data ----------------------------------------------------
+  const tree = useMemo(() => buildTree(visible), [visible]);
 
   const selected = useMemo(
     () => pages.find((p) => p.id === selectedId),
     [pages, selectedId],
   );
 
+  // Which domains have content under the current filters.
+  const domainHasContent = (d: Domain): boolean => {
+    if (d.key === "reference") return refFiles.length > 0;
+    return d.kinds.some((k) => (byKind.get(k)?.length ?? 0) > 0);
+  };
+  const activeDomains = DOMAINS.filter(domainHasContent);
+
   const hasResults =
-    overviewVisible || (view === "type" ? sections.length > 0 : tree.children.size > 0);
+    view === "domain" ? activeDomains.length > 0 : tree.children.size > 0;
+
+  const pageRow = (p: WikiPage, indent: number) => (
+    <button
+      key={p.id}
+      className={"wiki-page-item" + (p.id === selectedId ? " wiki-page-item-on" : "")}
+      onClick={() => setSelectedId(p.id)}
+      title={p.targetPath}
+      style={{ paddingLeft: 8 + indent }}
+    >
+      <span className="wiki-page-lines">
+        <span className="wiki-page-title">{p.targetPath}</span>
+        {p.title && <span className="wiki-page-sub">{p.title}</span>}
+      </span>
+      <span className={`fresh-dot fresh-${p.freshness}`} title={p.freshness} />
+    </button>
+  );
 
   return (
     <div className="wiki">
       <div className="wiki-list">
-        <input
-          className="wiki-search"
-          placeholder="Search docs…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
         <div className="wiki-types">
+          <button
+            className={"chip-btn" + (view === "domain" ? " chip-btn-on" : "")}
+            onClick={() => setView("domain")}
+          >
+            <span className="wiki-glyph">
+              <Icon name="account_tree" size={16} />
+            </span>{" "}
+            By domain
+          </button>
           <button
             className={"chip-btn" + (view === "folder" ? " chip-btn-on" : "")}
             onClick={() => setView("folder")}
           >
+            <span className="wiki-glyph">
+              <Icon name="folder" size={16} />
+            </span>{" "}
             By folder
           </button>
+        </div>
+
+        <div className="wiki-searchbar">
+          <input
+            className="wiki-search"
+            placeholder="Search docs…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
           <button
-            className={"chip-btn" + (view === "type" ? " chip-btn-on" : "")}
-            onClick={() => setView("type")}
+            className={"wiki-funnel" + (showFilters ? " wiki-funnel-on" : "")}
+            onClick={() => setShowFilters((v) => !v)}
+            title={showFilters ? "Hide filters" : "Show filters"}
+            aria-label="Toggle filters"
           >
-            By type
+            <Icon name="filter_list" size={18} />
           </button>
         </div>
-        <div className="wiki-types">
-          {FRESHNESS_FILTERS.map((f) => (
-            <button
-              key={f || "all"}
-              className={"chip-btn" + (freshness === f ? " chip-btn-on" : "")}
-              onClick={() => setFreshness(f)}
-            >
-              {f || "All"}
-            </button>
-          ))}
-        </div>
-        <div className="wiki-pages">
-          {overview && overviewVisible && (
-            <button
-              key={overview.id}
-              className={
-                "wiki-page-item wiki-overview-item" +
-                (overview.id === selectedId ? " wiki-page-item-on" : "")
-              }
-              onClick={() => setSelectedId(overview.id)}
-              title={overview.title || overview.targetPath}
-            >
-              <span className="wiki-page-lines">
-                <span className="wiki-page-title">{overview.title || "Overview"}</span>
-              </span>
-              <span
-                className={`fresh-dot fresh-${overview.freshness}`}
-                title={overview.freshness}
-              />
-            </button>
-          )}
 
-          {view === "type" ? (
-            sections.map((s) => (
-              <div key={s.kind} className="wiki-section">
-                <div className="wiki-section-head">
-                  {s.label}
-                  <span className="wiki-section-count">{s.pages.length}</span>
-                </div>
-                {s.pages.map((p) => (
+        {showFilters && (
+          <div className="wiki-filters">
+            <div className="wiki-filter-group">
+              <div className="wiki-filter-label">Type</div>
+              <div className="wiki-types">
+                <button
+                  className={"chip-btn" + (kindFilter === "" ? " chip-btn-on" : "")}
+                  onClick={() => setKindFilter("")}
+                >
+                  All
+                </button>
+                {kinds.map((k) => (
                   <button
-                    key={p.id}
-                    className={
-                      "wiki-page-item" + (p.id === selectedId ? " wiki-page-item-on" : "")
-                    }
-                    onClick={() => setSelectedId(p.id)}
-                    title={p.targetPath}
+                    key={k}
+                    className={"chip-btn" + (kindFilter === k ? " chip-btn-on" : "")}
+                    onClick={() => setKindFilter(k)}
                   >
-                    <span className="wiki-page-lines">
-                      <span className="wiki-page-title">{p.targetPath}</span>
-                      {p.title && <span className="wiki-page-sub">{p.title}</span>}
-                    </span>
-                    <span className={`fresh-dot fresh-${p.freshness}`} title={p.freshness} />
+                    {kindLabel(k)}
                   </button>
                 ))}
               </div>
-            ))
+            </div>
+            <div className="wiki-filter-group">
+              <div className="wiki-filter-label">Status</div>
+              <div className="wiki-types">
+                {FRESHNESS_FILTERS.map((f) => (
+                  <button
+                    key={f || "all"}
+                    className={"chip-btn" + (freshness === f ? " chip-btn-on" : "")}
+                    onClick={() => setFreshness(f)}
+                  >
+                    {f ? f.charAt(0).toUpperCase() + f.slice(1) : "All"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="muted small wiki-summary">
+          {summary.total} pages · {summary.fresh} fresh · {summary.needAttention} need attention
+        </div>
+
+        <div className="wiki-pages">
+          {view === "domain" ? (
+            activeDomains.map((d, i) => {
+              const open = openDomains.has(d.key);
+              return (
+                <div key={d.key} className="wiki-section">
+                  <button
+                    className="wiki-domain-head"
+                    onClick={() => toggleDomain(d.key)}
+                    title={open ? "Collapse" : "Expand"}
+                  >
+                    <span className="wiki-domain-chevron">
+                      <Icon name={open ? "expand_more" : "chevron_right"} size={18} />
+                    </span>
+                    <span className="wiki-domain-num">{i + 1}</span>
+                    <span className="wiki-domain-glyph">
+                      <Icon name={d.glyph} size={18} />
+                    </span>
+                    <span className="wiki-domain-label">{d.label}</span>
+                  </button>
+                  {open && (
+                    <>
+                      {d.key === "reference"
+                        ? refFiles.map((f) => (
+                            <div key={f.path} className="wiki-ref-file">
+                              {f.filePage
+                                ? pageRow(f.filePage, 12)
+                                : (
+                                  <div
+                                    className="wiki-page-item wiki-ref-stub"
+                                    style={{ paddingLeft: 20 }}
+                                    title={f.path}
+                                  >
+                                    <span className="wiki-page-lines">
+                                      <span className="wiki-page-title">{f.path}</span>
+                                    </span>
+                                  </div>
+                                )}
+                              {f.symbols.map((s) => pageRow(s, 24))}
+                            </div>
+                          ))
+                        : d.kinds.flatMap((k) =>
+                            (byKind.get(k) ?? [])
+                              .slice()
+                              .sort((a, b) => a.targetPath.localeCompare(b.targetPath))
+                              .map((p) => pageRow(p, 12)),
+                          )}
+                    </>
+                  )}
+                </div>
+              );
+            })
           ) : (
             <FolderTree
               root={tree}
@@ -402,7 +532,7 @@ function TreeRow({
               onClick={() => toggle(node.path)}
               title={open ? "Collapse" : "Expand"}
             >
-              {open ? "▾" : "▸"}
+              <Icon name={open ? "expand_more" : "chevron_right"} size={16} />
             </button>
           ) : (
             <span className="wiki-tree-caret wiki-tree-caret-empty" />
@@ -419,6 +549,7 @@ function TreeRow({
             title={node.path}
             disabled={!page && !hasSymbols}
           >
+            <Icon name="description" size={16} />
             <span className="wiki-page-title">{node.name}</span>
             {page ? (
               <span className={`fresh-dot fresh-${page.freshness}`} title={page.freshness} />
@@ -444,6 +575,7 @@ function TreeRow({
                   onClick={() => onSelect(s.id)}
                   title={s.targetPath}
                 >
+                  <Icon name="data_object" size={16} />
                   <span className="wiki-page-title wiki-tree-symbol">{sym}</span>
                   <span className={`fresh-dot fresh-${s.freshness}`} title={s.freshness} />
                 </button>
@@ -465,7 +597,7 @@ function TreeRow({
           onClick={() => toggle(node.path)}
           title={open ? "Collapse" : "Expand"}
         >
-          {open ? "▾" : "▸"}
+          <Icon name={open ? "expand_more" : "chevron_right"} size={16} />
         </button>
         <button
           className={
@@ -478,6 +610,7 @@ function TreeRow({
           }}
           title={node.path}
         >
+          <Icon name={open ? "folder_open" : "folder"} size={16} />
           <span className="wiki-page-title wiki-tree-folder-name">{node.name}</span>
           {dir ? (
             <span className={`fresh-dot fresh-${dir.freshness}`} title={dir.freshness} />
