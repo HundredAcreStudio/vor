@@ -386,9 +386,9 @@ export function fetchPages(id: string): Promise<WikiPage[]> {
 
 export type WikiPageContent = WikiPage & { content: string; sourceHash: string };
 
-export function fetchPage(id: string, targetPath: string): Promise<WikiPageContent> {
+export function fetchPage(id: string, targetPath: string, kind: string): Promise<WikiPageContent> {
   return getJSON<WikiPageContent>(
-    `/api/repos/${id}/pages/show?path=${encodeURIComponent(targetPath)}`,
+    `/api/repos/${id}/pages/show?path=${encodeURIComponent(targetPath)}&kind=${encodeURIComponent(kind)}`,
   );
 }
 
