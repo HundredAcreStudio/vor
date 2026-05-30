@@ -9,12 +9,14 @@ import filter_list from "@material-symbols/svg-400/outlined/filter_list.svg?raw"
 import folder from "@material-symbols/svg-400/outlined/folder.svg?raw";
 import folder_open from "@material-symbols/svg-400/outlined/folder_open.svg?raw";
 import group from "@material-symbols/svg-400/outlined/group.svg?raw";
+import info from "@material-symbols/svg-400/outlined/info.svg?raw";
 import inventory_2 from "@material-symbols/svg-400/outlined/inventory_2.svg?raw";
 import layers from "@material-symbols/svg-400/outlined/layers.svg?raw";
 import lightbulb from "@material-symbols/svg-400/outlined/lightbulb.svg?raw";
 import local_fire_department from "@material-symbols/svg-400/outlined/local_fire_department.svg?raw";
 import settings from "@material-symbols/svg-400/outlined/settings.svg?raw";
 import shield from "@material-symbols/svg-400/outlined/shield.svg?raw";
+import vital_signs from "@material-symbols/svg-400/outlined/vital_signs.svg?raw";
 import widgets from "@material-symbols/svg-400/outlined/widgets.svg?raw";
 
 const ICONS: Record<string, string> = {
@@ -29,12 +31,14 @@ const ICONS: Record<string, string> = {
   folder,
   folder_open,
   group,
+  info,
   inventory_2,
   layers,
   lightbulb,
   local_fire_department,
   settings,
   shield,
+  vital_signs,
   widgets,
 };
 

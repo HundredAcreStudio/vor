@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 import { fetchHealthFindings, fetchHealthSummary } from "../../api.ts";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
+import { MetricLabel, MetricTip } from "../../MetricTip.tsx";
 
 export function RepoHealth() {
   const { repoId = "" } = useParams();
@@ -32,10 +33,12 @@ export function RepoHealth() {
               {biomarkers.length > 0 && (
                 <div className="chips">
                   {biomarkers.map(([kind, n]) => (
-                    <span className="chip" key={kind}>
-                      {kind.replace(/_/g, " ")}
-                      <b>{n}</b>
-                    </span>
+                    <MetricTip id={kind} key={kind}>
+                      <span className="chip">
+                        {kind.replace(/_/g, " ")}
+                        <b>{n}</b>
+                      </span>
+                    </MetricTip>
                   ))}
                 </div>
               )}
@@ -64,7 +67,7 @@ export function RepoHealth() {
                 {rows.map((f, i) => (
                   <tr key={i}>
                     <td>
-                      <span className="mono">{f.biomarkerType}</span>
+                      <MetricLabel id={f.biomarkerType} />
                     </td>
                     <td className="mono path" title={f.filePath}>
                       {f.filePath}

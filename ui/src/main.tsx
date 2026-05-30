@@ -22,6 +22,7 @@ import { Activity } from "./pages/repo/Activity.tsx";
 import { Security } from "./pages/repo/Security.tsx";
 import { Settings as RepoSettings } from "./pages/repo/Settings.tsx";
 import { Settings } from "./pages/Settings.tsx";
+import { Metrics } from "./pages/Metrics.tsx";
 import "./styles.css";
 
 createRoot(document.getElementById("root")!).render(
@@ -51,6 +52,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="activity" element={<Activity />} />
             <Route path="settings" element={<RepoSettings />} />
           </Route>
+          <Route path="metrics" element={<Metrics />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/repositories" replace />} />
         </Route>

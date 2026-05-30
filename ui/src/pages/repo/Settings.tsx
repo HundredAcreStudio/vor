@@ -14,6 +14,7 @@ import {
   type TasksResponse,
 } from "../../api.ts";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
+import { MetricTip } from "../../MetricTip.tsx";
 
 export function Settings() {
   const { repoId = "" } = useParams();
@@ -152,7 +153,7 @@ function SettingsBody({
                       checked={r.biomarkers.includes(b)}
                       onChange={() => toggleBiomarker(i, b)}
                     />
-                    {b.replace(/_/g, " ")}
+                    <MetricTip id={b}>{b.replace(/_/g, " ")}</MetricTip>
                   </label>
                 ))}
               </div>

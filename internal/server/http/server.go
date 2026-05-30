@@ -79,6 +79,7 @@ func New(opts Options) (*Server, error) {
 	r.Route("/api", func(api chi.Router) {
 		routes.MountOverview(api, deps)
 		routes.MountGlobalSettings(api, deps)
+		routes.MountBiomarkers(api, deps)
 		api.Route("/repos", func(reposR chi.Router) {
 			routes.MountRepos(reposR, deps)
 			reposR.Route("/{repoID}", func(per chi.Router) {

@@ -5,6 +5,7 @@ import { Icon } from "./Icon.tsx";
 // contextual sidebar (repo menu / repo list) is rendered by the routed pages.
 const RAIL: { to: string; icon: string; title: string }[] = [
   { to: "/repositories", icon: "folder", title: "Repositories" },
+  { to: "/metrics", icon: "vital_signs", title: "Health Metrics" },
   { to: "/settings", icon: "settings", title: "Settings" },
 ];
 

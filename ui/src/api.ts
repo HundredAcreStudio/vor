@@ -46,6 +46,28 @@ export function fetchOverview(): Promise<Overview> {
   return getJSON<Overview>("/api/overview");
 }
 
+// ---- biomarker catalog (global, static) --------------------------------
+
+export type Biomarker = {
+  id: string;
+  name: string;
+  scope: "function" | "class" | "file";
+  summary: string;
+  how: string;
+  thresholds: string;
+  severities: string[];
+};
+
+// Cached at the module level so the many MetricTip/MetricLabel instances that
+// reference the catalog share a single in-flight/resolved request.
+let _biomarkers: Promise<Biomarker[]> | null = null;
+
+export function fetchBiomarkers(): Promise<Biomarker[]> {
+  return (_biomarkers ??= getJSON<{ biomarkers: Biomarker[] }>("/api/biomarkers").then(
+    (r) => r.biomarkers ?? [],
+  ));
+}
+
 // ---- overview extras: attention digest + language mix ------------------
 
 export type AttentionItem = {

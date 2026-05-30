@@ -1929,3 +1929,124 @@ a.module-card:hover {
   color: #0e1116;
   text-transform: capitalize;
 }
+
+/* ---- health metrics page --------------------------------------------- */
+.metric-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.metric-card {
+  margin-bottom: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 14px 16px;
+}
+.metric-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.metric-card-name {
+  font-size: 15px;
+  margin: 0;
+}
+.metric-scope {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.metric-sev {
+  font-size: 10px;
+  text-transform: capitalize;
+  border-radius: 999px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+}
+.metric-sev-bad {
+  color: var(--bad);
+  border-color: var(--bad);
+  background: rgba(248, 81, 73, 0.12);
+}
+.metric-sev-warn {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: rgba(210, 153, 34, 0.12);
+}
+.metric-sev-muted {
+  color: var(--muted);
+}
+.metric-summary {
+  margin: 10px 0 8px;
+  color: var(--text);
+}
+.metric-detail {
+  margin: 4px 0;
+}
+.metric-detail-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---- metric tooltip (CSS-only hover popover) ------------------------- */
+.metric-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.metric-tip-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 280px;
+  width: max-content;
+  padding: 10px 12px;
+  background: #0b0e13;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+  line-height: 1.45;
+  text-transform: none;
+  cursor: default;
+  white-space: normal;
+}
+.metric-tip:hover > .metric-tip-pop,
+.metric-tip:focus-within > .metric-tip-pop {
+  display: flex;
+}
+.metric-tip-name {
+  color: var(--text);
+  font-weight: 600;
+}
+.metric-tip-summary {
+  color: var(--muted);
+}
+.metric-tip-thresholds {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+.metric-tip-th-label {
+  font-family: inherit;
+  color: var(--text);
+  font-weight: 600;
+}
+.metric-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.metric-label .micon {
+  color: var(--muted);
+}
