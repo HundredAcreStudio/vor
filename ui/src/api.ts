@@ -399,6 +399,22 @@ export function fetchHealthFindings(id: string): Promise<HealthFinding[]> {
   ).then((r) => r.findings);
 }
 
+export type HealthSnapshot = {
+  takenAt: string; // RFC3339
+  commit: string;
+  branch?: string;
+  average: number;
+  hotspot: number;
+  worstPath?: string;
+  worst: number;
+};
+
+export function fetchHealthHistory(id: string): Promise<HealthSnapshot[]> {
+  return getJSON<{ snapshots: HealthSnapshot[] }>(`/api/repos/${id}/health/history`).then(
+    (r) => r.snapshots ?? [],
+  );
+}
+
 export type Hotspot = {
   path: string;
   churnPercentile: number;

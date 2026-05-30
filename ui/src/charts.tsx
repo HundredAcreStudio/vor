@@ -86,6 +86,114 @@ export function Heatmap({ modules, cells }: { modules: string[]; cells: number[]
   );
 }
 
+// TrendChart draws one or more line series over a shared 0..max y-axis.
+// Width fills its container (viewBox + preserveAspectRatio="none"); height is
+// fixed. Handles 0 points (renders nothing) and 1 point (renders a dot).
+export function TrendChart({
+  series,
+  max = 10,
+  height = 220,
+  xLabels,
+}: {
+  series: { label: string; color: string; values: number[] }[];
+  max?: number;
+  height?: number;
+  xLabels?: string[];
+}) {
+  const n = Math.max(0, ...series.map((s) => s.values.length));
+  if (n === 0) return null;
+
+  // viewBox coordinate space; SVG scales to 100% width via preserveAspectRatio.
+  const W = 600;
+  const H = height;
+  const padL = 28;
+  const padR = 12;
+  const padT = 12;
+  const padB = xLabels && xLabels.length ? 24 : 12;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const x = (i: number) => (n <= 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW);
+  const y = (v: number) => {
+    const frac = Math.max(0, Math.min(1, v / max));
+    return padT + (1 - frac) * plotH;
+  };
+
+  const gridLevels = [0, max / 2, max];
+
+  return (
+    <div className="trend">
+      <svg
+        className="trend-svg"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        style={{ width: "100%", height }}
+        role="img"
+      >
+        {gridLevels.map((lvl) => (
+          <g key={lvl}>
+            <line
+              x1={padL}
+              x2={W - padR}
+              y1={y(lvl)}
+              y2={y(lvl)}
+              stroke="var(--border)"
+              strokeWidth={1}
+            />
+            <text x={4} y={y(lvl) + 3} className="trend-axis" fill="var(--muted)">
+              {lvl}
+            </text>
+          </g>
+        ))}
+        {series.map((s) => {
+          const pts = s.values.map((v, i) => `${x(i)},${y(v)}`).join(" ");
+          return (
+            <g key={s.label}>
+              {s.values.length > 1 && (
+                <polyline
+                  points={pts}
+                  fill="none"
+                  stroke={s.color}
+                  strokeWidth={2}
+                  vectorEffect="non-scaling-stroke"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              )}
+              {s.values.map((v, i) => (
+                <circle key={i} cx={x(i)} cy={y(v)} r={3} fill={s.color} />
+              ))}
+            </g>
+          );
+        })}
+        {xLabels?.map((lbl, i) =>
+          // Only label the endpoints to avoid crowding.
+          i === 0 || i === xLabels.length - 1 ? (
+            <text
+              key={i}
+              x={x(i)}
+              y={H - 6}
+              textAnchor={i === 0 ? "start" : "end"}
+              className="trend-axis"
+              fill="var(--muted)"
+            >
+              {lbl}
+            </text>
+          ) : null,
+        )}
+      </svg>
+      <ul className="trend-legend">
+        {series.map((s) => (
+          <li key={s.label}>
+            <span className="swatch" style={{ background: s.color }} />
+            <span>{s.label}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export type DonutSlice = { label: string; value: number };
 
 // Donut draws a ring chart with a legend. Slices are expected pre-sorted.

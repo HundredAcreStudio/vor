@@ -1,18 +1,62 @@
 import { useParams } from "react-router-dom";
-import { fetchHealthFindings, fetchHealthSummary } from "../../api.ts";
+import { fetchHealthFindings, fetchHealthHistory, fetchHealthSummary } from "../../api.ts";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 import { MetricLabel, MetricTip } from "../../MetricTip.tsx";
+import { TrendChart } from "../../charts.tsx";
 
 export function RepoHealth() {
   const { repoId = "" } = useParams();
   const summary = useAsync(() => fetchHealthSummary(repoId), [repoId]);
   const findings = useAsync(() => fetchHealthFindings(repoId), [repoId]);
+  const history = useAsync(() => fetchHealthHistory(repoId), [repoId]);
 
   return (
     <>
       <header className="page-header">
         <h1>Health</h1>
       </header>
+
+      <div className="panel trend-panel">
+        <div className="panel-head">
+          <h3>Health over time</h3>
+        </div>
+        <AsyncView state={history}>
+          {(snaps) =>
+            snaps.length === 0 ? (
+              <p className="muted">
+                No history yet — a snapshot is recorded per commit as the repo is re-indexed.
+              </p>
+            ) : (
+              <>
+                <TrendChart
+                  series={[
+                    {
+                      label: "Average",
+                      color: "var(--good)",
+                      values: snaps.map((s) => s.average),
+                    },
+                    {
+                      label: "Hotspot",
+                      color: "var(--warn)",
+                      values: snaps.map((s) => s.hotspot),
+                    },
+                  ]}
+                  max={10}
+                  xLabels={snaps.map((s) => s.commit.slice(0, 7))}
+                />
+                {snaps.length === 1 && (
+                  <p className="muted">
+                    Only one snapshot so far — more points appear as the repo is re-indexed.
+                  </p>
+                )}
+                <p className="muted trend-foot mono">
+                  latest {snaps[snaps.length - 1].commit.slice(0, 7)}
+                </p>
+              </>
+            )
+          }
+        </AsyncView>
+      </div>
 
       <AsyncView state={summary}>
         {(s) => {

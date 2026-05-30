@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/HundredAcreStudio/vor/internal/persistence/healthstore"
+	"github.com/HundredAcreStudio/vor/internal/persistence/snapshotstore"
 	"github.com/HundredAcreStudio/vor/internal/server/http/httpx"
 )
 
@@ -14,11 +15,54 @@ import (
 //	GET .../health           — aggregate KPI: avg score + biomarker tally
 //	GET .../health/findings  — paginated list of health_findings
 //	GET .../health/files     — paginated per-file metrics
+//	GET .../health/history   — per-commit health snapshots over time
 func MountHealth(r chi.Router, deps Deps) {
 	store := healthstore.New(deps.DB)
 	r.Get("/health", healthSummary(deps, store))
 	r.Get("/health/findings", healthFindings(deps))
 	r.Get("/health/files", healthFiles(deps))
+	r.Get("/health/history", healthHistory(deps))
+}
+
+type healthSnapshotDTO struct {
+	TakenAt   string  `json:"takenAt"`
+	Commit    string  `json:"commit"`
+	Branch    string  `json:"branch,omitempty"`
+	Average   float64 `json:"average"`
+	Hotspot   float64 `json:"hotspot"`
+	WorstPath string  `json:"worstPath,omitempty"`
+	Worst     float64 `json:"worst"`
+}
+
+// healthHistory returns the repo's health snapshots in chronological order —
+// one point per indexed commit — for the over-time trend chart.
+func healthHistory(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		repoID := httpx.URLParam(r, "repoID")
+		limit := httpx.ParseIntQuery(r, "limit", 200)
+		snaps, err := snapshotstore.New(deps.DB).List(r.Context(), repoID, limit)
+		if err != nil {
+			httpx.Internal(w, err)
+			return
+		}
+		out := make([]healthSnapshotDTO, 0, len(snaps))
+		for _, s := range snaps {
+			commit := s.CommitSHA
+			if len(commit) > 10 {
+				commit = commit[:10]
+			}
+			out = append(out, healthSnapshotDTO{
+				TakenAt:   s.TakenAt.UTC().Format("2006-01-02T15:04:05Z"),
+				Commit:    commit,
+				Branch:    s.Branch,
+				Average:   s.AverageHealth,
+				Hotspot:   s.HotspotHealth,
+				WorstPath: s.WorstPath,
+				Worst:     s.WorstScore,
+			})
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"snapshots": out})
+	}
 }
 
 type healthSummaryDTO struct {
