@@ -434,6 +434,18 @@ export function fetchHealthDiff(id: string): Promise<HealthDiff> {
   return getJSON<HealthDiff>(`/api/repos/${id}/health/diff`);
 }
 
+export function fetchHealthBranches(id: string): Promise<string[]> {
+  return getJSON<{ branches: string[] }>(`/api/repos/${id}/health/branches`).then(
+    (r) => r.branches ?? [],
+  );
+}
+
+export function fetchHealthCompare(id: string, base: string, head: string): Promise<HealthDiff> {
+  return getJSON<HealthDiff>(
+    `/api/repos/${id}/health/compare?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`,
+  );
+}
+
 export type Hotspot = {
   path: string;
   churnPercentile: number;

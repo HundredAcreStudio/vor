@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   type FileDelta,
   type HealthDiff,
+  fetchHealthBranches,
+  fetchHealthCompare,
   fetchHealthDiff,
   fetchHealthFindings,
   fetchHealthHistory,
@@ -62,11 +65,17 @@ function DeltaList({
   );
 }
 
-function DiffPanelBody({ d }: { d: HealthDiff }) {
+function DiffPanelBody({
+  d,
+  noBaseline,
+}: {
+  d: HealthDiff;
+  noBaseline?: string;
+}) {
   if (!d.hasBaseline) {
     return (
       <p className="muted small">
-        No committed baseline yet — commit and re-index to compare.
+        {noBaseline ?? "No committed baseline yet — commit and re-index to compare."}
       </p>
     );
   }
@@ -100,12 +109,69 @@ function DiffPanelBody({ d }: { d: HealthDiff }) {
   );
 }
 
+function CompareBranchesPanel({
+  repoId,
+  branches,
+}: {
+  repoId: string;
+  branches: string[];
+}) {
+  const [base, setBase] = useState(branches[0]);
+  const [head, setHead] = useState(branches[1]);
+  const compare = useAsync(
+    () => fetchHealthCompare(repoId, base, head),
+    [repoId, base, head],
+  );
+
+  return (
+    <>
+      <div className="diff-summary">
+        <select
+          className="branch-select"
+          value={base}
+          onChange={(e) => setBase(e.target.value)}
+        >
+          {branches.map((b) => (
+            <option key={b} value={b}>
+              {b}
+            </option>
+          ))}
+        </select>
+        <Icon name="chevron_right" />
+        <select
+          className="branch-select"
+          value={head}
+          onChange={(e) => setHead(e.target.value)}
+        >
+          {branches.map((b) => (
+            <option key={b} value={b}>
+              {b}
+            </option>
+          ))}
+        </select>
+        <span className="mono muted small">
+          {base} → {head}
+        </span>
+      </div>
+      <AsyncView state={compare}>
+        {(d) => (
+          <DiffPanelBody
+            d={d}
+            noBaseline="One of the selected branches has no health snapshot — index the repo on that branch to compare."
+          />
+        )}
+      </AsyncView>
+    </>
+  );
+}
+
 export function RepoHealth() {
   const { repoId = "" } = useParams();
   const summary = useAsync(() => fetchHealthSummary(repoId), [repoId]);
   const findings = useAsync(() => fetchHealthFindings(repoId), [repoId]);
   const history = useAsync(() => fetchHealthHistory(repoId), [repoId]);
   const diff = useAsync(() => fetchHealthDiff(repoId), [repoId]);
+  const branches = useAsync(() => fetchHealthBranches(repoId), [repoId]);
 
   return (
     <>
@@ -160,6 +226,24 @@ export function RepoHealth() {
           <h3>Changes since last commit</h3>
         </div>
         <AsyncView state={diff}>{(d) => <DiffPanelBody d={d} />}</AsyncView>
+      </div>
+
+      <div className="panel diff-panel">
+        <div className="panel-head">
+          <h3>Compare branches</h3>
+        </div>
+        <AsyncView state={branches}>
+          {(list) =>
+            list.length < 2 ? (
+              <p className="muted small">
+                Need snapshots on at least two branches to compare. Index the repo on
+                another branch to populate this.
+              </p>
+            ) : (
+              <CompareBranchesPanel repoId={repoId} branches={list} />
+            )
+          }
+        </AsyncView>
       </div>
 
       <AsyncView state={summary}>
