@@ -1932,9 +1932,10 @@ a.module-card:hover {
 
 /* ---- health metrics page --------------------------------------------- */
 .metric-cards {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
   gap: 16px;
+  align-items: start;
 }
 .metric-card {
   margin-bottom: 0;
