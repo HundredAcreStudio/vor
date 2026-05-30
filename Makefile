@@ -1,4 +1,4 @@
-.PHONY: build install test test-race lint vet fmt tidy clean run version-info help ui ui-dev all
+.PHONY: build install test test-race lint vet fmt tidy clean run version-info help ui ui-dev all start stop restart logs logs-follow
 
 GO            ?= go
 NPM           ?= npm
@@ -8,6 +8,7 @@ GOBIN         ?= $(shell $(GO) env GOBIN)
 ifeq ($(GOBIN),)
 GOBIN         := $(shell $(GO) env GOPATH)/bin
 endif
+VOR           := $(GOBIN)/vor
 PKG           := github.com/HundredAcreStudio/vor
 VERSION       ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT        := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -57,6 +58,21 @@ tidy: ## Tidy module deps
 
 run: build ## Build and run vor
 	./$(BIN_DIR)/vor
+
+start: ## Start the background daemon (uses the installed vor + your env)
+	$(VOR) daemon start
+
+stop: ## Stop the background daemon
+	$(VOR) daemon stop
+
+restart: ## Restart the background daemon
+	$(VOR) daemon restart
+
+logs: ## Print the daemon log (tail)
+	$(VOR) daemon logs
+
+logs-follow: ## Stream the daemon log as it's written
+	$(VOR) daemon logs -f
 
 version-info: ## Print version metadata that would be embedded
 	@echo "Version:    $(VERSION)"
