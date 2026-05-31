@@ -16,7 +16,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/HundredAcreStudio/vor/internal/analysis/healthdiff"
 	"github.com/HundredAcreStudio/vor/internal/config"
 	"github.com/HundredAcreStudio/vor/internal/insights"
 	"github.com/HundredAcreStudio/vor/internal/persistence/db"
@@ -54,34 +57,39 @@ type toolInput struct {
 
 func main() {
 	// Hooks must never crash the agent: recover any panic and emit nothing.
-	out := safeRun()
+	out, event := safeRun()
 	if out != "" {
 		_ = json.NewEncoder(os.Stdout).Encode(map[string]any{
 			"hookSpecificOutput": map[string]any{
-				"hookEventName":     "PostToolUse",
+				"hookEventName":     event,
 				"additionalContext": out,
 			},
 		})
 	}
 }
 
-func safeRun() (out string) {
+func safeRun() (out, event string) {
 	defer func() {
 		if recover() != nil {
-			out = ""
+			out, event = "", ""
 		}
 	}()
 	return run()
 }
 
-func run() string {
+// run handles a single hook invocation, returning the additionalContext to
+// inject (or "") and the hook event name to tag it with.
+func run() (string, string) {
 	raw, err := io.ReadAll(io.LimitReader(os.Stdin, 4<<20))
 	if err != nil || len(raw) == 0 {
-		return ""
+		return "", ""
 	}
 	var p hookPayload
-	if json.Unmarshal(raw, &p) != nil || p.HookEventName != "PostToolUse" {
-		return ""
+	if json.Unmarshal(raw, &p) != nil {
+		return "", ""
+	}
+	if p.HookEventName != "PostToolUse" && p.HookEventName != "Stop" {
+		return "", ""
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
@@ -89,24 +97,28 @@ func run() string {
 
 	conn, err := openDB(ctx)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	defer conn.Close()
 
 	repoID, repoRoot := resolveRepo(ctx, conn, p.Cwd)
 	if repoID == "" {
-		return ""
+		return "", ""
+	}
+
+	if p.HookEventName == "Stop" {
+		return stopHealthSummary(ctx, conn, repoID, repoRoot), "Stop"
 	}
 
 	switch p.ToolName {
 	case "Grep", "Glob":
-		return searchEnrich(ctx, conn, repoID, p)
+		return searchEnrich(ctx, conn, repoID, p), "PostToolUse"
 	case "Bash":
-		return bashStaleness(ctx, conn, repoID, repoRoot, p)
+		return bashStaleness(ctx, conn, repoID, repoRoot, p), "PostToolUse"
 	case "Read", "Edit", "Write", "MultiEdit":
-		return fileEnrich(ctx, conn, repoID, repoRoot, p)
+		return fileEnrich(ctx, conn, repoID, repoRoot, p), "PostToolUse"
 	}
-	return ""
+	return "", ""
 }
 
 func openDB(ctx context.Context) (*sql.DB, error) {
@@ -292,6 +304,80 @@ func short(c string) string {
 		return c[:8]
 	}
 	return c
+}
+
+// ---- Stop: turn-end code-health regression nudge -------------------------
+
+// stopHealthSummary runs at the end of a turn: if the working state's health
+// has regressed versus the last committed snapshot, it returns a short,
+// non-blocking note so the agent can self-correct. Deduped per regression
+// signature so an unchanged regression isn't re-surfaced every turn.
+//
+// The diff is computed from the indexed health (the daemon's auto-reindex
+// keeps it close to the working tree); a regression introduced moments before
+// the turn ends may surface on the next turn instead.
+func stopHealthSummary(ctx context.Context, conn *sql.DB, repoID, repoRoot string) string {
+	diff, err := healthdiff.Compute(ctx, conn, repoID)
+	if err != nil || !diff.HasBaseline {
+		return ""
+	}
+	if len(diff.Regressions) == 0 && diff.Delta > -0.05 {
+		return "" // nothing got worse
+	}
+
+	var b strings.Builder
+	if diff.Delta <= -0.05 {
+		fmt.Fprintf(&b, "[vor] Code health dropped vs the last commit (avg %.2f → %.2f, Δ %.2f).", diff.BaselineAvg, diff.CurrentAvg, diff.Delta)
+	} else {
+		fmt.Fprintf(&b, "[vor] %d file(s) regressed in health vs the last commit (overall avg steady at %.2f).", len(diff.Regressions), diff.CurrentAvg)
+	}
+	shown := 0
+	for _, r := range diff.Regressions {
+		if shown >= 3 {
+			fmt.Fprintf(&b, "\n  …and %d more", len(diff.Regressions)-shown)
+			break
+		}
+		fmt.Fprintf(&b, "\n  %s: %.1f → %.1f", r.Path, r.Before, r.After)
+		shown++
+	}
+	b.WriteString("\n  Review with vor_health_diff; consider addressing before committing.")
+	summary := b.String()
+
+	// Dedup: only nudge when the regression set changed since last time.
+	sig := short(sha(summary))
+	if stopAlreadyNudged(repoID, sig) {
+		return ""
+	}
+	recordStopNudge(repoID, sig)
+	return summary
+}
+
+func sha(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+func stopMarker(repoID string) string {
+	dir, err := userconfig.StateDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "augment-stop-"+repoID)
+}
+
+func stopAlreadyNudged(repoID, sig string) bool {
+	m := stopMarker(repoID)
+	if m == "" {
+		return false
+	}
+	b, err := os.ReadFile(m)
+	return err == nil && strings.TrimSpace(string(b)) == sig
+}
+
+func recordStopNudge(repoID, sig string) {
+	if m := stopMarker(repoID); m != "" {
+		_ = os.WriteFile(m, []byte(sig), 0o644)
+	}
 }
 
 // ---- Read / Edit enrichment: a file's wiki page + risk signal ------------
