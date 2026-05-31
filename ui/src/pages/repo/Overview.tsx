@@ -32,7 +32,7 @@ export function RepoOverview() {
   const repo = useAsync(() => fetchRepo(repoId), [repoId]);
   const health = useAsync(() => fetchHealthSummary(repoId), [repoId]);
   const summary = useAsync(
-    () => fetchOverview().then((o) => o.repos.find((r) => r.id === repoId)),
+    () => fetchOverview().then((o) => o.repos.find((r) => r.slug === repoId || r.id === repoId)),
     [repoId],
   );
   const attention = useAsync(() => fetchAttention(repoId), [repoId]);

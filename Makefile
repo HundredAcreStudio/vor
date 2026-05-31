@@ -33,7 +33,7 @@ ui-dev: ## Run the Vite dev server (proxies /api to the daemon on :7337)
 
 all: ui build ## Build the UI then the binaries (full release build)
 
-install: build ## Install built binaries to $GOBIN (fresh inode; avoids macOS codesign-cache SIGKILL)
+install: ui build ## Build the UI, then install built binaries to $GOBIN (fresh inode; avoids macOS codesign-cache SIGKILL)
 	@mkdir -p $(GOBIN)
 	install -m 0755 $(BIN_DIR)/vor $(GOBIN)/vor
 	install -m 0755 $(BIN_DIR)/vor-augment $(GOBIN)/vor-augment
