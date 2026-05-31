@@ -12,8 +12,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	gctx "github.com/HundredAcreStudio/vor/internal/generation/context"
 	"github.com/HundredAcreStudio/vor/internal/generation/models"
@@ -58,6 +60,18 @@ type Options struct {
 	// OnProgress is called once per unit with its outcome. Optional;
 	// when nil, the runner is silent. Useful for CLI tick output.
 	OnProgress func(FileResult)
+
+	// Incremental selects the changed-files strategy: only the files in
+	// Changed (plus the directory pages on their ancestor paths, plus the
+	// architecture page) are visited, and pages for files/directories no
+	// longer indexed are pruned. When false, every indexed unit is visited
+	// (the full pass — used by init/reindex and --force).
+	Incremental bool
+	// Changed lists the repo-relative file paths added or modified by the
+	// index that triggered this run. Only consulted when Incremental is true.
+	// An empty Changed under Incremental means no file content changed, so the
+	// run does pruning + the (hash-skipped) architecture page only.
+	Changed []string
 }
 
 // FileResult is the outcome for one file's generation attempt.
@@ -91,6 +105,7 @@ type Summary struct {
 	ErrorCount        int
 	MissingCount      int
 	DryRunCount       int
+	PrunedCount       int // pages removed for files/directories no longer indexed
 	TotalInputTokens  int
 	TotalOutputTokens int
 	TotalCachedTokens int
@@ -112,6 +127,27 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 	summary := Summary{Files: []FileResult{}}
 	store := wikistore.New(opts.DB)
 
+	// Reconcile stored pages against the live indexed set: delete pages for
+	// files/directories that no longer exist. Skipped for a single-target run
+	// (which must not touch other pages) and for dry runs. The removed file
+	// paths feed the incremental plan so their ancestor directory pages get
+	// refreshed (their child list shrank).
+	var removedFiles []string
+	if opts.Target == "" && !opts.DryRun {
+		rf, err := reconcileDeletions(ctx, opts, store, &summary)
+		if err != nil {
+			return summary, err
+		}
+		removedFiles = rf
+	}
+
+	plan := buildPlan(opts, removedFiles)
+	// Incremental run with nothing added/modified/removed: reconciliation is
+	// done and no unit can have changed, so there's no generation work.
+	if plan.incremental && len(plan.files) == 0 && len(plan.dirs) == 0 && summary.PrunedCount == 0 {
+		return summary, nil
+	}
+
 	for _, kind := range kinds {
 		if opts.Limit > 0 && summary.GeneratedCount+summary.DryRunCount >= opts.Limit {
 			break
@@ -124,11 +160,11 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		)
 		switch kind {
 		case models.PageKindFileOverview:
-			err = runFileOverviews(ctx, opts, store, &summary)
+			err = runFileOverviews(ctx, opts, plan, store, &summary)
 		case models.PageKindDirectoryOverview:
-			err = runDirectoryOverviews(ctx, opts, store, &summary)
+			err = runDirectoryOverviews(ctx, opts, plan, store, &summary)
 		case models.PageKindSymbolDetail:
-			err = runSymbolDetails(ctx, opts, store, &summary)
+			err = runSymbolDetails(ctx, opts, plan, store, &summary)
 		case models.PageKindArchitecture:
 			err = runArchitecture(ctx, opts, store, &summary)
 		default:
@@ -141,9 +177,81 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 	return summary, nil
 }
 
+// incrementalPlan captures which units an incremental run should regenerate.
+// When incremental is false the plan is ignored and every unit is visited.
+type incrementalPlan struct {
+	incremental bool
+	files       map[string]bool // file_overview targets to (re)generate
+	dirs        map[string]bool // directory_overview targets to (re)generate
+}
+
+// buildPlan derives the incremental plan from the changed files plus the files
+// removed during reconciliation. A directory page is regenerated when any file
+// on its subtree changed or was removed, so the affected directories are the
+// ancestor directories of every changed-or-removed file. The architecture page
+// is always attempted (it hash-skips when its bundle is unchanged), so it isn't
+// listed here.
+func buildPlan(opts Options, removedFiles []string) incrementalPlan {
+	if !opts.Incremental {
+		return incrementalPlan{}
+	}
+	files := make(map[string]bool, len(opts.Changed))
+	dirs := map[string]bool{}
+	add := func(p string) {
+		p = strings.ReplaceAll(p, "\\", "/")
+		for d := path.Dir(p); d != "." && d != "/" && d != ""; d = path.Dir(d) {
+			dirs[d] = true
+		}
+	}
+	for _, f := range opts.Changed {
+		f = strings.ReplaceAll(f, "\\", "/")
+		files[f] = true
+		add(f)
+	}
+	for _, f := range removedFiles {
+		add(f)
+	}
+	return incrementalPlan{incremental: true, files: files, dirs: dirs}
+}
+
+// reconcileDeletions removes file/directory pages whose target is no longer in
+// the live indexed set and records the count on the summary. Returns the
+// removed file_overview target paths so the caller can refresh their ancestor
+// directory pages.
+func reconcileDeletions(ctx context.Context, opts Options, store *wikistore.Store, summary *Summary) ([]string, error) {
+	files, err := loadIndexedFiles(ctx, opts.DB, opts.RepositoryID, "")
+	if err != nil {
+		return nil, fmt.Errorf("load indexed files: %w", err)
+	}
+	liveFiles := make([]string, len(files))
+	for i, f := range files {
+		liveFiles[i] = f.path
+	}
+	removedFiles, err := store.PruneExcept(ctx, opts.RepositoryID, models.PageKindFileOverview, liveFiles)
+	if err != nil {
+		return nil, fmt.Errorf("prune file pages: %w", err)
+	}
+
+	dirs, err := loadIndexedDirectories(ctx, opts.DB, opts.RepositoryID, "")
+	if err != nil {
+		return nil, fmt.Errorf("load directories: %w", err)
+	}
+	liveDirs := make([]string, len(dirs))
+	for i, d := range dirs {
+		liveDirs[i] = d.Path
+	}
+	removedDirs, err := store.PruneExcept(ctx, opts.RepositoryID, models.PageKindDirectoryOverview, liveDirs)
+	if err != nil {
+		return nil, fmt.Errorf("prune directory pages: %w", err)
+	}
+
+	summary.PrunedCount += len(removedFiles) + len(removedDirs)
+	return removedFiles, nil
+}
+
 // runFileOverviews handles the file_overview kind — extracted from the
 // original Run for Pass D's multi-kind dispatch.
-func runFileOverviews(ctx context.Context, opts Options, store *wikistore.Store, summary *Summary) error {
+func runFileOverviews(ctx context.Context, opts Options, plan incrementalPlan, store *wikistore.Store, summary *Summary) error {
 	files, err := loadIndexedFiles(ctx, opts.DB, opts.RepositoryID, opts.Target)
 	if err != nil {
 		return fmt.Errorf("load indexed files: %w", err)
@@ -160,6 +268,11 @@ func runFileOverviews(ctx context.Context, opts Options, store *wikistore.Store,
 		}
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		// Incremental: skip files that weren't added/modified this index —
+		// before any disk read, so an unchanged tree costs nothing here.
+		if plan.incremental && !plan.files[f.path] {
+			continue
 		}
 		res := generateOne(ctx, opts, gen, store, f)
 		recordResult(opts, summary, res)

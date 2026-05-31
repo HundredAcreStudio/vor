@@ -131,6 +131,73 @@ func (s *Store) GetByTarget(ctx context.Context, repoID string, kind models.Page
 	return scanPage(row)
 }
 
+// PruneExcept deletes every current page of the given kind whose target_path
+// is not in keep, along with its archived versions and FTS rows, and returns
+// the removed target_paths. It reconciles stored pages against the live indexed
+// unit set: when a file or directory is deleted from the repo, its page is no
+// longer regenerated and would otherwise linger forever. A nil/empty keep means
+// "nothing of this kind is live" — every page of the kind is removed.
+//
+// wiki_page_versions.page_id has no ON DELETE CASCADE, so each victim's archived
+// versions are cleared first, in the same transaction.
+func (s *Store) PruneExcept(ctx context.Context, repoID string, kind models.PageKind, keep []string) ([]string, error) {
+	keepSet := make(map[string]struct{}, len(keep))
+	for _, k := range keep {
+		keepSet[k] = struct{}{}
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, target_path FROM wiki_pages WHERE repository_id = ? AND page_type = ?`,
+		repoID, string(kind))
+	if err != nil {
+		return nil, err
+	}
+	type victim struct{ id, target string }
+	var victims []victim
+	for rows.Next() {
+		var id, target string
+		if err := rows.Scan(&id, &target); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if _, ok := keepSet[target]; !ok {
+			victims = append(victims, victim{id, target})
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(victims) == 0 {
+		return nil, nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	removed := make([]string, 0, len(victims))
+	for _, v := range victims {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM wiki_page_versions WHERE page_id = ?`, v.id); err != nil {
+			return nil, fmt.Errorf("delete versions: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM page_fts WHERE page_id = ?`, v.id); err != nil {
+			if !isMissingTable(err) {
+				return nil, fmt.Errorf("fts delete: %w", err)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM wiki_pages WHERE id = ?`, v.id); err != nil {
+			return nil, fmt.Errorf("delete page: %w", err)
+		}
+		removed = append(removed, v.target)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return removed, nil
+}
+
 // MarkStale flips freshness_status to "stale" for every page whose
 // source_hash differs from the supplied value. Useful when the indexer
 // has fresh source for a path and wants to invalidate stored pages.

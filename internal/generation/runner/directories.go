@@ -21,7 +21,7 @@ import (
 // Directories aren't stored as graph rows — we derive them from the
 // distinct parent paths of file-typed graph_nodes. Same dispatch shape
 // as runFileOverviews so behaviour stays predictable.
-func runDirectoryOverviews(ctx context.Context, opts Options, store *wikistore.Store, summary *Summary) error {
+func runDirectoryOverviews(ctx context.Context, opts Options, plan incrementalPlan, store *wikistore.Store, summary *Summary) error {
 	dirs, err := loadIndexedDirectories(ctx, opts.DB, opts.RepositoryID, opts.Target)
 	if err != nil {
 		return fmt.Errorf("load directories: %w", err)
@@ -47,6 +47,11 @@ func runDirectoryOverviews(ctx context.Context, opts Options, store *wikistore.S
 		}
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		// Incremental: only refresh directories on the ancestor path of a
+		// file that was added, modified, or removed this index.
+		if plan.incremental && !plan.dirs[d.Path] {
+			continue
 		}
 
 		summaries := map[string]string{}

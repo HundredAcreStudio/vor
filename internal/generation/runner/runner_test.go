@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	gmodels "github.com/HundredAcreStudio/vor/internal/generation/models"
 	"github.com/HundredAcreStudio/vor/internal/generation/runner"
 	"github.com/HundredAcreStudio/vor/internal/persistence/db"
 	"github.com/HundredAcreStudio/vor/internal/persistence/migrations"
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
+	"github.com/HundredAcreStudio/vor/internal/persistence/wikistore"
 	"github.com/HundredAcreStudio/vor/internal/providers"
 	_ "github.com/HundredAcreStudio/vor/internal/providers/mock"
 )
@@ -117,6 +119,87 @@ func TestRun_AbortsOnFatalProviderError(t *testing.T) {
 	if summary.ErrorCount != 1 {
 		t.Errorf("ErrorCount = %d, want 1 (the one fatal attempt is recorded)", summary.ErrorCount)
 	}
+}
+
+// An incremental run regenerates only the changed files (+ their ancestor
+// directory pages), leaves unchanged files untouched, and prunes pages for
+// files that are no longer indexed.
+func TestRun_IncrementalRegeneratesChangedAndPrunesDeleted(t *testing.T) {
+	ctx := context.Background()
+	root, repoID, conn := fixture(t, map[string]string{
+		"pkg/a.go": "package pkg\nfunc A() {}\n",
+		"pkg/b.go": "package pkg\nfunc B() {}\n",
+	})
+	kinds := []gmodels.PageKind{gmodels.PageKindFileOverview, gmodels.PageKindDirectoryOverview}
+	base := runner.Options{RepoRoot: root, RepositoryID: repoID, DB: conn, Provider: mockProvider(t), Kinds: kinds}
+
+	// Full pass first: every file + the "pkg" directory page exists.
+	if _, err := runner.Run(ctx, base); err != nil {
+		t.Fatalf("full run: %v", err)
+	}
+
+	// Simulate a file that was deleted from the repo but still has a page.
+	store := wikistore.New(conn)
+	if _, err := store.Upsert(ctx, gmodels.Page{
+		RepositoryID: repoID, PageType: gmodels.PageKindFileOverview,
+		TargetPath: "pkg/gone.go", Title: "gone", Content: "x", Summary: "x",
+		SourceHash: "h", ModelName: "mock-1", ProviderName: "mock", Confidence: 1,
+	}); err != nil {
+		t.Fatalf("seed orphan page: %v", err)
+	}
+
+	// Modify a.go on disk so its hash changes and it actually regenerates.
+	if err := os.WriteFile(filepath.Join(root, "pkg/a.go"), []byte("package pkg\nfunc A() { _ = 1 }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	inc := base
+	inc.Incremental = true
+	inc.Changed = []string{"pkg/a.go"}
+	sum, err := runner.Run(ctx, inc)
+	if err != nil {
+		t.Fatalf("incremental run: %v", err)
+	}
+
+	// b.go was not in Changed → never visited (absent from the result set).
+	for _, f := range sum.Files {
+		if f.Path == "pkg/b.go" {
+			t.Errorf("pkg/b.go should not have been visited in an incremental run")
+		}
+	}
+	// a.go was visited and regenerated (its hash changed).
+	if !hasGenerated(sum, "pkg/a.go") {
+		t.Errorf("pkg/a.go should have regenerated; files=%+v", sum.Files)
+	}
+	// The orphan page for the deleted file was pruned.
+	if sum.PrunedCount != 1 {
+		t.Errorf("PrunedCount = %d, want 1", sum.PrunedCount)
+	}
+	if _, err := store.GetByTarget(ctx, repoID, gmodels.PageKindFileOverview, "pkg/gone.go"); err == nil {
+		t.Error("pkg/gone.go page should have been pruned")
+	}
+	// The ancestor directory page ("pkg") is refreshed on the changed path.
+	if !hasGenerated(sum, "pkg") && !hasSkipped(sum, "pkg") {
+		t.Errorf("directory page 'pkg' should have been visited; files=%+v", sum.Files)
+	}
+}
+
+func hasGenerated(s runner.Summary, path string) bool {
+	for _, f := range s.Files {
+		if f.Path == path && f.Status == runner.StatusGenerated {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSkipped(s runner.Summary, path string) bool {
+	for _, f := range s.Files {
+		if f.Path == path && f.Status == runner.StatusSkipped {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRun_GeneratesPagesPerIndexedFile(t *testing.T) {

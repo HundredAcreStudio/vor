@@ -72,12 +72,14 @@ func (Task) Run(ctx context.Context, tc tasks.Context) (tasks.Result, error) {
 		Provider:     tc.Provider,
 		Model:        tc.Model,
 		Kinds:        defaultKinds,
+		Incremental:  tc.Incremental,
+		Changed:      tc.Changed,
 	})
 	if err != nil {
 		return tasks.Result{}, fmt.Errorf("wiki generation: %w", err)
 	}
-	detail := fmt.Sprintf("%d generated, %d skipped, %d errors (%d in / %d out tokens)",
-		sum.GeneratedCount, sum.SkippedCount, sum.ErrorCount,
+	detail := fmt.Sprintf("%d generated, %d skipped, %d pruned, %d errors (%d in / %d out tokens)",
+		sum.GeneratedCount, sum.SkippedCount, sum.PrunedCount, sum.ErrorCount,
 		sum.TotalInputTokens, sum.TotalOutputTokens)
 	return tasks.Result{Detail: detail}, nil
 }

@@ -34,6 +34,41 @@ func setup(t *testing.T) (*sql.DB, string) {
 	return conn, r.ID
 }
 
+func TestPruneExcept(t *testing.T) {
+	conn, repoID := setup(t)
+	s := wikistore.New(conn)
+	ctx := context.Background()
+
+	// Three file pages; "gone.go" is upserted twice so it has an archived
+	// version row (exercises the wiki_page_versions cleanup path).
+	_, _ = s.Upsert(ctx, samplePage(repoID, "keep.go", "k"))
+	_, _ = s.Upsert(ctx, samplePage(repoID, "gone.go", "v1"))
+	_, _ = s.Upsert(ctx, samplePage(repoID, "gone.go", "v2"))
+	_, _ = s.Upsert(ctx, samplePage(repoID, "also-gone.go", "x"))
+
+	removed, err := s.PruneExcept(ctx, repoID, models.PageKindFileOverview, []string{"keep.go"})
+	if err != nil {
+		t.Fatalf("PruneExcept: %v", err)
+	}
+	if len(removed) != 2 {
+		t.Errorf("removed %v, want 2 (gone.go, also-gone.go)", removed)
+	}
+	if _, err := s.GetByTarget(ctx, repoID, models.PageKindFileOverview, "gone.go"); err == nil {
+		t.Error("gone.go should have been pruned")
+	}
+	if _, err := s.GetByTarget(ctx, repoID, models.PageKindFileOverview, "keep.go"); err != nil {
+		t.Errorf("keep.go should remain: %v", err)
+	}
+	// Pruning a different kind must not touch file pages.
+	removed2, err := s.PruneExcept(ctx, repoID, models.PageKindDirectoryOverview, nil)
+	if err != nil {
+		t.Fatalf("PruneExcept (dir): %v", err)
+	}
+	if len(removed2) != 0 {
+		t.Errorf("no directory pages exist; removed %v", removed2)
+	}
+}
+
 func samplePage(repoID, target string, content string) models.Page {
 	return models.Page{
 		RepositoryID: repoID,

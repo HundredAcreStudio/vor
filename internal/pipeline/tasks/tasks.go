@@ -90,6 +90,16 @@ type Context struct {
 	// when nil.
 	Embedder providers.Embedder
 	Logger   *slog.Logger
+
+	// Incremental is true when the index that triggered these tasks was an
+	// incremental update (the daemon's file-watch path), so Changed is
+	// authoritative. False for a full init/reindex — tasks should treat every
+	// unit as potentially affected.
+	Incremental bool
+	// Changed lists the repo-relative file paths added or modified by the
+	// triggering index. Only meaningful when Incremental is true; lets tasks
+	// (e.g. wiki generation) work on just what changed instead of rescanning.
+	Changed []string
 }
 
 // Result is a task's self-reported outcome, for logs and CLI/UI display.
@@ -181,12 +191,24 @@ func RunEnabled(ctx context.Context, tc Context, overrides map[string]bool) []Ou
 	return outcomes
 }
 
+// PipelineOutcome carries the just-completed index's change summary so
+// post-pipeline tasks can work incrementally. The zero value means "full
+// index" — Incremental false, no specific changed set — which is correct for
+// init and reindex.
+type PipelineOutcome struct {
+	// Incremental is true for the daemon's file-watch update path.
+	Incremental bool
+	// Changed lists the repo-relative paths added or modified this index.
+	Changed []string
+}
+
 // AfterPipeline is the single post-pipeline entry point used by every code
 // path that indexes a repo (init, reindex, and the auto-reindex watcher). It
 // resolves the repo's config + LLM provider, then runs the enabled tasks.
 // Failures are logged, not returned, so a generation hiccup never fails an
-// otherwise-successful index.
-func AfterPipeline(ctx context.Context, conn *sql.DB, repoID, repoRoot string, logger *slog.Logger) []Outcome {
+// otherwise-successful index. idx describes what the triggering index changed,
+// so incremental-aware tasks can scope their work.
+func AfterPipeline(ctx context.Context, conn *sql.DB, repoID, repoRoot string, logger *slog.Logger, idx PipelineOutcome) []Outcome {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -204,6 +226,8 @@ func AfterPipeline(ctx context.Context, conn *sql.DB, repoID, repoRoot string, l
 		Model:        model,
 		Embedder:     providerfactory.OptionalEmbedder(cfg),
 		Logger:       logger,
+		Incremental:  idx.Incremental,
+		Changed:      idx.Changed,
 	}
 	outcomes := RunEnabled(ctx, tc, cfg.Tasks)
 	for _, o := range outcomes {

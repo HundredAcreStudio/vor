@@ -119,7 +119,9 @@ incremental re-indexing.`,
 			// Run enabled post-pipeline tasks (e.g. wiki generation). These
 			// self-skip when disabled for this repo or when no LLM provider is
 			// configured, so this stays a no-op for zero-config repos.
-			reportTaskOutcomes(cmd, tasks.AfterPipeline(ctx, conn, repoRow.ID, absRoot, logger))
+			// Full index: PipelineOutcome zero value (not incremental) so tasks
+			// treat every unit as potentially affected.
+			reportTaskOutcomes(cmd, tasks.AfterPipeline(ctx, conn, repoRow.ID, absRoot, logger, tasks.PipelineOutcome{}))
 			return nil
 		},
 	}

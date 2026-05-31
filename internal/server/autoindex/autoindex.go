@@ -350,14 +350,15 @@ func (rw *repoWatcher) reindex(ctx context.Context, reason string) {
 
 	rw.logger.Info("auto-reindex: starting", "repo", rw.repoID, "reason", reason)
 	start := time.Now()
-	if _, err := pipeline.Run(ctx, pipeline.Options{
+	res, err := pipeline.Run(ctx, pipeline.Options{
 		RepoPath:     rw.root,
 		Mode:         pipeline.ModeUpdate,
 		DB:           rw.db,
 		RepositoryID: rw.repoID,
 		RunID:        uuid.NewString(),
 		Logger:       rw.logger,
-	}); err != nil {
+	})
+	if err != nil {
 		if ctx.Err() != nil {
 			return // shutdown cancelled the run; not an error worth shouting about
 		}
@@ -368,8 +369,13 @@ func (rw *repoWatcher) reindex(ctx context.Context, reason string) {
 		"took", time.Since(start).Round(time.Millisecond))
 
 	// Run enabled post-pipeline tasks (e.g. wiki generation) so pages stay
-	// fresh as files change. Each task self-skips when disabled for this repo
-	// or when no LLM provider is configured; the wiki runner regenerates only
-	// the units whose source changed. Outcomes are logged inside AfterPipeline.
-	tasks.AfterPipeline(ctx, rw.db, rw.repoID, rw.root, rw.logger)
+	// fresh as files change. This is the incremental path: pass the set of
+	// re-parsed files so the wiki runner regenerates only those (plus their
+	// ancestor directory pages + the architecture page) and prunes pages for
+	// files that were deleted. Each task self-skips when disabled or when no
+	// LLM provider is configured. Outcomes are logged inside AfterPipeline.
+	tasks.AfterPipeline(ctx, rw.db, rw.repoID, rw.root, rw.logger, tasks.PipelineOutcome{
+		Incremental: true,
+		Changed:     res.ChangedFiles,
+	})
 }

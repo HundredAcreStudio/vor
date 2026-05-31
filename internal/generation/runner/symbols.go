@@ -23,7 +23,7 @@ import (
 // outbound. Both are capped at maxNeighbors to keep prompts bounded.
 const maxNeighbors = 25
 
-func runSymbolDetails(ctx context.Context, opts Options, store *wikistore.Store, summary *Summary) error {
+func runSymbolDetails(ctx context.Context, opts Options, plan incrementalPlan, store *wikistore.Store, summary *Summary) error {
 	symbols, err := loadIndexedSymbols(ctx, opts.DB, opts.RepositoryID, opts.Target)
 	if err != nil {
 		return fmt.Errorf("load symbols: %w", err)
@@ -45,6 +45,10 @@ func runSymbolDetails(ctx context.Context, opts Options, store *wikistore.Store,
 		}
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		// Incremental: only regenerate symbols whose host file changed.
+		if plan.incremental && !plan.files[s.filePath] {
+			continue
 		}
 		res := FileResult{Path: s.id}
 

@@ -94,7 +94,8 @@ func newReindexCmd() *cobra.Command {
 			// Run enabled post-pipeline tasks (e.g. wiki generation) against
 			// the freshly-rebuilt index. With state wiped, every page is
 			// regenerated; otherwise the runner skips unchanged units.
-			reportTaskOutcomes(cmd, tasks.AfterPipeline(ctx, conn, fresh.ID, absRoot, logger))
+			// Scorched-earth reindex is a full pass: zero PipelineOutcome.
+			reportTaskOutcomes(cmd, tasks.AfterPipeline(ctx, conn, fresh.ID, absRoot, logger, tasks.PipelineOutcome{}))
 			return nil
 		},
 	}
