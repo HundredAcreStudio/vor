@@ -3,6 +3,7 @@ package runner_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,6 +77,46 @@ func mockProvider(t *testing.T) providers.Provider {
 		t.Fatal(err)
 	}
 	return p
+}
+
+// fatalProvider returns an ErrAccountFatal on every Generate and counts how
+// many times it was called, so a test can assert the run aborted early.
+type fatalProvider struct{ calls int }
+
+func (p *fatalProvider) Name() string     { return "fatal" }
+func (p *fatalProvider) Models() []string { return []string{"fatal-1"} }
+func (p *fatalProvider) Generate(context.Context, providers.Request) (providers.Response, error) {
+	p.calls++
+	return providers.Response{}, fmt.Errorf("provider Generate: %w: credit balance too low", providers.ErrAccountFatal)
+}
+func (p *fatalProvider) GenerateStream(context.Context, providers.Request) (<-chan providers.StreamEvent, error) {
+	return nil, fmt.Errorf("unused")
+}
+
+// A fatal account error (e.g. exhausted credits) must abort the whole run
+// after the first failure rather than attempting every indexed unit.
+func TestRun_AbortsOnFatalProviderError(t *testing.T) {
+	root, repoID, conn := fixture(t, map[string]string{
+		"a.go": "package a\nfunc TopFunc() {}\n",
+		"b.go": "package b\nfunc TopFunc() {}\n",
+		"c.go": "package c\nfunc TopFunc() {}\n",
+	})
+	prov := &fatalProvider{}
+	summary, err := runner.Run(context.Background(), runner.Options{
+		RepoRoot: root, RepositoryID: repoID, DB: conn, Provider: prov,
+	})
+	if !errors.Is(err, providers.ErrAccountFatal) {
+		t.Fatalf("Run should return the fatal error, got %v", err)
+	}
+	if prov.calls != 1 {
+		t.Errorf("provider called %d times, want 1 (run should fail fast)", prov.calls)
+	}
+	if summary.GeneratedCount != 0 {
+		t.Errorf("GeneratedCount = %d, want 0", summary.GeneratedCount)
+	}
+	if summary.ErrorCount != 1 {
+		t.Errorf("ErrorCount = %d, want 1 (the one fatal attempt is recorded)", summary.ErrorCount)
+	}
 }
 
 func TestRun_GeneratesPagesPerIndexedFile(t *testing.T) {

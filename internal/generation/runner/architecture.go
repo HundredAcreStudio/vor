@@ -18,6 +18,7 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/persistence/healthstore"
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 	"github.com/HundredAcreStudio/vor/internal/persistence/wikistore"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 const (
@@ -52,6 +53,7 @@ func runArchitecture(ctx context.Context, opts Options, store *wikistore.Store, 
 		if gerr != nil {
 			res.Status = StatusError
 			res.Reason = gerr.Error()
+			res.Err = gerr
 		} else {
 			res.Status = StatusGenerated
 			res.Page = &page
@@ -61,6 +63,9 @@ func runArchitecture(ctx context.Context, opts Options, store *wikistore.Store, 
 		}
 	}
 	recordResult(opts, summary, res)
+	if providers.IsFatal(res.Err) {
+		return res.Err
+	}
 	return nil
 }
 

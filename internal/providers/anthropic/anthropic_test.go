@@ -194,6 +194,40 @@ func TestGenerate_ContextTooLong(t *testing.T) {
 	}
 }
 
+func TestGenerate_AccountFatalOnCreditBalance(t *testing.T) {
+	// Anthropic returns this as a 400 when the account is out of credits.
+	prov, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}`))
+	})
+	_, err := prov.Generate(context.Background(), providers.Request{
+		Messages: []providers.Message{{Role: providers.RoleUser, Content: "hi"}},
+	})
+	if !errors.Is(err, providers.ErrAccountFatal) {
+		t.Errorf("expected ErrAccountFatal, got %v", err)
+	}
+	if !providers.IsFatal(err) {
+		t.Errorf("a credit-balance error should be fatal for a batch")
+	}
+	// A credit 400 must not be mistaken for a retryable error.
+	if providers.IsTransient(err) {
+		t.Errorf("credit-balance error should not be transient")
+	}
+}
+
+func TestGenerate_AccountFatalOnPaymentRequired(t *testing.T) {
+	prov, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPaymentRequired)
+		_, _ = w.Write([]byte(`{"type":"error","error":{"type":"billing_error","message":"payment required"}}`))
+	})
+	_, err := prov.Generate(context.Background(), providers.Request{
+		Messages: []providers.Message{{Role: providers.RoleUser, Content: "hi"}},
+	})
+	if !errors.Is(err, providers.ErrAccountFatal) {
+		t.Errorf("expected ErrAccountFatal on 402, got %v", err)
+	}
+}
+
 func TestGenerate_TransientOn5xx(t *testing.T) {
 	prov, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)

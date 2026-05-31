@@ -10,7 +10,8 @@
 //     ephemeral) plus cache-aware Usage reporting
 //   - Error classification: 401/403→ErrUnauthenticated, 404 on model
 //     →ErrModelNotFound, 400 context-length→ErrContextTooLong,
-//     429/5xx→ErrTransient (retryable)
+//     402 / 400 billing-or-credit→ErrAccountFatal, 429/5xx→ErrTransient
+//     (retryable)
 //   - Configurable base URL + HTTP client for tests
 //
 // Construction is via providers.NewProvider("anthropic", opts) with:
@@ -469,6 +470,8 @@ func classifyError(status int, body []byte) error {
 	switch {
 	case status == http.StatusUnauthorized, status == http.StatusForbidden:
 		return fmt.Errorf("anthropic %d: %w: %s", status, providers.ErrUnauthenticated, msg)
+	case status == http.StatusPaymentRequired:
+		return fmt.Errorf("anthropic %d: %w: %s", status, providers.ErrAccountFatal, msg)
 	case status == http.StatusNotFound:
 		if strings.Contains(strings.ToLower(env.Error.Type), "model") ||
 			strings.Contains(strings.ToLower(msg), "model") {
@@ -480,8 +483,25 @@ func classifyError(status int, body []byte) error {
 			strings.Contains(lower, "exceed") || strings.Contains(lower, "limit")) {
 			return fmt.Errorf("anthropic %d: %w: %s", status, providers.ErrContextTooLong, msg)
 		}
+		// A credit/billing 400 ("Your credit balance is too low…") recurs for
+		// every request until the account is topped up — treat it as fatal so
+		// batch callers stop instead of hammering the API.
+		if isBillingMessage(lower) {
+			return fmt.Errorf("anthropic %d: %w: %s", status, providers.ErrAccountFatal, msg)
+		}
 	case status == http.StatusTooManyRequests, status >= 500:
 		return fmt.Errorf("anthropic %d: %w: %s", status, providers.ErrTransient, msg)
 	}
 	return fmt.Errorf("anthropic %d: %s", status, msg)
+}
+
+// isBillingMessage reports whether a (lowercased) error message reads as an
+// account-level billing/credit failure rather than a problem with the request.
+func isBillingMessage(lower string) bool {
+	for _, s := range []string{"credit balance", "billing", "purchase credits", "insufficient", "quota"} {
+		if strings.Contains(lower, s) {
+			return true
+		}
+	}
+	return false
 }

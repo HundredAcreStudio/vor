@@ -12,6 +12,7 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/generation/models"
 	"github.com/HundredAcreStudio/vor/internal/generation/pages"
 	"github.com/HundredAcreStudio/vor/internal/persistence/wikistore"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 // runSymbolDetails iterates every non-file graph node with a name and
@@ -99,7 +100,11 @@ func runSymbolDetails(ctx context.Context, opts Options, store *wikistore.Store,
 		if err != nil {
 			res.Status = StatusError
 			res.Reason = err.Error()
+			res.Err = err
 			recordResult(opts, summary, res)
+			if providers.IsFatal(err) {
+				return err
+			}
 			continue
 		}
 		res.Status = StatusGenerated

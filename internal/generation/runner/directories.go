@@ -12,6 +12,7 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/generation/models"
 	"github.com/HundredAcreStudio/vor/internal/generation/pages"
 	"github.com/HundredAcreStudio/vor/internal/persistence/wikistore"
+	"github.com/HundredAcreStudio/vor/internal/providers"
 )
 
 // runDirectoryOverviews iterates every directory that contains at least
@@ -80,7 +81,11 @@ func runDirectoryOverviews(ctx context.Context, opts Options, store *wikistore.S
 		if err != nil {
 			res.Status = StatusError
 			res.Reason = err.Error()
+			res.Err = err
 			recordResult(opts, summary, res)
+			if providers.IsFatal(err) {
+				return err
+			}
 			continue
 		}
 		res.Status = StatusGenerated

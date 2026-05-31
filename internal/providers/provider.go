@@ -151,9 +151,26 @@ var ErrModelNotFound = errors.New("model not found")
 // window. Never retried.
 var ErrContextTooLong = errors.New("context too long")
 
+// ErrAccountFatal marks an account-level failure that will recur identically
+// for every request until the account is fixed — exhausted credits, disabled
+// billing, payment required. Never retried, and signals batch callers (e.g.
+// wiki generation) to abort rather than attempt the remaining work.
+var ErrAccountFatal = errors.New("account error")
+
 // IsTransient classifies an error for the retry layer. Implementations
 // can wrap their errors with ErrTransient; this helper inspects via
 // errors.Is.
 func IsTransient(err error) bool {
 	return errors.Is(err, ErrTransient)
+}
+
+// IsFatal reports whether err dooms an entire batch of provider calls: missing
+// or invalid credentials, an unknown model, or an account-level billing
+// failure. These recur identically per request, so a batch caller should stop
+// instead of attempting the rest. Per-request failures — ErrTransient (retried)
+// and ErrContextTooLong (depends on the specific input) — are not fatal.
+func IsFatal(err error) bool {
+	return errors.Is(err, ErrUnauthenticated) ||
+		errors.Is(err, ErrModelNotFound) ||
+		errors.Is(err, ErrAccountFatal)
 }

@@ -65,6 +65,7 @@ type FileResult struct {
 	Path         string
 	Status       Status
 	Reason       string // human-readable detail for skips/errors
+	Err          error  // underlying error when Status==StatusError; nil otherwise
 	Page         *models.Page
 	InputTokens  int
 	OutputTokens int
@@ -162,6 +163,9 @@ func runFileOverviews(ctx context.Context, opts Options, store *wikistore.Store,
 		}
 		res := generateOne(ctx, opts, gen, store, f)
 		recordResult(opts, summary, res)
+		if providers.IsFatal(res.Err) {
+			return res.Err
+		}
 	}
 	return nil
 }
@@ -229,6 +233,7 @@ func generateOne(ctx context.Context, opts Options, gen *pages.FileOverviewGener
 	if err != nil {
 		res.Status = StatusError
 		res.Reason = err.Error()
+		res.Err = err
 		return res
 	}
 	res.Status = StatusGenerated
