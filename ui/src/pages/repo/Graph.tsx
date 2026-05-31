@@ -3,6 +3,8 @@ import { fetchDependencyMatrix, fetchGraphEdges, fetchGraphNodes } from "../../a
 import { ModuleGraph } from "../../ModuleGraph.tsx";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 
+/** Graph renders the repo's module dependency graph (focusable by module) plus
+ * tables of the most central files and the import edges between them. */
 export function Graph() {
   const { repoId = "" } = useParams();
   const [params, setParams] = useSearchParams();

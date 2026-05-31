@@ -121,6 +121,8 @@ function ReadinessLine({
   );
 }
 
+/** Settings renders the global settings page, loading effective provider,
+ * embedder, and API-key configuration and delegating to SettingsBody. */
 export function Settings() {
   const [nonce, setNonce] = useState(0);
   const state = useAsync(() => fetchGlobalSettings(), [nonce]);
@@ -137,6 +139,8 @@ export function Settings() {
   );
 }
 
+/** SettingsBody lays out the loaded settings as the provider, embedder, and
+ * API-keys sections. */
 function SettingsBody({
   settings,
   reload,
@@ -171,6 +175,8 @@ function SettingsBody({
   );
 }
 
+/** ProviderSection renders the LLM-provider selector and model field, with a
+ * readiness line and a Save button that persists provider/model globally. */
 function ProviderSection({
   reload,
   options,
@@ -197,6 +203,7 @@ function ProviderSection({
     setMdl(pickModel(catalog, next, mdl));
   }
 
+  /** save persists the selected provider and model, then reloads settings. */
   function save() {
     setSaving(true);
     setMsg(null);
@@ -246,6 +253,8 @@ function ProviderSection({
   );
 }
 
+/** EmbedderSection renders the embedder selector and embedding-model field,
+ * with a readiness line and a Save button that persists them globally. */
 function EmbedderSection({
   reload,
   options,
@@ -272,6 +281,8 @@ function EmbedderSection({
     setMdl(pickModel(catalog, next, mdl));
   }
 
+  /** save persists the selected embedder and embedding model, then reloads
+   * settings. */
   function save() {
     setSaving(true);
     setMsg(null);
@@ -324,6 +335,8 @@ function EmbedderSection({
   );
 }
 
+/** ApiKeysSection renders a read-only chip per provider showing whether its API
+ * key was detected in the daemon's environment. */
 function ApiKeysSection({ providerKeys }: { providerKeys: Record<string, boolean> }) {
   const entries = Object.entries(providerKeys);
 

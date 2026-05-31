@@ -2,6 +2,8 @@ import { useParams } from "react-router-dom";
 import { fetchDeadCode } from "../../api.ts";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 
+/** RepoDeadCode renders a table of detected dead code for the repo — kind,
+ * file, symbol, confidence, and a safe-to-delete flag. */
 export function RepoDeadCode() {
   const { repoId = "" } = useParams();
   const deadcode = useAsync(() => fetchDeadCode(repoId), [repoId]);

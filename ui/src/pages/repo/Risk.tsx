@@ -76,6 +76,7 @@ export function RepoRisk() {
   );
 }
 
+/** Renders the row of summary stat cards (hotspots, silos, dead code, stale decisions, security) at the top of the Risk page. */
 function StatCards({ data }: { data: RiskData }) {
   const c = data.counts;
   return (
@@ -91,6 +92,7 @@ function StatCards({ data }: { data: RiskData }) {
 
 // ---- Heatmap tab: ownership treemap + bus factor + contributors + network --
 
+/** Heatmap tab: ownership treemap (toggleable module/file mode), bus-factor breakdown, and the contributor co-authorship network. */
 function HeatmapTab({
   repoId,
   risk,
@@ -142,6 +144,7 @@ function HeatmapTab({
   );
 }
 
+/** Side-by-side panels: a bus-factor donut with the highest-risk files, and a bar list of top contributors by commit count. */
 function BusFactorRow({ data }: { data: RiskData }) {
   const bf = data.busFactor;
   const contributors = [...data.topContributors].sort((a, b) => b.commits - a.commits);
@@ -218,6 +221,7 @@ function BusFactorRow({ data }: { data: RiskData }) {
 
 // ---- Hotspots tab -------------------------------------------------------
 
+/** Hotspots tab: a table of high-churn files with churn percentile, commit counts, owner, and bus factor. */
 function HotspotsTab({ repoId }: { repoId: string }) {
   const hotspots = useAsync(() => fetchHotspots(repoId), [repoId]);
   return (
@@ -262,6 +266,7 @@ function HotspotsTab({ repoId }: { repoId: string }) {
 
 // ---- Modules tab --------------------------------------------------------
 
+/** Modules tab: a table of indexed modules with file/symbol/dependency counts and docs coverage. */
 function ModulesTab({ repoId }: { repoId: string }) {
   const modules = useAsync(() => fetchModules(repoId), [repoId]);
   return (
@@ -304,6 +309,7 @@ function ModulesTab({ repoId }: { repoId: string }) {
 
 // ---- Dead Code tab ------------------------------------------------------
 
+/** Dead Code tab: a table of unreachable files/symbols with confidence and a safe-to-delete flag. */
 function DeadCodeTab({ repoId }: { repoId: string }) {
   const deadcode = useAsync(() => fetchDeadCode(repoId), [repoId]);
   return (
@@ -355,6 +361,7 @@ function DeadCodeTab({ repoId }: { repoId: string }) {
 
 // ---- Impact tab: module coupling heatmap --------------------------------
 
+/** Impact tab: a module-coupling heatmap used as a blast-radius proxy for changes. */
 function ImpactTab({ repoId }: { repoId: string }) {
   const matrix = useAsync(() => fetchDependencyMatrix(repoId), [repoId]);
   return (
@@ -377,6 +384,7 @@ function ImpactTab({ repoId }: { repoId: string }) {
 
 // ---- Security tab -------------------------------------------------------
 
+/** Maps a finding severity to a CSS color variable: bad for critical/high, warn for medium, muted otherwise. */
 function severityColor(sev: string): string {
   const s = sev.toLowerCase();
   if (s === "critical" || s === "high") return "var(--bad)";
@@ -384,6 +392,7 @@ function severityColor(sev: string): string {
   return "var(--muted)";
 }
 
+/** Security tab: a table of security findings with severity badge, kind, file, line, and snippet. */
 function SecurityTab({ repoId }: { repoId: string }) {
   const security = useAsync(() => fetchSecurity(repoId), [repoId]);
   return (
@@ -433,6 +442,7 @@ function SecurityTab({ repoId }: { repoId: string }) {
   );
 }
 
+/** A single labeled stat card showing a localized numeric value, a sub-caption, and an icon. */
 function StatCard({
   label,
   value,

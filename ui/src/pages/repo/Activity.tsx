@@ -1,5 +1,7 @@
 import { Stub } from "./Stub.tsx";
 
+/** Activity renders a placeholder for the pipeline run-history view (per-phase
+ * state and duration), pending wiring to the /pipeline API. */
 export function Activity() {
   return (
     <Stub title="Activity">

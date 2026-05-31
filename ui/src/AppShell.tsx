@@ -9,6 +9,11 @@ const RAIL: { to: string; icon: string; title: string }[] = [
   { to: "/settings", icon: "settings", title: "Settings" },
 ];
 
+/**
+ * Top-level layout: the fixed icon rail plus an {@link Outlet} for the routed
+ * page. Each rail entry links to a major app area; the contextual sidebar is
+ * supplied by the routed pages themselves.
+ */
 export function AppShell() {
   return (
     <div className="shell">

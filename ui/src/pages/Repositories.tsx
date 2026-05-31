@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { fetchOverview, registerRepo, type RepoSummary } from "../api.ts";
 import { AsyncView, useAsync } from "../useAsync.tsx";
 
+/** Repositories renders the landing page listing all indexed repositories as
+ * cards, with an add-repository form that reloads the list on success. */
 export function Repositories() {
   const [nonce, setNonce] = useState(0);
   const state = useAsync(() => fetchOverview().then((o) => o.repos), [nonce]);
@@ -36,11 +38,15 @@ export function Repositories() {
   );
 }
 
+/** AddRepo renders the form for registering a repository by absolute path,
+ * showing busy state and any registration error; calls onAdded on success. */
 function AddRepo({ onAdded }: { onAdded: () => void }) {
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /** submit registers the trimmed path, clearing the field and notifying the
+   * parent on success, or surfacing the error otherwise. */
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const p = path.trim();
@@ -72,6 +78,8 @@ function AddRepo({ onAdded }: { onAdded: () => void }) {
   );
 }
 
+/** RepoCard renders a clickable summary card for one repository: name, health
+ * badge, file/symbol/finding counts, head commit, and last-indexed time. */
 function RepoCard({ repo }: { repo: RepoSummary }) {
   return (
     <Link to={`/repositories/${repo.slug}/overview`} className="repo-card">
@@ -92,6 +100,7 @@ function RepoCard({ repo }: { repo: RepoSummary }) {
   );
 }
 
+/** Stat renders a single labeled statistic as a <dt>/<dd> pair. */
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="stat">
@@ -101,6 +110,8 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** HealthBadge renders a colored badge for a 1–10 health score, tiered into
+ * good/warn/bad. */
 function HealthBadge({ score }: { score: number }) {
   // Health is a 1–10 score (10 = perfect).
   const tier = score >= 7.5 ? "good" : score >= 5 ? "warn" : "bad";
@@ -115,6 +126,8 @@ function fmt(n: number): string {
   return n.toLocaleString();
 }
 
+/** relativeTime formats an ISO timestamp as a coarse "just now"/"Nm/h/d ago"
+ * string, returning "never indexed" for an empty input. */
 function relativeTime(iso: string): string {
   if (!iso) return "never indexed";
   const then = new Date(iso).getTime();

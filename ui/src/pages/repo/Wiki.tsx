@@ -6,6 +6,8 @@ import { fetchPage, fetchPages, type WikiPage } from "../../api.ts";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 import { Icon } from "../../Icon.tsx";
 
+// Wiki is the repo wiki route: loads all generated pages and renders the
+// WikiBrowser, or an empty-state hint when none exist.
 export function Wiki() {
   const { repoId = "" } = useParams();
   const pages = useAsync(() => fetchPages(repoId), [repoId]);
@@ -78,6 +80,9 @@ const DOMAINS: Domain[] = [
 
 type ViewMode = "folder" | "domain";
 
+// WikiBrowser is the two-pane wiki UI: a filterable sidebar (by-domain or
+// by-folder views, search, type/status pills) on the left and the selected
+// page's rendered doc on the right.
 function WikiBrowser({ repoId, pages: allPages }: { repoId: string; pages: WikiPage[] }) {
   // Symbols are documented inline on each file's page, not as separate wiki
   // pages, so symbol_detail pages never appear in the sidebar. Existing repos
@@ -99,6 +104,7 @@ function WikiBrowser({ repoId, pages: allPages }: { repoId: string; pages: WikiP
   const [openDomains, setOpenDomains] = useState<Set<string>>(
     () => new Set(DOMAINS.filter((d) => d.defaultOpen).map((d) => d.key)),
   );
+  // Flip a domain section's collapsed/expanded state.
   const toggleDomain = (key: string) =>
     setOpenDomains((prev) => {
       const next = new Set(prev);
@@ -108,6 +114,7 @@ function WikiBrowser({ repoId, pages: allPages }: { repoId: string; pages: WikiP
     });
 
   const q = filter.toLowerCase();
+  // Predicate combining the freshness, kind, and text filters for one page.
   const matches = (p: WikiPage) =>
     (!freshness || p.freshness === freshness) &&
     (!kindFilter || p.pageType === kindFilter) &&
@@ -162,6 +169,8 @@ function WikiBrowser({ repoId, pages: allPages }: { repoId: string; pages: WikiP
   const hasResults =
     view === "domain" ? activeDomains.length > 0 : tree.children.size > 0;
 
+  // Render a sidebar row showing a page's full targetPath, optional title, and
+  // freshness dot; selects the page on click.
   const pageRow = (p: WikiPage, indent: number) => (
     <button
       key={p.id}
@@ -421,6 +430,8 @@ function sortedChildren(n: TreeNode): TreeNode[] {
   });
 }
 
+// FolderTree renders the by-folder sidebar view, tracking per-folder expansion
+// state and recursing through TreeRow for each child.
 function FolderTree({
   root,
   selectedId,
@@ -436,6 +447,7 @@ function FolderTree({
   // of a match is part of the tree (we filtered first), so expand all.
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     const init = new Set<string>();
+    // Recursively mark folder nodes in the top two levels as initially expanded.
     const seed = (n: TreeNode, depth: number) => {
       for (const c of n.children.values()) {
         if (!isFileNode(c) && depth < 2) init.add(c.path);
@@ -446,6 +458,7 @@ function FolderTree({
     return init;
   });
 
+  // Flip a folder node's expanded/collapsed state by path.
   const toggle = (path: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -474,6 +487,8 @@ function FolderTree({
   );
 }
 
+// TreeRow renders one folder-tree row: a plain selectable leaf for file nodes,
+// or an expandable folder header that recurses into its children when open.
 function TreeRow({
   node,
   depth,
@@ -568,6 +583,8 @@ function TreeRow({
 
 // ---- doc view ------------------------------------------------------------
 
+// relTime formats an ISO timestamp as a coarse relative-time string
+// ("just now", "5m ago", "2d ago", …); returns "" for unparseable input.
 function relTime(iso: string): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return "";
@@ -585,6 +602,8 @@ function relTime(iso: string): string {
   return `${Math.round(mo / 12)}y ago`;
 }
 
+// WikiDoc fetches and renders a single wiki page's markdown content along with
+// freshness, model, version, and generation-metadata badges.
 function WikiDoc({
   repoId,
   targetPath,

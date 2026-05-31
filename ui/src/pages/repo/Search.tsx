@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { searchSymbols, type SearchHit } from "../../api.ts";
 
+/** Renders the repo Search page: a symbol/file search box and a results table ranked by PageRank. */
 export function Search() {
   const { repoId = "" } = useParams();
   const [q, setQ] = useState("");
@@ -9,6 +10,7 @@ export function Search() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  /** Submits the trimmed query to the search API, tracking busy/error state. */
   function run(e: React.FormEvent) {
     e.preventDefault();
     const term = q.trim();

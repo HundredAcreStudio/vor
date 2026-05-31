@@ -23,6 +23,9 @@ const REPO_NAV: { to: string; label: string; soon?: boolean }[] = [
   { to: "settings", label: "Settings" },
 ];
 
+/** RepoLayout renders the repo-scoped shell: a sidebar with the repo selector,
+ * default branch, and section nav, plus a breadcrumb header and an <Outlet> for
+ * the active repo subsection. */
 export function RepoLayout() {
   const { repoId = "" } = useParams();
   const location = useLocation();

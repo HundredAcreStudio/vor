@@ -1,5 +1,7 @@
 import { Stub } from "./Stub.tsx";
 
+/** Contributors renders a placeholder for the per-author contributor breakdown
+ * (commits, ownership, bus factor), pending a git-author aggregation endpoint. */
 export function Contributors() {
   return (
     <Stub title="Contributors">

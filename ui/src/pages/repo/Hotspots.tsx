@@ -2,6 +2,8 @@ import { useParams } from "react-router-dom";
 import { fetchHotspots } from "../../api.ts";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 
+/** RepoHotspots renders the repo's high-churn files as a table — commit counts,
+ * primary owner, bus factor, and lines added/deleted over the last 90 days. */
 export function RepoHotspots() {
   const { repoId = "" } = useParams();
   const hotspots = useAsync(() => fetchHotspots(repoId), [repoId]);

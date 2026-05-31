@@ -226,10 +226,25 @@ func (s *Store) SetTracked(ctx context.Context, id string, tracked, ephemeral bo
 	return nil
 }
 
-// Delete removes a repository row. CASCADE handles the dependent rows.
+// Delete removes a repository row. ON DELETE CASCADE handles dependent rows
+// for every repository_id-scoped table except wiki_page_versions, whose only
+// foreign key (page_id -> wiki_pages) lacks a cascade: the cascade from
+// repositories into wiki_pages would orphan its rows and trip the FK check.
+// It carries repository_id, so we clear it explicitly first, in the same
+// transaction, before deleting the repo row.
 func (s *Store) Delete(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM repositories WHERE id = ?`, id)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+	if _, err := tx.ExecContext(ctx, `DELETE FROM wiki_page_versions WHERE repository_id = ?`, id); err != nil {
+		return fmt.Errorf("delete wiki_page_versions: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM repositories WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("delete repository: %w", err)
+	}
+	return tx.Commit()
 }
 
 // Slug converts a repository name into a URL-safe slug (lowercase, runs of

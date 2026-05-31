@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { fetchGraphNodes } from "../../api.ts";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 
+/** Renders the repo Symbols page: the most-central indexed symbols (graph nodes ranked by PageRank). */
 export function Symbols() {
   const { repoId = "" } = useParams();
   // No dedicated symbol-list endpoint; graph_nodes filtered to symbols and

@@ -97,5 +97,19 @@ func Biomarkers() []BiomarkerInfo {
 			Thresholds: "≥8 co-changing files. Always medium.",
 			Severities: []Severity{SeverityMedium},
 		},
+		{
+			ID: BiomarkerGodFile, Name: "God file", Scope: "file",
+			Summary:    "A file declaring too many top-level symbols — module bloat, the file-level analogue of a god class.",
+			How:        "Count of top-level symbols (free functions and type declarations, excluding their methods and bare constants/variables). A file built around a single large class counts as one and is left to god_class instead.",
+			Thresholds: "≥20 top-level symbols = medium, ≥40 = high.",
+			Severities: []Severity{SeverityHigh, SeverityMedium},
+		},
+		{
+			ID: BiomarkerDeepInheritance, Name: "Deep inheritance", Scope: "class",
+			Summary:    "A type buried deep in an inheritance chain — fragile, hard to reason about, and tightly bound to its ancestors.",
+			How:        "Depth of inheritance tree (longest ancestor chain) built from heritage relations across all files. Fires only where inheritance exists.",
+			Thresholds: "depth ≥4 = medium, ≥6 = high.",
+			Severities: []Severity{SeverityHigh, SeverityMedium},
+		},
 	}
 }

@@ -17,6 +17,8 @@ import { TrendChart } from "../../charts.tsx";
 
 const DELTA_ROWS = 8;
 
+/** deltaColor returns the CSS color for a score delta: bad for a meaningful
+ * drop, good for a meaningful rise, muted within ±0.05. */
 function deltaColor(delta: number): string {
   if (delta <= -0.05) return "var(--bad)";
   if (delta >= 0.05) return "var(--good)";
@@ -28,6 +30,8 @@ function fmtDelta(delta: number): string {
   return delta > 0 ? `+${v}` : v;
 }
 
+/** DeltaList renders a titled, count-capped list of per-file score changes
+ * (before → after with delta), summarizing any overflow as "+N more". */
 function DeltaList({
   title,
   rows,
@@ -65,6 +69,8 @@ function DeltaList({
   );
 }
 
+/** DiffPanelBody renders a health diff: a baseline-vs-current summary line plus
+ * sorted regressed/improved file lists, or a no-baseline message when absent. */
 function DiffPanelBody({
   d,
   noBaseline,
@@ -109,6 +115,8 @@ function DiffPanelBody({
   );
 }
 
+/** CompareBranchesPanel renders two branch selectors and shows the health diff
+ * between the chosen base and head branches. */
 function CompareBranchesPanel({
   repoId,
   branches,
@@ -165,6 +173,9 @@ function CompareBranchesPanel({
   );
 }
 
+/** RepoHealth renders the repo's health page: a trend chart over time, the diff
+ * since last commit, a branch-comparison panel, KPI/biomarker summary, and a
+ * findings table. */
 export function RepoHealth() {
   const { repoId = "" } = useParams();
   const summary = useAsync(() => fetchHealthSummary(repoId), [repoId]);

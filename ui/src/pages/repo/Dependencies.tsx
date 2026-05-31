@@ -1,5 +1,7 @@
 import { Stub } from "./Stub.tsx";
 
+/** Dependencies renders a placeholder for the declared third-party dependency
+ * view (grouped by ecosystem, dev vs. runtime), pending wiring to /externals. */
 export function Dependencies() {
   return (
     <Stub title="Dependencies">

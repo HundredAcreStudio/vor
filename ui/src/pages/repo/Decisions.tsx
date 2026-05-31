@@ -2,6 +2,8 @@ import { useParams } from "react-router-dom";
 import { fetchDecisions } from "../../api.ts";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 
+/** RepoDecisions renders the repo's detected architectural decisions, each with
+ * its rationale, source, evidence location, and confidence. */
 export function RepoDecisions() {
   const { repoId = "" } = useParams();
   const decisions = useAsync(() => fetchDecisions(repoId), [repoId]);

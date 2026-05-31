@@ -46,6 +46,11 @@ const ICONS: Record<string, string> = {
   widgets,
 };
 
+/**
+ * Renders an inline Material Symbols SVG by name. Unknown names render an empty
+ * span; `size` sets the glyph dimensions (default 18) and `fill` toggles the
+ * filled variant via CSS class.
+ */
 export function Icon({ name, size, fill }: { name: string; size?: number; fill?: boolean }) {
   const svg = ICONS[name] ?? "";
   return (

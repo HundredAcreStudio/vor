@@ -23,6 +23,9 @@ import {
 import { Donut, Heatmap, HealthGauge } from "../../charts.tsx";
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 
+/** RepoOverview renders the repo dashboard: health gauge, KPIs, language and
+ * commit-category breakdowns, module heatmap, attention items, execution flows,
+ * and links into the detailed sections. */
 export function RepoOverview() {
   const { repoId = "" } = useParams();
   const base = `/repositories/${repoId}`;
@@ -479,6 +482,8 @@ function gradeColor(t: number): string {
   return "var(--bad)";
 }
 
+/** Bars renders a horizontal bar chart scaled to the max value; when `graded`,
+ * bars are colored by position via gradeColor (hotter toward the end). */
 function Bars({ data, graded }: { data: { label: string; value: number }[]; graded?: boolean }) {
   const max = Math.max(1, ...data.map((d) => d.value));
   return (
@@ -522,12 +527,15 @@ function categoryColor(category: string): string {
   return CATEGORY_COLORS[category] ?? "#6e7681";
 }
 
+/** scoreLabel buckets a 1–10 health score into GOOD/FAIR/POOR. */
 function scoreLabel(score: number): string {
   if (score >= 7.5) return "GOOD";
   if (score >= 5) return "FAIR";
   return "POOR";
 }
 
+/** FlowBranch recursively renders one execution-flow node and up to four of its
+ * children, indenting by depth. */
 function FlowBranch({ node, depth }: { node: FlowNode; depth: number }) {
   const short = node.node.split("/").pop() ?? node.node;
   return (
@@ -550,6 +558,8 @@ const CATEGORY_META: Record<AttentionItem["category"], { label: string; cls: str
   needs_review: { label: "Needs review", cls: "att-review" },
 };
 
+/** AttentionRow renders one attention item as a link to its section, with a
+ * category tag and detail text. */
 function AttentionRow({ item, base }: { item: AttentionItem; base: string }) {
   const meta = CATEGORY_META[item.category] ?? { label: item.category, cls: "" };
   return (
@@ -563,6 +573,7 @@ function AttentionRow({ item, base }: { item: AttentionItem; base: string }) {
   );
 }
 
+/** KpiCard renders a single key-metric card with a label, icon, and value. */
 function KpiCard({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
     <div className="kpi-card">
@@ -587,6 +598,8 @@ function relDays(iso: string): string {
   return `${days}d ago`;
 }
 
+/** Panel renders a titled dashboard section with a "view all" link to `to` and
+ * arbitrary children. */
 function Panel({ title, to, children }: { title: string; to: string; children: React.ReactNode }) {
   return (
     <section className="panel">

@@ -1,5 +1,7 @@
 import { Stub } from "./Stub.tsx";
 
+/** Costs renders a placeholder for the LLM-spend view (tokens and dollar cost
+ * per provider/model and pipeline phase), pending a costs HTTP route. */
 export function Costs() {
   return (
     <Stub title="Costs">

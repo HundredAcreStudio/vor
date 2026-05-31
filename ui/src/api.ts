@@ -19,6 +19,7 @@ export type Overview = {
   repos: RepoSummary[];
 };
 
+/** GETs `path` expecting JSON, throwing an Error with status and body on a non-2xx response. */
 async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(path, { headers: { Accept: "application/json" } });
   if (!res.ok) {
@@ -28,6 +29,10 @@ async function getJSON<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * Issues a write request (`method`) with an optional JSON `body`, throwing on a
+ * non-2xx response. Returns undefined for 204 or empty bodies.
+ */
 async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
     method,
@@ -63,6 +68,7 @@ export type Biomarker = {
 // reference the catalog share a single in-flight/resolved request.
 let _biomarkers: Promise<Biomarker[]> | null = null;
 
+/** Returns the static biomarker catalog, sharing one module-cached request across callers. */
 export function fetchBiomarkers(): Promise<Biomarker[]> {
   return (_biomarkers ??= getJSON<{ biomarkers: Biomarker[] }>("/api/biomarkers").then(
     (r) => r.biomarkers ?? [],
@@ -78,6 +84,7 @@ export type AttentionItem = {
   link: string;
 };
 
+/** Fetches the repo's attention digest — items flagged as needing review, silos, dead code, etc. */
 export function fetchAttention(id: string): Promise<AttentionItem[]> {
   return getJSON<{ items: AttentionItem[] }>(`/api/repos/${id}/attention`).then(
     (r) => r.items ?? [],
@@ -92,6 +99,7 @@ export function fetchLanguages(id: string): Promise<{ languages: LanguageSlice[]
 
 export type Community = { communityId: number; label: string; size: number; top: string[] };
 
+/** Fetches the repo's detected code communities (clusters) with their labels, sizes, and top members. */
 export function fetchCommunities(id: string): Promise<Community[]> {
   return getJSON<{ communities: Community[] }>(`/api/repos/${id}/communities`).then(
     (r) => r.communities ?? [],
@@ -100,6 +108,7 @@ export function fetchCommunities(id: string): Promise<Community[]> {
 
 export type EntryPoint = { path: string; language?: string; pagerank: number };
 
+/** Fetches the repo's entry-point files ranked by PageRank. */
 export function fetchEntryPoints(id: string): Promise<EntryPoint[]> {
   return getJSON<{ entryPoints: EntryPoint[] }>(`/api/repos/${id}/entry-points`).then(
     (r) => r.entryPoints ?? [],
@@ -152,6 +161,7 @@ export type OwnershipCell = {
   owner: string;
 };
 
+/** Fetches risk-weighted ownership cells for the treemap, grouped either `by` module or by file. */
 export function fetchRiskOwnership(
   id: string,
   by: "module" | "file",
@@ -164,6 +174,7 @@ export function fetchRiskOwnership(
 export type ContribNode = { name: string; files: number; commits: number };
 export type ContribEdge = { source: string; target: string; weight: number };
 
+/** Fetches the contributor co-authorship graph (nodes + weighted edges) for the network chart. */
 export function fetchRiskContributors(
   id: string,
 ): Promise<{ nodes: ContribNode[]; edges: ContribEdge[] }> {
@@ -180,6 +191,7 @@ export type SecurityFinding = {
   line: number;
 };
 
+/** Fetches the repo's security findings (kind, severity, location, snippet). */
 export function fetchSecurity(id: string): Promise<SecurityFinding[]> {
   return getJSON<{ findings: SecurityFinding[] }>(`/api/repos/${id}/security`).then(
     (r) => r.findings ?? [],
@@ -224,6 +236,7 @@ export function fetchPackages(id: string): Promise<Packages> {
 
 export type FlowNode = { node: string; children?: FlowNode[] };
 
+/** Fetches the repo's traced execution flows as forests of call trees. */
 export function fetchExecutionFlows(id: string): Promise<FlowNode[]> {
   return getJSON<{ flows: FlowNode[] }>(`/api/repos/${id}/execution-flows`).then(
     (r) => r.flows ?? [],
@@ -362,6 +375,7 @@ export function fetchTasks(id: string): Promise<TasksResponse> {
   return getJSON<TasksResponse>(`/api/repos/${id}/tasks`);
 }
 
+/** Enables or disables a pipeline task for the repo, returning its resulting state. */
 export function setTask(
   id: string,
   taskId: string,
@@ -393,6 +407,7 @@ export type HealthFinding = {
   reason: string;
 };
 
+/** Fetches the repo's individual health findings (capped at 200). */
 export function fetchHealthFindings(id: string): Promise<HealthFinding[]> {
   return getJSON<{ findings: HealthFinding[] }>(
     `/api/repos/${id}/health/findings?limit=200`,
@@ -409,6 +424,7 @@ export type HealthSnapshot = {
   worst: number;
 };
 
+/** Fetches the repo's health snapshots over time for trend charting. */
 export function fetchHealthHistory(id: string): Promise<HealthSnapshot[]> {
   return getJSON<{ snapshots: HealthSnapshot[] }>(`/api/repos/${id}/health/history`).then(
     (r) => r.snapshots ?? [],
@@ -434,12 +450,14 @@ export function fetchHealthDiff(id: string): Promise<HealthDiff> {
   return getJSON<HealthDiff>(`/api/repos/${id}/health/diff`);
 }
 
+/** Fetches the branch names that have health snapshots available for comparison. */
 export function fetchHealthBranches(id: string): Promise<string[]> {
   return getJSON<{ branches: string[] }>(`/api/repos/${id}/health/branches`).then(
     (r) => r.branches ?? [],
   );
 }
 
+/** Fetches a health diff between two branches/commits (`base` vs `head`). */
 export function fetchHealthCompare(id: string, base: string, head: string): Promise<HealthDiff> {
   return getJSON<HealthDiff>(
     `/api/repos/${id}/health/compare?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`,
@@ -458,6 +476,7 @@ export type Hotspot = {
   linesDeleted90d: number;
 };
 
+/** Fetches the repo's top-50 churn hotspots with ownership and bus-factor metadata. */
 export function fetchHotspots(id: string): Promise<Hotspot[]> {
   return getJSON<{ hotspots: Hotspot[] }>(`/api/repos/${id}/hotspots?limit=50`).then(
     (r) => r.hotspots,
@@ -476,6 +495,7 @@ export type Decision = {
   sourceQuote?: string;
 };
 
+/** Fetches the repo's recorded architectural decisions (capped at 100). */
 export function fetchDecisions(id: string): Promise<Decision[]> {
   return getJSON<{ decisions: Decision[] }>(`/api/repos/${id}/decisions?limit=100`).then(
     (r) => r.decisions,
@@ -492,6 +512,7 @@ export type DeadCode = {
   safeToDelete: boolean;
 };
 
+/** Fetches the repo's dead-code findings (capped at 200) with safe-to-delete flags. */
 export function fetchDeadCode(id: string): Promise<DeadCode[]> {
   return getJSON<{ findings: DeadCode[] }>(`/api/repos/${id}/dead-code?limit=200`).then(
     (r) => r.findings,
@@ -521,6 +542,7 @@ export function fetchPages(id: string): Promise<WikiPage[]> {
 
 export type WikiPageContent = WikiPage & { content: string; sourceHash: string };
 
+/** Fetches the full content of a single generated wiki page identified by target path and kind. */
 export function fetchPage(id: string, targetPath: string, kind: string): Promise<WikiPageContent> {
   return getJSON<WikiPageContent>(
     `/api/repos/${id}/pages/show?path=${encodeURIComponent(targetPath)}&kind=${encodeURIComponent(kind)}`,
@@ -539,6 +561,7 @@ export type SearchHit = {
   pagerank: number;
 };
 
+/** Searches the repo's indexed symbols for `q`, optionally restricted to a node `type` (capped at 100). */
 export function searchSymbols(id: string, q: string, type?: string): Promise<SearchHit[]> {
   const params = new URLSearchParams({ q, limit: "100" });
   if (type) params.set("type", type);
@@ -565,6 +588,7 @@ export type GraphNode = {
   visibility?: string;
 };
 
+/** Fetches graph nodes (files/symbols) for the repo, optionally filtered by `type` and limited. */
 export function fetchGraphNodes(id: string, type?: string, limit = 100): Promise<GraphNode[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (type) params.set("type", type);
@@ -581,6 +605,7 @@ export type GraphEdge = {
   importedNames?: string[];
 };
 
+/** Fetches graph edges (imports/calls/etc.) for the repo, optionally filtered by `type` and limited. */
 export function fetchGraphEdges(id: string, type?: string, limit = 200): Promise<GraphEdge[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (type) params.set("type", type);

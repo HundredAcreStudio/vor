@@ -41,6 +41,8 @@ const (
 	BiomarkerLongParameterList = "long_parameter_list"
 	BiomarkerFeatureEnvy       = "feature_envy"
 	BiomarkerShotgunSurgery    = "shotgun_surgery"
+	BiomarkerGodFile           = "god_file"
+	BiomarkerDeepInheritance   = "deep_inheritance"
 )
 
 // AllBiomarkers lists every biomarker type, for UIs that let users select
@@ -58,6 +60,8 @@ func AllBiomarkers() []string {
 		BiomarkerLongParameterList,
 		BiomarkerFeatureEnvy,
 		BiomarkerShotgunSurgery,
+		BiomarkerGodFile,
+		BiomarkerDeepInheritance,
 	}
 }
 
@@ -136,28 +140,46 @@ type Thresholds struct {
 	// ShotgunSurgeryFiles: a file that co-changes with ≥ this many distinct
 	// other files is flagged — a change here tends to ripple widely.
 	ShotgunSurgeryFiles int
+
+	// GodFileSymbols / GodFileSymbolsHigh: a file with ≥ this many top-level
+	// symbols (free functions + types, i.e. symbols with no parent) is flagged
+	// medium / high. Catches module bloat where god_class never fires (Go, C,
+	// procedural Python). Counting only top-level symbols means a file built
+	// around one large class is left to god_class — no double-counting.
+	GodFileSymbols     int
+	GodFileSymbolsHigh int
+
+	// DeepInheritanceDIT / DeepInheritanceDITHigh: a type whose inheritance
+	// chain (depth of inheritance tree) reaches ≥ this many levels is flagged
+	// medium / high. Fires only where inheritance exists.
+	DeepInheritanceDIT     int
+	DeepInheritanceDITHigh int
 }
 
 // DefaultThresholds returns the recommended values.
 func DefaultThresholds() Thresholds {
 	return Thresholds{
-		ComplexityWarning:     10,
-		ComplexityHigh:        20,
-		ComplexityCritical:    50,
-		LongFunctionLines:     60,
-		VeryLongFunctionLines: 120,
-		NestingWarning:        4,
-		NestingHigh:           6,
-		GodClassMethods:       15,
-		GodClassMethodsHigh:   25,
-		BrainMethodCCN:        10,
-		BrainMethodNesting:    3,
-		BrainMethodLines:      50,
-		UntestedCoveragePct:   50,
-		LongParameterList:     5,
-		LongParameterListHigh: 8,
-		FeatureEnvyCalls:      4,
-		ShotgunSurgeryFiles:   8,
+		ComplexityWarning:      10,
+		ComplexityHigh:         20,
+		ComplexityCritical:     50,
+		LongFunctionLines:      60,
+		VeryLongFunctionLines:  120,
+		NestingWarning:         4,
+		NestingHigh:            6,
+		GodClassMethods:        15,
+		GodClassMethodsHigh:    25,
+		BrainMethodCCN:         10,
+		BrainMethodNesting:     3,
+		BrainMethodLines:       50,
+		UntestedCoveragePct:    50,
+		LongParameterList:      5,
+		LongParameterListHigh:  8,
+		FeatureEnvyCalls:       4,
+		ShotgunSurgeryFiles:    8,
+		GodFileSymbols:         20,
+		GodFileSymbolsHigh:     40,
+		DeepInheritanceDIT:     4,
+		DeepInheritanceDITHigh: 6,
 	}
 }
 
@@ -245,6 +267,7 @@ var fileLocalBiomarkers = map[string]bool{
 	BiomarkerLongParameterList: true,
 	BiomarkerFeatureEnvy:       true,
 	BiomarkerBrainMethod:       true,
+	BiomarkerGodFile:           true,
 }
 
 // IsFileLocalBiomarker reports whether a biomarker is recomputed per-file (vs
@@ -311,6 +334,7 @@ func (a *Analyzer) globalFindings(files []models.ParsedFile, testPairs map[strin
 	emittedPairs := map[string]bool{}
 	out := a.computeHiddenCoupling(files, emittedPairs)
 	out = append(out, a.computeDuplication(files)...)
+	out = append(out, computeDeepInheritance(files, t)...)
 	for _, pf := range files {
 		out = append(out, a.fileFindings(pf, testPairs, t)...)
 	}
@@ -322,6 +346,9 @@ func (a *Analyzer) localFindings(pf models.ParsedFile, t Thresholds) []Finding {
 	methodsByParent := methodCounts(pf)
 	callsByCaller := groupCallsByCaller(pf)
 	var out []Finding
+	if f, ok := godFileFinding(pf, t); ok {
+		out = append(out, f)
+	}
 	for _, sym := range pf.Symbols {
 		out = append(out, a.symbolFindings(pf, sym, methodsByParent, callsByCaller, t)...)
 	}

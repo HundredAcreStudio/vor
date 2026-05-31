@@ -1,5 +1,6 @@
 import { Stub } from "./Stub.tsx";
 
+/** Renders the repo Security page: a placeholder until a security-findings HTTP route exists. */
 export function Security() {
   return (
     <Stub title="Security">

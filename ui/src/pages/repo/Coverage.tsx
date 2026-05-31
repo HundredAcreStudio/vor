@@ -1,5 +1,7 @@
 import { Stub } from "./Stub.tsx";
 
+/** Coverage renders a placeholder for the test-coverage view (per-file/package
+ * coverage with untested-hotspot overlays), pending a coverage HTTP route. */
 export function Coverage() {
   return (
     <Stub title="Coverage">

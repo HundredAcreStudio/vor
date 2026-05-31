@@ -16,6 +16,7 @@ import {
 import { AsyncView, useAsync } from "../../useAsync.tsx";
 import { MetricTip } from "../../MetricTip.tsx";
 
+/** Renders the repo Settings page: loads per-repo settings and renders SettingsBody, with a nonce-driven reload. */
 export function Settings() {
   const { repoId = "" } = useParams();
   const [nonce, setNonce] = useState(0);
@@ -37,6 +38,7 @@ export function Settings() {
 // glob pattern) plus the biomarkers it disables.
 type EditRule = { kind: "path" | "pattern"; match: string; biomarkers: string[] };
 
+/** Converts stored HealthRules into editable EditRule form, classifying each as a glob pattern or path prefix. */
 function toEdit(rules: HealthRule[] | null): EditRule[] {
   return (rules ?? []).map((r) => ({
     kind: r.pattern ? "pattern" : "path",
@@ -45,6 +47,7 @@ function toEdit(rules: HealthRule[] | null): EditRule[] {
   }));
 }
 
+/** Converts editable EditRules back into HealthRules, dropping empty rules and marking selected biomarkers disabled. */
 function toRules(edits: EditRule[]): HealthRule[] {
   return edits
     .filter((e) => e.match.trim() && e.biomarkers.length > 0)
@@ -54,6 +57,7 @@ function toRules(edits: EditRule[]): HealthRule[] {
     }));
 }
 
+/** Main settings body: tasks, generation overrides, health-rule exclusions editor, and the danger zone. */
 function SettingsBody({
   repoId,
   settings,
@@ -72,6 +76,7 @@ function SettingsBody({
   function update(i: number, patch: Partial<EditRule>) {
     setRules((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
+  /** Adds or removes biomarker `b` from rule `i`'s disabled set. */
   function toggleBiomarker(i: number, b: string) {
     setRules((rs) =>
       rs.map((r, idx) =>
@@ -87,6 +92,7 @@ function SettingsBody({
     );
   }
 
+  /** Persists the edited exclusion rules as the repo's health_rules setting. */
   function save() {
     setSaving(true);
     setMsg(null);
@@ -99,6 +105,7 @@ function SettingsBody({
       .finally(() => setSaving(false));
   }
 
+  /** Clears the repo's health_rules override, reverting to global defaults. */
   function resetToGlobal() {
     setSaving(true);
     clearRepoSetting(repoId, "health_rules")
@@ -189,6 +196,7 @@ function SettingsBody({
   );
 }
 
+/** Settings section that loads the repo's analysis tasks and renders TasksBody, with nonce-driven reload. */
 function TasksSection({ repoId }: { repoId: string }) {
   const [nonce, setNonce] = useState(0);
   const state = useAsync(() => fetchTasks(repoId), [repoId, nonce]);
@@ -209,6 +217,7 @@ function TasksSection({ repoId }: { repoId: string }) {
   );
 }
 
+/** Renders per-repo analysis task toggles with optimistic updates and unmet-requirement hints. */
 function TasksBody({
   repoId,
   data,
@@ -224,6 +233,7 @@ function TasksBody({
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
+  /** Optimistically flips a task's enabled flag, persisting via the API and rolling back on failure. */
   function toggle(task: TaskInfo) {
     const next = !task.enabled;
     setBusy(task.id);
@@ -250,6 +260,7 @@ function TasksBody({
     provider: data.providerConfigured,
     embedder: data.embedderConfigured,
   };
+  /** Builds a hint listing any unconfigured requirements for a task, or null when all are met. */
   function unmetHint(req: string[]): string | null {
     const labels = req
       .filter((r) => !configured[r])
@@ -293,6 +304,7 @@ function TasksBody({
   );
 }
 
+/** Settings section for per-repo provider/model and embedder overrides; shows a notice when nothing is configured globally. */
 function GenerationSection({
   repoId,
   settings,
@@ -360,6 +372,7 @@ function GenerationSection({
   );
 }
 
+/** A provider/embedder override editor pairing a provider select with a model select or free-text input, with save and reset-to-global. */
 function OverrideGroup({
   repoId,
   reload,
@@ -418,12 +431,14 @@ function OverrideGroup({
       : [model, ...entry.models]
     : [];
 
+  /** Saves a non-empty setting value, or clears the override when the value is blank. */
   function persist(key: string, value: string): Promise<void> {
     return value.trim()
       ? putRepoSetting(repoId, key, value.trim())
       : clearRepoSetting(repoId, key);
   }
 
+  /** Persists the selected provider/embedder and its model together. */
   function save() {
     setSaving(true);
     setMsg(null);
@@ -436,6 +451,7 @@ function OverrideGroup({
       .finally(() => setSaving(false));
   }
 
+  /** Clears both the provider/embedder and model overrides, reverting to global defaults. */
   function resetToGlobal() {
     setSaving(true);
     setMsg(null);
@@ -507,11 +523,13 @@ function OverrideGroup({
   );
 }
 
+/** Danger-zone control to delete the repo: a two-step armed confirmation that removes all indexed data. */
 function DeleteRepo({ repoId, onDeleted }: { repoId: string; onDeleted: () => void }) {
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /** Calls the delete-repo API and invokes onDeleted on success. */
   function run() {
     setBusy(true);
     setError(null);

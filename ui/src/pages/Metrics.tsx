@@ -10,6 +10,9 @@ function severityClass(sev: string): string {
   return "metric-sev metric-sev-muted";
 }
 
+/** Metrics renders the Health Metrics page: a card per biomarker the analyzer
+ * detects, documenting what each one means, how it's measured, and its
+ * triggering thresholds. */
 export function Metrics() {
   const state = useAsync(() => fetchBiomarkers(), []);
 
@@ -44,6 +47,8 @@ export function Metrics() {
   );
 }
 
+/** MetricCard renders a single biomarker's name, scope, severity badges,
+ * summary, and (when present) its calculation method and thresholds. */
 function MetricCard({ bm }: { bm: Biomarker }) {
   return (
     <section className="settings-section metric-card">
