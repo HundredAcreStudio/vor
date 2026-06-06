@@ -11,6 +11,7 @@ package registry
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -20,11 +21,21 @@ import (
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 )
 
+// ErrNoWatcher is returned by Reindex when the registrar has no live watcher
+// (e.g. a CLI mutating the DB with no running daemon), so there's nothing to
+// run the background work. The HTTP layer maps it to 503.
+var ErrNoWatcher = errors.New("registry: no live watcher")
+
 // Tracker is the slice of the autoindex watcher the registrar drives.
 // Defined here (not imported) so registry stays decoupled from autoindex.
 type Tracker interface {
 	Track(repoID, root string)
 	Untrack(repoID string)
+	// Reindex triggers a non-destructive background re-index of repoID.
+	// forceHealth forces a full biomarker recompute; forceWiki forces a full
+	// LLM wiki regeneration. Primitive args keep registry decoupled from the
+	// autoindex package's option types.
+	Reindex(repoID, reason string, forceHealth, forceWiki bool) error
 }
 
 // Repo is the registrar's DTO for a tracked repository.
@@ -123,6 +134,27 @@ func (r *Registrar) Delete(ctx context.Context, spec string) (Repo, error) {
 		return out, fmt.Errorf("delete repo: %w", err)
 	}
 	r.logger.Info("registry: deleted repo + index", "repo", row.ID, "path", row.LocalPath)
+	return out, nil
+}
+
+// Reindex triggers a non-destructive background re-index of the repo named by
+// spec (id or local path). forceHealth forces a full biomarker recompute;
+// forceWiki forces a full LLM wiki regeneration. Requires a live watcher.
+func (r *Registrar) Reindex(ctx context.Context, spec, reason string, forceHealth, forceWiki bool) (Repo, error) {
+	store := repos.New(r.db)
+	row, err := r.resolve(ctx, store, spec)
+	if err != nil {
+		return Repo{}, err
+	}
+	out := Repo{ID: row.ID, Name: row.Name, Path: row.LocalPath, Ephemeral: row.Ephemeral}
+	if r.tracker == nil {
+		return out, ErrNoWatcher
+	}
+	if err := r.tracker.Reindex(row.ID, reason, forceHealth, forceWiki); err != nil {
+		return out, err
+	}
+	r.logger.Info("registry: reindex triggered", "repo", row.ID, "reason", reason,
+		"forceHealth", forceHealth, "forceWiki", forceWiki)
 	return out, nil
 }
 

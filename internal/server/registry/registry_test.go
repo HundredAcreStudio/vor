@@ -16,10 +16,15 @@ import (
 type fakeTracker struct {
 	tracked   []string
 	untracked []string
+	reindexed []string
 }
 
 func (f *fakeTracker) Track(id, root string) { f.tracked = append(f.tracked, id) }
 func (f *fakeTracker) Untrack(id string)     { f.untracked = append(f.untracked, id) }
+func (f *fakeTracker) Reindex(id, reason string, forceHealth, forceWiki bool) error {
+	f.reindexed = append(f.reindexed, id)
+	return nil
+}
 
 func freshDB(t *testing.T) *sql.DB {
 	t.Helper()

@@ -13,6 +13,7 @@ package autoindex
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -329,53 +330,106 @@ func (rw *repoWatcher) sourceDirs() map[string]bool {
 // reindex runs one incremental pipeline pass, skipping if a run is already
 // in flight for this repo (the MCP vor_reindex tool can fire concurrently).
 // reason is logged for observability ("startup" or "change").
+// TriggerOptions tunes one index pass. The watch path leaves it mostly zero
+// (incremental, no force); the manual dashboard triggers set the force flags.
+type TriggerOptions struct {
+	// Reason is logged for observability ("file change", "manual reindex", …).
+	Reason string
+	// Incremental restricts wiki generation to the files changed this run.
+	// True for the file-watch path; false for manual triggers, which do a full
+	// (hash-skipped) pass.
+	Incremental bool
+	// ForceHealth forces a full biomarker recompute (rescan biomarkers).
+	ForceHealth bool
+	// ForceWiki forces a full LLM wiki regeneration (regenerate wiki).
+	ForceWiki bool
+}
+
 func (rw *repoWatcher) reindex(ctx context.Context, reason string) {
-	// Bound concurrent reindexes across all repos.
-	if rw.sem != nil {
+	runIndex(ctx, rw.db, rw.logger, rw.sem, rw.repoID, rw.root, TriggerOptions{
+		Reason: reason, Incremental: true,
+	})
+}
+
+// runIndex runs one non-destructive pipeline pass for a repo plus its enabled
+// post-pipeline tasks, honoring the trigger's force flags. Shared by the
+// file-watch path and the manual dashboard triggers. It bounds concurrency via
+// sem and skips when a run is already in progress for the repo.
+func runIndex(ctx context.Context, db *sql.DB, logger *slog.Logger, sem chan struct{}, repoID, root string, t TriggerOptions) {
+	if sem != nil {
 		select {
-		case rw.sem <- struct{}{}:
-			defer func() { <-rw.sem }()
+		case sem <- struct{}{}:
+			defer func() { <-sem }()
 		case <-ctx.Done():
 			return
 		}
 	}
 
-	pstore := pipelinestore.New(rw.db)
-	if latest, err := pstore.LatestRun(ctx, rw.repoID); err == nil && latest != nil &&
+	pstore := pipelinestore.New(db)
+	if latest, err := pstore.LatestRun(ctx, repoID); err == nil && latest != nil &&
 		latest.Overall == pipelinestore.OutcomeRunning {
-		rw.logger.Debug("auto-reindex: run already in progress, skipping",
-			"repo", rw.repoID, "reason", reason)
+		logger.Debug("reindex: run already in progress, skipping",
+			"repo", repoID, "reason", t.Reason)
 		return
 	}
 
-	rw.logger.Info("auto-reindex: starting", "repo", rw.repoID, "reason", reason)
+	logger.Info("reindex: starting", "repo", repoID, "reason", t.Reason)
 	start := time.Now()
 	res, err := pipeline.Run(ctx, pipeline.Options{
-		RepoPath:     rw.root,
+		RepoPath:     root,
 		Mode:         pipeline.ModeUpdate,
-		DB:           rw.db,
-		RepositoryID: rw.repoID,
+		DB:           db,
+		RepositoryID: repoID,
 		RunID:        uuid.NewString(),
-		Logger:       rw.logger,
+		Logger:       logger,
+		ForceHealth:  t.ForceHealth,
 	})
 	if err != nil {
 		if ctx.Err() != nil {
 			return // shutdown cancelled the run; not an error worth shouting about
 		}
-		rw.logger.Error("auto-reindex: failed", "repo", rw.repoID, "reason", reason, "err", err)
+		logger.Error("reindex: failed", "repo", repoID, "reason", t.Reason, "err", err)
 		return
 	}
-	rw.logger.Info("auto-reindex: done", "repo", rw.repoID, "reason", reason,
+	logger.Info("reindex: done", "repo", repoID, "reason", t.Reason,
 		"took", time.Since(start).Round(time.Millisecond))
 
-	// Run enabled post-pipeline tasks (e.g. wiki generation) so pages stay
-	// fresh as files change. This is the incremental path: pass the set of
-	// re-parsed files so the wiki runner regenerates only those (plus their
+	// Run enabled post-pipeline tasks. On the incremental watch path, pass the
+	// re-parsed file set so wiki generation touches only those (plus their
 	// ancestor directory pages + the architecture page) and prunes pages for
-	// files that were deleted. Each task self-skips when disabled or when no
-	// LLM provider is configured. Outcomes are logged inside AfterPipeline.
-	tasks.AfterPipeline(ctx, rw.db, rw.repoID, rw.root, rw.logger, tasks.PipelineOutcome{
-		Incremental: true,
-		Changed:     res.ChangedFiles,
+	// deleted files. Manual triggers do a full pass; ForceWiki additionally
+	// re-writes every page. Each task self-skips when disabled or providerless.
+	outcome := tasks.PipelineOutcome{ForceWiki: t.ForceWiki}
+	if t.Incremental {
+		outcome.Incremental = true
+		outcome.Changed = res.ChangedFiles
+	}
+	tasks.AfterPipeline(ctx, db, repoID, root, logger, outcome)
+}
+
+// Reindex triggers a non-destructive re-index of repoID in the background,
+// returning once the work is launched. Implements registry.Tracker. Used by the
+// dashboard's reindex / regenerate-wiki / rescan-biomarkers actions. Returns an
+// error only when the repo can't be resolved.
+func (w *Watcher) Reindex(repoID, reason string, forceHealth, forceWiki bool) error {
+	base := w.baseCtx()
+	repo, err := repos.New(w.db).Get(base, repoID)
+	if err != nil {
+		return fmt.Errorf("resolve repo %s: %w", repoID, err)
+	}
+	go runIndex(base, w.db, w.logger, w.sem, repo.ID, repo.LocalPath, TriggerOptions{
+		Reason: reason, ForceHealth: forceHealth, ForceWiki: forceWiki,
 	})
+	return nil
+}
+
+// baseCtx returns the daemon-lifetime context, or context.Background when the
+// watcher isn't running (so a trigger still works in non-daemon callers).
+func (w *Watcher) baseCtx() context.Context {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.base != nil {
+		return w.base
+	}
+	return context.Background()
 }

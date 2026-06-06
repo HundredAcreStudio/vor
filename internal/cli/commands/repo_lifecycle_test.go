@@ -146,7 +146,8 @@ func TestDelete_CascadesPersistedTables(t *testing.T) {
 	}
 }
 
-func TestReindex_RequiresConfirm(t *testing.T) {
+// The default reindex is non-destructive and runs without confirmation.
+func TestReindex_DefaultIsNonDestructive(t *testing.T) {
 	tmp, _, _ := repoFixture(t)
 	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
 		t.Fatal(err)
@@ -155,8 +156,26 @@ func TestReindex_RequiresConfirm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout, "Re-run with --yes") {
-		t.Errorf("expected confirm prompt, got %q", stdout)
+	if strings.Contains(stdout, "--hard") {
+		t.Errorf("default reindex should not prompt for confirmation, got %q", stdout)
+	}
+	if !strings.Contains(stdout, "reindex complete") {
+		t.Errorf("expected default reindex to run, got %q", stdout)
+	}
+}
+
+// The destructive --hard rebuild requires --yes.
+func TestReindexHard_RequiresConfirm(t *testing.T) {
+	tmp, _, _ := repoFixture(t)
+	if _, _, err := runVorCmd(t, nil, "init", tmp); err != nil {
+		t.Fatal(err)
+	}
+	stdout, _, err := runVorCmd(t, nil, "reindex", "--hard", tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, "--hard --yes") {
+		t.Errorf("expected --hard to require confirmation, got %q", stdout)
 	}
 }
 
@@ -179,9 +198,9 @@ func TestReindex_RebuildsFromScratch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, _, err := runVorCmd(t, nil, "reindex", "--yes", tmp)
+	stdout, _, err := runVorCmd(t, nil, "reindex", "--hard", "--yes", tmp)
 	if err != nil {
-		t.Fatalf("reindex --yes: %v", err)
+		t.Fatalf("reindex --hard --yes: %v", err)
 	}
 	if !strings.Contains(stdout, "reindex complete") {
 		t.Errorf("expected 'reindex complete', got %q", stdout)

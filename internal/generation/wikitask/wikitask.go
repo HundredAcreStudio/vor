@@ -74,6 +74,7 @@ func (Task) Run(ctx context.Context, tc tasks.Context) (tasks.Result, error) {
 		Kinds:        defaultKinds,
 		Incremental:  tc.Incremental,
 		Changed:      tc.Changed,
+		Force:        tc.ForceWiki,
 	})
 	if err != nil {
 		return tasks.Result{}, fmt.Errorf("wiki generation: %w", err)

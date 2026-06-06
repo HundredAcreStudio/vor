@@ -100,6 +100,11 @@ type Context struct {
 	// triggering index. Only meaningful when Incremental is true; lets tasks
 	// (e.g. wiki generation) work on just what changed instead of rescanning.
 	Changed []string
+	// ForceWiki requests a full wiki regeneration (every page re-written by the
+	// LLM, ignoring source-hash freshness). Set by the explicit "regenerate
+	// wiki" trigger — the only path that deliberately spends LLM credits on a
+	// full re-gen.
+	ForceWiki bool
 }
 
 // Result is a task's self-reported outcome, for logs and CLI/UI display.
@@ -200,6 +205,8 @@ type PipelineOutcome struct {
 	Incremental bool
 	// Changed lists the repo-relative paths added or modified this index.
 	Changed []string
+	// ForceWiki requests a full LLM wiki regeneration (ignores freshness).
+	ForceWiki bool
 }
 
 // AfterPipeline is the single post-pipeline entry point used by every code
@@ -228,6 +235,7 @@ func AfterPipeline(ctx context.Context, conn *sql.DB, repoID, repoRoot string, l
 		Logger:       logger,
 		Incremental:  idx.Incremental,
 		Changed:      idx.Changed,
+		ForceWiki:    idx.ForceWiki,
 	}
 	outcomes := RunEnabled(ctx, tc, cfg.Tasks)
 	for _, o := range outcomes {

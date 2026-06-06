@@ -2,12 +2,14 @@ package routes
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/HundredAcreStudio/vor/internal/persistence/repos"
 	"github.com/HundredAcreStudio/vor/internal/server/http/httpx"
+	"github.com/HundredAcreStudio/vor/internal/server/registry"
 )
 
 // MountRepos wires the /api/repos endpoints (collection level) onto r.
@@ -30,6 +32,38 @@ func MountRepoDetail(r chi.Router, deps Deps) {
 	store := repos.New(deps.DB)
 	r.Get("/", getRepo(store))
 	r.Delete("/", deleteRepo(deps))
+	// Non-destructive maintenance triggers (dashboard Settings actions). Each
+	// launches background work on the daemon and returns 202.
+	r.Post("/reindex", triggerReindex(deps, "manual reindex", false, false))
+	r.Post("/wiki/regenerate", triggerReindex(deps, "manual wiki regenerate", false, true))
+	r.Post("/health/rescan", triggerReindex(deps, "manual biomarker rescan", true, false))
+}
+
+// triggerReindex returns a handler that kicks off a non-destructive background
+// re-index of {repoID}. forceHealth forces a full biomarker recompute;
+// forceWiki forces a full LLM wiki regeneration. Returns 202 Accepted once the
+// work is launched, or 503 when no live watcher is running.
+func triggerReindex(deps Deps, reason string, forceHealth, forceWiki bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.Registrar == nil {
+			httpx.Error(w, http.StatusServiceUnavailable, "reindex unavailable (no watcher running)")
+			return
+		}
+		id := httpx.URLParam(r, "repoID") // canonicalized by ResolveRepoRef
+		repo, err := deps.Registrar.Reindex(r.Context(), id, reason, forceHealth, forceWiki)
+		if err != nil {
+			if errors.Is(err, registry.ErrNoWatcher) {
+				httpx.Error(w, http.StatusServiceUnavailable, "reindex unavailable (no watcher running)")
+				return
+			}
+			httpx.BadRequest(w, err.Error())
+			return
+		}
+		httpx.JSON(w, http.StatusAccepted, map[string]any{
+			"status": "started",
+			"repo":   repo,
+		})
+	}
 }
 
 // deleteRepo handles DELETE /api/repos/{repoID}: stop watching the repo and

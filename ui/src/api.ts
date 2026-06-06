@@ -375,6 +375,21 @@ export function fetchTasks(id: string): Promise<TasksResponse> {
   return getJSON<TasksResponse>(`/api/repos/${id}/tasks`);
 }
 
+/** Triggers a non-destructive background re-index (re-parse + recompute). */
+export function reindexRepo(id: string): Promise<{ status: string }> {
+  return send<{ status: string }>("POST", `/api/repos/${id}/reindex`);
+}
+
+/** Triggers a full LLM wiki regeneration (spends provider credits). */
+export function regenerateWiki(id: string): Promise<{ status: string }> {
+  return send<{ status: string }>("POST", `/api/repos/${id}/wiki/regenerate`);
+}
+
+/** Triggers a full biomarker (code-health) recompute. No LLM cost. */
+export function rescanBiomarkers(id: string): Promise<{ status: string }> {
+  return send<{ status: string }>("POST", `/api/repos/${id}/health/rescan`);
+}
+
 /** Enables or disables a pipeline task for the repo, returning its resulting state. */
 export function setTask(
   id: string,

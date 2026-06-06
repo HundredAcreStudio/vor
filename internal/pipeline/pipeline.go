@@ -138,6 +138,12 @@ type Options struct {
 	// GitMaxCommits caps the git intelligence walk (0 = default 10000).
 	GitMaxCommits int
 
+	// ForceHealth forces a full biomarker recompute: it suppresses the
+	// "HEAD unchanged" fast-path (so graph + health + persist run) and makes
+	// the health phase run a full Analyze instead of reusing prior findings.
+	// Used by the "rescan biomarkers" trigger. No LLM cost.
+	ForceHealth bool
+
 	// RunID groups every phase of this run together in pipeline_jobs
 	// for resume + observability. When empty, Run() generates one. When
 	// Mode=ModeResume, an explicit RunID overrides the auto-detected
@@ -167,11 +173,11 @@ type Result struct {
 	// file-local findings (health.AnalyzeIncremental); persist then writes
 	// only the changed/global rows instead of ReplaceAll.
 	HealthIncremental bool
-	DeadCode         []deadcode.Finding
-	HealthResult     health.Result
-	Externals        []external.Record
-	Decisions        []decisions.Record
-	TraversalStats   models.TraversalStats
+	DeadCode          []deadcode.Finding
+	HealthResult      health.Result
+	Externals         []external.Record
+	Decisions         []decisions.Record
+	TraversalStats    models.TraversalStats
 
 	// ParseStats reports incremental-parse outcomes for the run: how many
 	// files were freshly parsed vs reused from the cache, and how many
@@ -401,7 +407,10 @@ func phaseGit(ctx context.Context, opts Options, res *Result) error {
 			res.GitReused = true
 			// HEAD unchanged + no files re-parsed/pruned ⇒ the whole index is
 			// already current; the downstream analysis phases will no-op.
-			res.Unchanged = res.ParseStats.Parsed == 0 && res.ParseStats.Pruned == 0
+			// ForceHealth callers (the "rescan biomarkers" trigger) need the
+			// downstream phases to run even when nothing changed, so don't take
+			// the no-op shortcut for them.
+			res.Unchanged = !opts.ForceHealth && res.ParseStats.Parsed == 0 && res.ParseStats.Pruned == 0
 			opts.Logger.Info("git: HEAD unchanged, reusing stored metadata", "commit", short(sha), "unchanged", res.Unchanged)
 			return nil
 		}
@@ -500,7 +509,9 @@ func phaseHealth(ctx context.Context, opts Options, res *Result) error {
 	// just the changed files (global/cross-file findings are recomputed in
 	// full inside AnalyzeIncremental). Falls back to a full Analyze on the
 	// first index or when no prior exists.
-	if prior, ok := priorHealth(ctx, opts); ok {
+	// ForceHealth recomputes every file's findings from scratch; otherwise reuse
+	// the prior run's file-local findings and recompute only changed files.
+	if prior, ok := priorHealth(ctx, opts); ok && !opts.ForceHealth {
 		changed := make(map[string]bool, len(res.ChangedFiles))
 		for _, p := range res.ChangedFiles {
 			changed[p] = true

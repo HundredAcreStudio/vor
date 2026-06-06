@@ -6,6 +6,9 @@ import {
   fetchRepoSettings,
   fetchTasks,
   putRepoSetting,
+  regenerateWiki,
+  reindexRepo,
+  rescanBiomarkers,
   setTask,
   type HealthRule,
   type ModelCatalog,
@@ -23,14 +26,14 @@ export function Settings() {
   const state = useAsync(() => fetchRepoSettings(repoId), [repoId, nonce]);
 
   return (
-    <>
+    <div className="settings-page">
       <header className="page-header">
         <h1>Settings</h1>
       </header>
       <AsyncView state={state}>
         {(s) => <SettingsBody repoId={repoId} settings={s} reload={() => setNonce((n) => n + 1)} />}
       </AsyncView>
-    </>
+    </div>
   );
 }
 
@@ -186,6 +189,11 @@ function SettingsBody({
           </button>
         </div>
         {msg && <p className="muted small">{msg}</p>}
+      </section>
+
+      <section className="settings-section">
+        <h2 className="section-title">Maintenance</h2>
+        <MaintenanceActions repoId={repoId} />
       </section>
 
       <section className="settings-section danger">
@@ -518,6 +526,99 @@ function OverrideGroup({
           {saving ? "Saving…" : "Save"}
         </button>
       </div>
+      {msg && <p className="muted small">{msg}</p>}
+    </div>
+  );
+}
+
+/** Non-destructive maintenance triggers: reindex, rescan biomarkers, and (credit-spending) wiki regeneration. */
+function MaintenanceActions({ repoId }: { repoId: string }) {
+  // Tracks which action is in flight (only one at a time) and the last result.
+  const [busy, setBusy] = useState<null | "reindex" | "health" | "wiki">(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [armWiki, setArmWiki] = useState(false);
+
+  /** Runs a trigger, showing a transient status message; never throws to the UI. */
+  function run(kind: "reindex" | "health" | "wiki", fn: () => Promise<unknown>, started: string) {
+    setBusy(kind);
+    setMsg(null);
+    fn()
+      .then(() => setMsg(started))
+      .catch((e: unknown) => setMsg(e instanceof Error ? e.message : String(e)))
+      .finally(() => {
+        setBusy(null);
+        setArmWiki(false);
+      });
+  }
+
+  return (
+    <div className="settings-actions-col">
+      <div className="maint-row">
+        <div>
+          <strong>Reindex</strong>
+          <p className="muted small">
+            Re-parse changed files and recompute the graph, health, and wiki in place.
+            Non-destructive — nothing is wiped, and the wiki only regenerates pages whose
+            source changed (no extra LLM cost).
+          </p>
+        </div>
+        <button
+          className="btn"
+          disabled={busy !== null}
+          onClick={() => run("reindex", () => reindexRepo(repoId), "Reindex started in the background.")}
+        >
+          {busy === "reindex" ? "Starting…" : "Reindex"}
+        </button>
+      </div>
+
+      <div className="maint-row">
+        <div>
+          <strong>Rescan biomarkers</strong>
+          <p className="muted small">
+            Recompute every code-health finding from scratch — useful after changing
+            thresholds or exclusion rules. No LLM cost.
+          </p>
+        </div>
+        <button
+          className="btn"
+          disabled={busy !== null}
+          onClick={() => run("health", () => rescanBiomarkers(repoId), "Biomarker rescan started in the background.")}
+        >
+          {busy === "health" ? "Starting…" : "Rescan biomarkers"}
+        </button>
+      </div>
+
+      <div className="maint-row">
+        <div>
+          <strong>Regenerate wiki</strong>
+          <p className="muted small">
+            Re-write <em>every</em> wiki page with the LLM, ignoring freshness. This
+            spends provider credits — normal indexing already keeps the wiki current, so
+            only use this after a prompt/model change or to repair the wiki.
+          </p>
+        </div>
+        {!armWiki ? (
+          <button className="btn" disabled={busy !== null} onClick={() => setArmWiki(true)}>
+            Regenerate wiki…
+          </button>
+        ) : (
+          <span className="confirm">
+            <button className="btn-ghost" disabled={busy !== null} onClick={() => setArmWiki(false)}>
+              Cancel
+            </button>
+            <button
+              className="btn"
+              disabled={busy !== null}
+              onClick={() =>
+                run("wiki", () => regenerateWiki(repoId), "Full wiki regeneration started in the background.")
+              }
+            >
+              {busy === "wiki" ? "Starting…" : "Confirm — spend credits"}
+            </button>
+          </span>
+        )}
+      </div>
+
       {msg && <p className="muted small">{msg}</p>}
     </div>
   );

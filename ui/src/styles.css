@@ -1169,9 +1169,14 @@ code {
 }
 
 /* ---- settings: rules editor + danger zone ----------------------------- */
+/* Center the whole settings page and let it fill the available width while
+   keeping a readable max for the form controls. */
+.settings-page {
+  max-width: 1040px;
+  margin-inline: auto;
+}
 .settings-section {
   margin-bottom: 32px;
-  max-width: 760px;
 }
 .rules {
   display: flex;
@@ -1291,6 +1296,29 @@ select {
 .confirm {
   display: flex;
   gap: 8px;
+  flex: none;
+}
+
+/* ---- settings: maintenance actions ----------------------------------- */
+.settings-actions-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.maint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.maint-row > div:first-child {
+  flex: 1;
+}
+.maint-row .btn,
+.maint-row .confirm {
   flex: none;
 }
 
